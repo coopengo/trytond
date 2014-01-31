@@ -8,6 +8,7 @@ attlist.tree &=
   [ a:defaultValue = "Unknown" ] attribute string { text }?
 attlist.tree &= attribute on_write { text }?
 attlist.tree &= attribute editable { "top" | "bottom" }?
+attlist.tree &= attribute editable_open { "0" | "1" }?
 attlist.tree &= attribute sequence { text }?
 attlist.tree &= attribute colors { text }?
 attlist.tree &=
