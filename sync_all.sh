@@ -16,11 +16,14 @@ rm -r company/.hgtags
 hg clone http://hg.tryton.org/modules/country
 rm -r country/.hg
 rm -r country/.hgtags
-hg clone http://hg.tryton.org/modules/curreny
-rm -r curreny/.hg
-rm -r curreny/.hgtags
+hg clone http://hg.tryton.org/modules/currency
+rm -r currency/.hg
+rm -r currency/.hgtags
 hg clone http://hg.tryton.org/modules/party
 rm -r party/.hg
 rm -r party/.hgtags
+hg clone http://hg.tryton.org/modules/party_siret
+rm -r party_siret/.hg
+rm -r party_siret/.hgtags
 mv ../tmp__init__ __init__.py
 rm /tmp/sync_all.sh
