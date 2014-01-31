@@ -412,6 +412,16 @@
       <attribute name="filename"/>
     </optional>
   </define>
+  <define name="attlist.field" combine="interleave">
+    <optional>
+      <attribute name="expand_toolbar" a:defaultValue="0">
+        <choice>
+          <value>0</value>
+          <value>1</value>
+        </choice>
+      </attribute>
+    </optional>
+  </define>
   <define name="image">
     <element name="image">
       <ref name="attlist.image"/>
