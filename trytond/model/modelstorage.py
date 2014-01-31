@@ -959,6 +959,11 @@ class ModelStorage(Model):
                                         [('id', 'in', relation_ids)],
                                         domain,
                                         ]):
+                                logging.getLogger().debug('class %s field %s :'
+                                    ' value %s, domain %s' % (cls.__name__,
+                                        field_name,
+                                        getattr(record, field_name),
+                                        repr(field.domain)))
                                 cls.raise_user_error(
                                         'domain_validation_record',
                                         error_args=cls._get_error_args(
