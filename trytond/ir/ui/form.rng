@@ -165,8 +165,14 @@
           <value>one2one</value>
           <value>richtext</value>
           <value>dict</value>
+          <value>source</value>
         </choice>
       </attribute>
+    </optional>
+  </define>
+  <define name="attlist.field" combine="interleave">
+    <optional>
+      <attribute name="context_tree"/>
     </optional>
   </define>
   <define name="attlist.field" combine="interleave">
