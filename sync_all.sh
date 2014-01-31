@@ -16,9 +16,9 @@ rm -r company/.hgtags
 hg clone http://hg.tryton.org/modules/country
 rm -r country/.hg
 rm -r country/.hgtags
-hg clone http://hg.tryton.org/modules/curreny
-rm -r curreny/.hg
-rm -r curreny/.hgtags
+hg clone http://hg.tryton.org/modules/currency
+rm -r currency/.hg
+rm -r currency/.hgtags
 hg clone http://hg.tryton.org/modules/party
 rm -r party/.hg
 rm -r party/.hgtags
