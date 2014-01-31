@@ -68,6 +68,7 @@ attlist.field &=
     | "dict"
     | "source"
   }?
+attlist.field &= attribute no_command { "0" | "1" }?
 attlist.field &= attribute context_tree { text }?
 attlist.field &= attribute fill { "0" | "1" }?
 attlist.field &= attribute yexpand { "0" | "1" }?
