@@ -281,6 +281,11 @@
   </define>
   <define name="attlist.field" combine="interleave">
     <optional>
+      <attribute name="group"/>
+    </optional>
+  </define>
+  <define name="attlist.field" combine="interleave">
+    <optional>
       <attribute name="view_ids"/>
     </optional>
   </define>
