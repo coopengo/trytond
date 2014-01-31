@@ -428,6 +428,8 @@ class ModelView(Model):
                             relation = field.get_target().__name__
                     except Exception:
                         relation = False
+                    if element.get('relation'):
+                        relation = element.get('relation')
                     if relation and element.tag == 'field':
                         childs = False
                         views = {}
@@ -462,8 +464,9 @@ class ModelView(Model):
                         element.attrib['mode'] = ','.join(mode)
                         element.attrib['view_ids'] = ','.join(
                             map(str, view_ids))
-                        fields_attrs[element.get(attr)].setdefault('views', {}
-                            ).update(views)
+                        if not element.get('relation'):
+                            fields_attrs[element.get(attr)].setdefault('views', {}
+                                ).update(views)
             if element.get('name') in fields_width:
                 element.set('width', str(fields_width[element.get('name')]))
 

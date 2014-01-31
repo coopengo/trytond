@@ -286,6 +286,16 @@
   </define>
   <define name="attlist.field" combine="interleave">
     <optional>
+      <attribute name="relation"/>
+    </optional>
+  </define>
+  <define name="attlist.field" combine="interleave">
+    <optional>
+      <attribute name="relation_field"/>
+    </optional>
+  </define>
+  <define name="attlist.field" combine="interleave">
+    <optional>
       <attribute name="view_ids"/>
     </optional>
   </define>
