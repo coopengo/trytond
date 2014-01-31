@@ -240,6 +240,26 @@ class ModelView(Model):
         result['arch'] = xarch
         result['fields'] = xfields
 
+        if result['field_childs']:
+            child_field = result['field_childs']
+            result['children_definitions'] = defs = {}
+            model = cls
+            requisite_fields = result['fields'].keys()
+            requisite_fields.remove(child_field)
+            while model and model.__name__ not in defs:
+                has_fields = all(hasattr(model, rfield)
+                    for rfield in requisite_fields)
+                if has_fields:
+                    defs[model.__name__] = model.fields_get(requisite_fields
+                        + [child_field])
+                field = getattr(model, child_field, None)
+                if field:
+                    model = pool.get(field.model_name)
+                else:
+                    model = None
+        else:
+            result['children_definitions'] = {}
+
         cls._fields_view_get_cache.set(key, result)
         return result
 
