@@ -392,10 +392,6 @@ msgctxt "field:res.user,status_bar:"
 msgid "Status Bar"
 msgstr "Barre d'état"
 
-msgctxt "field:res.user,timezone:"
-msgid "Timezone"
-msgstr "Fuseau horaire"
-
 msgctxt "field:res.user,warnings:"
 msgid "Warnings"
 msgstr "Avertissements"
