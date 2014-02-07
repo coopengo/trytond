@@ -19,7 +19,7 @@ from functools import reduce
 
 from trytond.model import Model
 from trytond.model import fields
-from trytond.tools import safe_eval, reduce_domain
+from trytond.tools import safe_eval, reduce_domain, memoize
 from trytond.pyson import PYSONEncoder, PYSONDecoder, PYSON
 from trytond.const import OPERATORS, RECORD_CACHE_SIZE, BROWSE_FIELD_TRESHOLD
 from trytond.transaction import Transaction
@@ -518,119 +518,122 @@ class ModelStorage(Model):
         '''
         pool = Pool()
 
-        def process_lines(data, prefix, fields_def, position=0):
+        def warn(msgname, *args):
+            msg = cls.raise_user_error(msgname, args,
+                    raise_exception=False)
+            logger.warn(msg)
 
-            def warn(msgname, *args):
-                msg = cls.raise_user_error(msgname, args,
-                        raise_exception=False)
-                logger.warn(msg)
+        def get_selection(selection, value, field):
+            res = None
+            if not isinstance(selection, (tuple, list)):
+                selection = getattr(cls, selection)()
+            for key, _ in selection:
+                if str(key) == value:
+                    res = key
+                    break
+            if value and not res:
+                warn('not_found_in_selection', value, '/'.join(field))
+            return res
 
-            def get_selection(selection, value):
+        @memoize(1000)
+        def get_many2one(relation, value):
+            if not value:
+                return None
+            Relation = pool.get(relation)
+            res = Relation.search([
+                ('rec_name', '=', value),
+                ], limit=2)
+            if len(res) < 1:
+                warn('relation_not_found', value, relation)
                 res = None
-                if not isinstance(selection, (tuple, list)):
-                    selection = getattr(cls, selection)()
-                for key, _ in selection:
-                    if str(key) == value:
-                        res = key
-                        break
-                if value and not res:
-                    warn('not_found_in_selection', value, '/'.join(field))
-                return res
+            elif len(res) > 1:
+                warn('too_many_relations_found', value, relation)
+                res = None
+            else:
+                res = res[0].id
+            return res
 
-            def get_many2one(relation, value):
-                if not value:
-                    return None
-                Relation = pool.get(relation)
-                res = Relation.search([
-                    ('rec_name', '=', value),
+        @memoize(1000)
+        def get_many2many(relation, value):
+            if not value:
+                return None
+            res = []
+            Relation = pool.get(relation)
+            for word in csv.reader(StringIO.StringIO(value), delimiter=',',
+                    quoting=csv.QUOTE_NONE, escapechar='\\').next():
+                res2 = Relation.search([
+                    ('rec_name', '=', word),
                     ], limit=2)
-                if len(res) < 1:
-                    warn('relation_not_found', value, relation)
-                    res = None
-                elif len(res) > 1:
-                    warn('too_many_relations_found', value, relation)
-                    res = None
+                if len(res2) < 1:
+                    warn('relation_not_found', word, relation)
+                elif len(res2) > 1:
+                    warn('too_many_relations_found', word, relation)
                 else:
-                    res = res[0].id
-                return res
+                    res.extend(res2)
+            if len(res):
+                res = [('add', [x.id for x in res])]
+            return res
 
-            def get_many2many(relation, value):
-                if not value:
-                    return None
-                res = []
-                Relation = pool.get(relation)
-                for word in csv.reader(StringIO.StringIO(value), delimiter=',',
-                        quoting=csv.QUOTE_NONE, escapechar='\\').next():
-                    res2 = Relation.search([
-                        ('rec_name', '=', word),
-                        ], limit=2)
-                    if len(res2) < 1:
-                        warn('relation_not_found', word, relation)
-                    elif len(res2) > 1:
-                        warn('too_many_relations_found', word, relation)
-                    else:
-                        res.extend(res2)
-                if len(res):
-                    res = [('add', [x.id for x in res])]
-                return res
+        def get_one2one(relation, value):
+            return ('add', get_many2one(relation, value))
 
-            def get_one2one(relation, value):
-                return ('add', get_many2one(relation, value))
+        @memoize(1000)
+        def get_reference(value, field):
+            if not value:
+                return None
+            try:
+                relation, value = value.split(',', 1)
+            except Exception:
+                warn('reference_syntax_error', value, '/'.join(field))
+                return None
+            Relation = pool.get(relation)
+            res = Relation.search([
+                ('rec_name', '=', value),
+                ], limit=2)
+            if len(res) < 1:
+                warn('relation_not_found', value, relation)
+                res = None
+            elif len(res) > 1:
+                warn('too_many_relations_found', value, relation)
+                res = None
+            else:
+                res = '%s,%s' % (relation, res[0].id)
+            return res
 
-            def get_reference(value):
-                if not value:
-                    return None
+        @memoize(1000)
+        def get_by_id(value, field):
+            if not value:
+                return None
+            relation = None
+            ftype = fields_def[field[-1][:-3]]['type']
+            if ftype == 'many2many':
+                value = csv.reader(StringIO.StringIO(value), delimiter=',',
+                        quoting=csv.QUOTE_NONE, escapechar='\\').next()
+            elif ftype == 'reference':
                 try:
                     relation, value = value.split(',', 1)
                 except Exception:
                     warn('reference_syntax_error', value, '/'.join(field))
                     return None
-                Relation = pool.get(relation)
-                res = Relation.search([
-                    ('rec_name', '=', value),
-                    ], limit=2)
-                if len(res) < 1:
-                    warn('relation_not_found', value, relation)
-                    res = None
-                elif len(res) > 1:
-                    warn('too_many_relations_found', value, relation)
-                    res = None
-                else:
-                    res = '%s,%s' % (relation, res[0].id)
-                return res
+                value = [value]
+            else:
+                value = [value]
+            res_ids = []
+            for word in value:
+                try:
+                    module, xml_id = word.rsplit('.', 1)
+                except Exception:
+                    warn('xml_id_syntax_error', word, '/'.join(field))
+                    continue
+                db_id = ModelData.get_id(module, xml_id)
+                res_ids.append(db_id)
+            if ftype == 'many2many' and res_ids:
+                return [('add', res_ids)]
+            elif ftype == 'reference' and res_ids:
+                return '%s,%s' % (relation, str(res_ids[0]))
+            return res_ids and res_ids[0] or False
 
-            def get_by_id(value):
-                if not value:
-                    return None
-                relation = None
-                ftype = fields_def[field[-1][:-3]]['type']
-                if ftype == 'many2many':
-                    value = csv.reader(StringIO.StringIO(value), delimiter=',',
-                            quoting=csv.QUOTE_NONE, escapechar='\\').next()
-                elif ftype == 'reference':
-                    try:
-                        relation, value = value.split(',', 1)
-                    except Exception:
-                        warn('reference_syntax_error', value, '/'.join(field))
-                        return None
-                    value = [value]
-                else:
-                    value = [value]
-                res_ids = []
-                for word in value:
-                    try:
-                        module, xml_id = word.rsplit('.', 1)
-                    except Exception:
-                        warn('xml_id_syntax_error', word, '/'.join(field))
-                        continue
-                    db_id = ModelData.get_id(module, xml_id)
-                    res_ids.append(db_id)
-                if ftype == 'many2many' and res_ids:
-                    return [('add', res_ids)]
-                elif ftype == 'reference' and res_ids:
-                    return '%s,%s' % (relation, str(res_ids[0]))
-                return res_ids and res_ids[0] or False
-
+        def process_lines(data, prefix, fields_def, position=0):
             line = data[position]
             row = {}
             translate = {}
@@ -645,7 +648,7 @@ class ModelStorage(Model):
                 is_prefix_len = (len(field) == (prefix_len + 1))
                 value = line[i]
                 if is_prefix_len and field[-1].endswith(':id'):
-                    row[field[0][:-3]] = get_by_id(value)
+                    row[field[0][:-3]] = get_by_id(value, field)
                 elif is_prefix_len and ':lang=' in field[-1]:
                     field_name, lang = field[-1].split(':lang=')
                     translate.setdefault(lang, {})[field_name] = value or False
@@ -677,7 +680,8 @@ class ModelStorage(Model):
                                 *time.strptime(value, '%Y-%m-%d %H:%M:%S')[:6])
                             if value else None)
                     elif field_type == 'selection':
-                        res = get_selection(this_field_def['selection'], value)
+                        res = get_selection(this_field_def['selection'], value,
+                            field)
                     elif field_type == 'many2one':
                         res = get_many2one(this_field_def['relation'], value)
                     elif field_type == 'many2many':
@@ -685,7 +689,7 @@ class ModelStorage(Model):
                     elif field_type == 'one2one':
                         res = get_one2one(this_field_def['relation'], value)
                     elif field_type == 'reference':
-                        res = get_reference(value)
+                        res = get_reference(value, field)
                     else:
                         res = value or None
                     row[field[-1]] = res
@@ -739,6 +743,7 @@ class ModelStorage(Model):
         done = 0
 
         warning = ''
+        to_create, translations, languages = [], [], set()
         while len(data):
             res = {}
             try:
@@ -749,10 +754,9 @@ class ModelStorage(Model):
                     # XXX should raise Exception
                     Transaction().cursor.rollback()
                     return (-1, res, warning, '')
-                new_id, = cls.create([res])
-                for lang in translate:
-                    with Transaction().set_context(language=lang):
-                        cls.write(new_id, translate[lang])
+                to_create.append(res)
+                translations.append(translate)
+                languages.update(translate)
             except Exception, exp:
                 logger = logging.getLogger('import')
                 logger.error(exp)
@@ -762,6 +766,11 @@ class ModelStorage(Model):
                 warning = '%s\n%s' % (tb_s, warning)
                 return (-1, res, exp, warning)
             done += 1
+        new_ids = cls.create(to_create)
+        for language in languages:
+            translated = [t.get(language, {}) for t in translations]
+            with Transaction().set_context(language=language):
+                cls.write(*zip(new_ids, translated))
         return (done, 0, 0, 0)
 
     @classmethod
@@ -959,6 +968,11 @@ class ModelStorage(Model):
                                         [('id', 'in', relation_ids)],
                                         domain,
                                         ]):
+                                logging.getLogger().debug('class %s field %s :'
+                                    ' value %s, domain %s' % (cls.__name__,
+                                        field_name,
+                                        getattr(record, field_name),
+                                        repr(field.domain)))
                                 cls.raise_user_error(
                                         'domain_validation_record',
                                         error_args=cls._get_error_args(
@@ -1096,6 +1110,9 @@ class ModelStorage(Model):
                             test.add('')
                             test.add(None)
                         if value not in test:
+                            logging.getLogger().debug('Bad Selection : field '
+                                    '%s of model %s : %s is not in %s' % (
+                                        field_name, cls.__name__, value, test))
                             error_args = cls._get_error_args(field_name)
                             error_args['value'] = value
                             cls.raise_user_error('selection_validation_record',

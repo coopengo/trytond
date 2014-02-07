@@ -66,7 +66,10 @@ attlist.field &=
     | "one2one"
     | "richtext"
     | "dict"
+    | "source"
   }?
+attlist.field &= attribute no_command { "0" | "1" }?
+attlist.field &= attribute context_tree { text }?
 attlist.field &= attribute fill { "0" | "1" }?
 attlist.field &= attribute yexpand { "0" | "1" }?
 attlist.field &= attribute yfill { "0" | "1" }?
@@ -83,6 +86,9 @@ attlist.field &= attribute readonly { "0" | "1" }?
 attlist.field &=
   [ a:defaultValue = "0" ] attribute tree_invisible { "0" | "1" }?
 attlist.field &= attribute mode { text }?
+attlist.field &= attribute group { text }?
+attlist.field &= attribute relation { text }?
+attlist.field &= attribute relation_field { text }?
 attlist.field &= attribute view_ids { text }?
 attlist.field &=
   [ a:defaultValue = "0" ] attribute invisible { "0" | "1" }?
@@ -105,6 +111,7 @@ attlist.field &=
 attlist.field &= [a:defaultValue = "0"] attribute pre_validate { "0" | "1" }?
 attlist.field &= attribute icon { text }?
 attlist.field &= [a:defaultValue = "1"] attribute completion { "0" | "1" }?
+attlist.field &= [a:defaultValue = "0"] attribute expand_toolbar { "0" | "1" }?
 attlist.field &= attribute string { text }?
 attlist.field &= [a:defaultValue = "1"] attribute factor { text }?
 attlist.field &= attribute filename { text }?
