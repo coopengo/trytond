@@ -137,6 +137,9 @@ class MenuitemTagHandler:
             else:
                 values['name'] = action_name
 
+        if values.get('sequence'):
+            values['sequence'] = int(values['sequence'])
+
         self.values = values
 
     def characters(self, data):
@@ -405,6 +408,10 @@ class TrytondXmlHandler(sax.handler.ContentHandler):
         self.grouped_write = defaultdict(list)
         self.grouped_model_data = []
         self.skip_data = False
+        Module = pool.get('ir.module.module')
+        self.installed_modules = [m.name for m in Module.search([
+                    ('state', 'in', ['installed', 'to upgrade']),
+                    ])]
 
         # Tag handlders are used to delegate the processing
         self.taghandlerlist = {
@@ -456,6 +463,11 @@ class TrytondXmlHandler(sax.handler.ContentHandler):
                     self.skip_data = True
                 else:
                     self.skip_data = False
+                depends = attributes.get('depends', '').split(',')
+                depends = [m.strip() for m in depends if m]
+                if depends:
+                    if not all((m in self.installed_modules for m in depends)):
+                        self.skip_data = True
 
             elif name == "tryton":
                 pass
@@ -752,10 +764,9 @@ class TrytondXmlHandler(sax.handler.ContentHandler):
         actions = iter(args)
         for record, values, old_values, fs_id, mdata_id in zip(
                 *((actions,) * 5)):
-            if module != self.module:
-                temp_values = old_values.copy()
-                temp_values.update(values)
-                values = temp_values
+            temp_values = old_values.copy()
+            temp_values.update(values)
+            values = temp_values
 
             if values != old_values:
                 self.grouped_model_data.extend(([self.ModelData(mdata_id)], {
