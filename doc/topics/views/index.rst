@@ -306,6 +306,9 @@ newline
 
 Force to use a new row.
 
+
+.. _form-button:
+
 button
 ^^^^^^
 
@@ -313,14 +316,10 @@ Display a button.
 
     * ``string``: The string that will be displayed inside the button.
 
-    * ``name``: The name of the action:
+    * ``name``: The name of the function that will be called. The function must
+      have this syntax:
 
-        * ``object``: the name of the function that will called.  The function
-          must have this syntax:
-
-          ``button(self, ids)``
-
-        * ``action``: the id of the ir.action that will be called.
+        ``button(cls, records)``
 
     * ``icon``
 
@@ -531,6 +530,11 @@ diplayed in the same column.
     * ``icon``: The name of the field that contains the name of the icon to
       display or the name of the icon.
 
+button
+^^^^^^
+
+Same as in form-button_.
+
 Example
 -------
 
@@ -549,6 +553,22 @@ Example
       <field name="sequence" tree_invisible="1"/>
   </tree>
 
+button
+^^^^^^
+
+Display a button.
+
+    * ``string``: The string that will be displayed inside the button.
+
+    * ``name``: The name of the function that will be called. The function must
+      have this syntax:
+
+        ``button(cls, records)``
+
+    * ``confirm``: A text that will be displayed in a confirmation popup when
+      the button is clicked.
+
+    * ``help``: see in common-attributes-help_
 
 Graph view
 ==========
