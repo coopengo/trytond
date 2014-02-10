@@ -680,8 +680,8 @@ class ModelStorage(Model):
                                 *time.strptime(value, '%Y-%m-%d %H:%M:%S')[:6])
                             if value else None)
                     elif field_type == 'selection':
-                        res = get_selection(this_field_def['selection'],
-                            value, field)
+                        res = get_selection(this_field_def['selection'], value,
+                            field)
                     elif field_type == 'many2one':
                         res = get_many2one(this_field_def['relation'], value)
                     elif field_type == 'many2many':
@@ -743,6 +743,7 @@ class ModelStorage(Model):
         done = 0
 
         warning = ''
+        to_create, translations, languages = [], [], set()
         while len(data):
             res = {}
             try:
@@ -753,10 +754,9 @@ class ModelStorage(Model):
                     # XXX should raise Exception
                     Transaction().cursor.rollback()
                     return (-1, res, warning, '')
-                new_id, = cls.create([res])
-                for lang in translate:
-                    with Transaction().set_context(language=lang):
-                        cls.write(new_id, translate[lang])
+                to_create.append(res)
+                translations.append(translate)
+                languages.update(translate)
             except Exception, exp:
                 logger = logging.getLogger('import')
                 logger.error(exp)
@@ -766,6 +766,11 @@ class ModelStorage(Model):
                 warning = '%s\n%s' % (tb_s, warning)
                 return (-1, res, exp, warning)
             done += 1
+        new_ids = cls.create(to_create)
+        for language in languages:
+            translated = [t.get(language, {}) for t in translations]
+            with Transaction().set_context(language=language):
+                cls.write(*zip(new_ids, translated))
         return (done, 0, 0, 0)
 
     @classmethod
@@ -963,6 +968,11 @@ class ModelStorage(Model):
                                         [('id', 'in', relation_ids)],
                                         domain,
                                         ]):
+                                logging.getLogger().debug('class %s field %s :'
+                                    ' value %s, domain %s' % (cls.__name__,
+                                        field_name,
+                                        getattr(record, field_name),
+                                        repr(field.domain)))
                                 cls.raise_user_error(
                                         'domain_validation_record',
                                         error_args=cls._get_error_args(
@@ -1100,6 +1110,9 @@ class ModelStorage(Model):
                             test.add('')
                             test.add(None)
                         if value not in test:
+                            logging.getLogger().debug('Bad Selection : field '
+                                    '%s of model %s : %s is not in %s' % (
+                                        field_name, cls.__name__, value, test))
                             error_args = cls._get_error_args(field_name)
                             error_args['value'] = value
                             cls.raise_user_error('selection_validation_record',
