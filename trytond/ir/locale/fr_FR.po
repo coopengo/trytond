@@ -46,6 +46,14 @@ msgstr ""
 "Impossible de supprimer les enregistrements \"%(value)s\" car ils sont "
 "utilisés sur le champs \"%(field)s\" de \"%(model)s\"."
 
+msgctxt "error:foreign_model_exist:"
+msgid ""
+"Could not delete records because they are used on field \"%(field)s\" of "
+"\"%(model)s\"."
+msgstr ""
+"Impossible de supprimer les enregistrements car ils sont utilisés sur le "
+"champ \"%(field)s\" de \"%(model)s\"."
+
 msgctxt "error:foreign_model_missing:"
 msgid "The value \"%(value)s\" of field \"%(field)s\" on \"%(model)s\" doesn't exist."
 msgstr ""
@@ -749,6 +757,10 @@ msgstr "Contenu"
 msgctxt "field:ir.action.report,report_content_custom:"
 msgid "Content"
 msgstr "Contenu"
+
+msgctxt "field:ir.action.report,report_content_name:"
+msgid "Content Name"
+msgstr "Nom du contenu"
 
 msgctxt "field:ir.action.report,report_name:"
 msgid "Internal Name"
@@ -4048,7 +4060,6 @@ msgctxt "wizard_button:ir.model.print_model_graph,start,print_:"
 msgid "Print"
 msgstr "Imprimer"
 
-#, fuzzy
 msgctxt "wizard_button:ir.module.module.config_wizard,done,end:"
 msgid "Ok"
 msgstr "Ok"
