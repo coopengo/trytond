@@ -1,6 +1,6 @@
 cp sync_all.sh /tmp
 hg update default
-hg pull -u http://hg.tryton.org/trytond
+hg pull http://hg.tryton.org/trytond
 cd trytond/modules
 cp __init__.py ../tmp__init__
 rm -r *
