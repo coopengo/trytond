@@ -166,6 +166,7 @@
           <value>richtext</value>
           <value>dict</value>
           <value>source</value>
+          <value>multiselection</value>
         </choice>
       </attribute>
     </optional>

@@ -67,6 +67,7 @@ attlist.field &=
     | "richtext"
     | "dict"
     | "source"
+    | "multiselection"
   }?
 attlist.field &= attribute no_command { "0" | "1" }?
 attlist.field &= attribute context_tree { text }?
