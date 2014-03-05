@@ -56,6 +56,8 @@ def dispatch(host, port, protocol, database_name, user, session, object_type,
             return True
         elif method == 'version':
             return VERSION
+        elif method == 'timezone_get':
+            return CONFIG['timezone']
         elif method == 'list_lang':
             return [
                 ('bg_BG', 'Български'),
