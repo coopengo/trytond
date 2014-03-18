@@ -379,6 +379,7 @@ class ModelSQL(ModelStorage):
             set()).update(new_ids)
 
         translation_values = {}
+        fields_to_set = {}
         for values, new_id in izip(vlist, new_ids):
             for fname, value in values.iteritems():
                 field = cls._fields[fname]
@@ -387,12 +388,17 @@ class ModelSQL(ModelStorage):
                     translation_values.setdefault(
                         '%s,%s' % (cls.__name__, fname), {})[new_id] = value
                 if hasattr(field, 'set'):
-                    field.set([new_id], cls, fname, value)
+                    fields_to_set.setdefault(fname, []).extend(
+                        ([new_id], value))
 
         if translation_values:
             for name, translations in translation_values.iteritems():
                 Translation.set_ids(name, 'model', Transaction().language,
                     translations.keys(), translations.values())
+
+        for fname, fargs in fields_to_set.iteritems():
+            field = cls._fields[fname]
+            field.set(cls, fname, *fargs)
 
         cls.__insert_history(new_ids)
 
@@ -411,11 +417,15 @@ class ModelSQL(ModelStorage):
         pool = Pool()
         Rule = pool.get('ir.rule')
         Translation = pool.get('ir.translation')
+        ModelAccess = pool.get('ir.model.access')
+        if not fields_names:
+            fields_names = []
+            for field_name in cls._fields.keys():
+                if ModelAccess.check_relation(cls.__name__, field_name,
+                        mode='read'):
+                    fields_names.append(field_name)
         super(ModelSQL, cls).read(ids, fields_names=fields_names)
         cursor = Transaction().cursor
-
-        if not fields_names:
-            fields_names = cls._fields.keys()
 
         if not ids:
             return []
@@ -452,7 +462,7 @@ class ModelSQL(ModelStorage):
             table = cls.__table_history__()
             column = Coalesce(table.write_date, table.create_date)
             history_clause = (column <= Transaction().context['_datetime'])
-            history_order = column.desc
+            history_order = (column.desc, Column(table, '__id').desc)
             history_limit = 1
 
         columns = []
@@ -657,6 +667,7 @@ class ModelSQL(ModelStorage):
 
         cls.__check_timestamp(all_ids)
 
+        fields_to_set = {}
         actions = iter((records, values) + args)
         for records, values in zip(actions, actions):
             ids = [r.id for r in records]
@@ -717,11 +728,15 @@ class ModelSQL(ModelStorage):
                         '%s,%s' % (cls.__name__, fname), 'model',
                         transaction.language, ids, [value] * len(ids))
                 if hasattr(field, 'set'):
-                    field.set(ids, cls, fname, value)
+                    fields_to_set.setdefault(fname, []).extend((ids, value))
 
             field_names = cls._fields.keys()
             cls._update_mptt(field_names, [ids] * len(field_names), values)
             all_field_names |= set(values.keys())
+
+        for fname, fargs in fields_to_set.iteritems():
+            field = cls._fields[fname]
+            field.set(cls, fname, *fargs)
 
         cls.__insert_history(all_ids)
         for i in range(0, len(all_records), RECORD_CACHE_SIZE):

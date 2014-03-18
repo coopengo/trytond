@@ -16,6 +16,7 @@ except ImportError:
 from decimal import Decimal
 from itertools import islice, ifilter, chain, izip
 from functools import reduce
+from operator import itemgetter
 
 from trytond.model import Model
 from trytond.model import fields
@@ -120,9 +121,15 @@ class ModelStorage(Model):
         ModelAccess = pool.get('ir.model.access')
         ModelFieldAccess = pool.get('ir.model.field.access')
 
+        if not fields_names:
+            fields_names = []
+            for field_name in cls._fields.keys():
+                if ModelAccess.check_relation(cls.__name__, field_name,
+                        mode='read'):
+                    fields_names.append(field_name)
+
         ModelAccess.check(cls.__name__, 'read')
-        ModelFieldAccess.check(cls.__name__,
-                fields_names or cls._fields.keys(), 'read')
+        ModelFieldAccess.check(cls.__name__, fields_names, 'read')
         return []
 
     @classmethod
@@ -680,8 +687,8 @@ class ModelStorage(Model):
                                 *time.strptime(value, '%Y-%m-%d %H:%M:%S')[:6])
                             if value else None)
                     elif field_type == 'selection':
-                        res = get_selection(this_field_def['selection'], value,
-                            field)
+                        res = get_selection(this_field_def['selection'],
+                            value, field)
                     elif field_type == 'many2one':
                         res = get_many2one(this_field_def['relation'], value)
                     elif field_type == 'many2many':
@@ -766,11 +773,12 @@ class ModelStorage(Model):
                 warning = '%s\n%s' % (tb_s, warning)
                 return (-1, res, exp, warning)
             done += 1
-        new_ids = cls.create(to_create)
+        new_records = cls.create(to_create)
         for language in languages:
             translated = [t.get(language, {}) for t in translations]
             with Transaction().set_context(language=language):
-                cls.write(*zip(new_ids, translated))
+                cls.write(*chain(*ifilter(itemgetter(1),
+                            izip(([r] for r in new_records), translated))))
         return (done, 0, 0, 0)
 
     @classmethod
@@ -925,6 +933,53 @@ class ModelStorage(Model):
                             return True
             return False
 
+        def validate_domain(field):
+            if not field.domain:
+                return
+            if field._type == 'dict':
+                return
+            if field._type in ('many2one', 'one2many'):
+                Relation = pool.get(field.model_name)
+            elif field._type in ('many2many', 'one2one'):
+                Relation = field.get_target()
+            else:
+                Relation = cls
+            if is_pyson(field.domain):
+                pyson_domain = PYSONEncoder().encode(field.domain)
+                for record in records:
+                    env = EvalEnvironment(record, cls)
+                    env.update(Transaction().context)
+                    env['current_date'] = datetime.datetime.today()
+                    env['time'] = time
+                    env['context'] = Transaction().context
+                    env['active_id'] = record.id
+                    domain = PYSONDecoder(env).decode(pyson_domain)
+                    validate_relation_domain(
+                        field, [record], Relation, domain)
+            else:
+                validate_relation_domain(
+                    field, records, Relation, field.domain)
+
+        def validate_relation_domain(field, records, Relation, domain):
+            if field._type in ('many2one', 'one2many', 'many2many', 'one2one'):
+                relations = []
+                for record in records:
+                    if getattr(record, field.name):
+                        if field._type in ('many2one', 'one2one'):
+                            relations.append(getattr(record, field.name))
+                        else:
+                            relations.extend(getattr(record, field.name))
+            else:
+                relations = records
+            if relations:
+                finds = Relation.search(['AND',
+                        [('id', 'in', [r.id for r in relations])],
+                        domain,
+                        ])
+                if set(relations) != set(finds):
+                    cls.raise_user_error('domain_validation_record',
+                        error_args=cls._get_error_args(field.name))
+
         field_names = set(field_names or [])
         ctx_pref['active_test'] = False
         with Transaction().set_context(ctx_pref):
@@ -936,70 +991,8 @@ class ModelStorage(Model):
                 if isinstance(field, fields.Function) and \
                         not field.setter:
                     continue
-                # validate domain
-                if (field._type in
-                        ('many2one', 'many2many', 'one2many', 'one2one')
-                        and field.domain):
-                    if field._type in ('many2one', 'one2many'):
-                        Relation = pool.get(field.model_name)
-                    else:
-                        Relation = field.get_target()
-                    if is_pyson(field.domain):
-                        pyson_domain = PYSONEncoder().encode(field.domain)
-                        for record in records:
-                            env = EvalEnvironment(record, cls)
-                            env.update(Transaction().context)
-                            env['current_date'] = datetime.datetime.today()
-                            env['time'] = time
-                            env['context'] = Transaction().context
-                            env['active_id'] = record.id
-                            domain = PYSONDecoder(env).decode(pyson_domain)
-                            relation_ids = []
-                            if getattr(record, field_name):
-                                if field._type in ('many2one', 'one2one'):
-                                    relation_ids.append(
-                                        getattr(record, field_name).id)
-                                else:
-                                    relation_ids.extend(
-                                        [x.id for x in getattr(record,
-                                                field_name)])
-                            if relation_ids and not Relation.search([
-                                        'AND',
-                                        [('id', 'in', relation_ids)],
-                                        domain,
-                                        ]):
-                                logging.getLogger().debug('class %s field %s :'
-                                    ' value %s, domain %s' % (cls.__name__,
-                                        field_name,
-                                        getattr(record, field_name),
-                                        repr(field.domain)))
-                                cls.raise_user_error(
-                                        'domain_validation_record',
-                                        error_args=cls._get_error_args(
-                                            field_name))
-                    else:
-                        relation_ids = []
-                        for record in records:
-                            if getattr(record, field_name):
-                                if field._type in ('many2one', 'one2one'):
-                                    relation_ids.append(
-                                        getattr(record, field_name).id)
-                                else:
-                                    relation_ids.extend(
-                                        [x.id for x in getattr(record,
-                                                field_name)])
-                        if relation_ids:
-                            finds = Relation.search([
-                                'AND',
-                                [('id', 'in', relation_ids)],
-                                field.domain,
-                                ])
-                            find_ids = map(int, finds)
-                            if not set(relation_ids) == set(find_ids):
-                                cls.raise_user_error(
-                                        'domain_validation_record',
-                                        error_args=cls._get_error_args(
-                                            field_name))
+
+                validate_domain(field)
 
                 def required_test(value, field_name):
                     if (isinstance(value, (type(None), type(False), list,
@@ -1282,10 +1275,17 @@ class ModelStorage(Model):
         def filter_(id_):
             return (name not in self._cache.get(id_, {})
                 and name not in self._local_cache.get(id_, {}))
+
+        def unique(ids):
+            s = set()
+            for id_ in ids:
+                if id_ not in s:
+                    s.add(id_)
+                    yield id_
         index = self._ids.index(self.id)
         ids = chain(islice(self._ids, index, None),
             islice(self._ids, 0, max(index - 1, 0)))
-        ids = islice(ifilter(filter_, ids), self._cursor.IN_MAX)
+        ids = islice(unique(ifilter(filter_, ids)), self._cursor.IN_MAX)
 
         def instantiate(field, value, data):
             if field._type in ('many2one', 'one2one', 'reference'):
@@ -1395,6 +1395,9 @@ class ModelStorage(Model):
                 to_write = []
                 for target in targets:
                     if target.id < 0:
+                        if field._type == 'one2many':
+                            # Don't store old target link
+                            setattr(target, field.field, None)
                         to_create.append(target._save_values)
                     else:
                         if target.id in to_remove:

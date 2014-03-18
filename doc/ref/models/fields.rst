@@ -49,12 +49,6 @@ If ``True``, the field is not editable in the client. Default is ``False``.
 A :ref:`domain <topics-domain>` constraint that will be applied on the field
 value.
 
-.. warning::
-
-    For now it only works on relational fields like :class:`Many2One`,
-    :class:`One2Many` and :class:`Many2Many`.
-..
-
 ``states``
 ----------
 
@@ -71,6 +65,8 @@ with the values of the record.
 .. attribute:: Field.select
 
 If true, the content of the field will be indexed.
+
+.. _ref-models-fields-on_change:
 
 ``on_change``
 -------------
@@ -256,15 +252,6 @@ A single line string field.
     This method must return a list of string that will populate the
     ComboboxEntry in the client.
     The set of field names could be filled by using the decorator :meth:`depends`.
-
-Sha
----
-
-.. class:: Sha(string[, \**options])
-
-A string field which value will be stored with a `secure hash algorithm`_.
-
-.. _`secure hash algorithm`: http://en.wikipedia.org/wiki/Secure_Hash_Algorithm
 
 Text
 ----
