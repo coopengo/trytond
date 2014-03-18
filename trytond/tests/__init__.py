@@ -12,6 +12,7 @@ from .access import *
 from .wizard import *
 from .workflow import *
 from .copy_ import *
+from history import *
 
 
 def register():
@@ -21,6 +22,7 @@ def register():
         Integer,
         IntegerDefault,
         IntegerRequired,
+        IntegerDomain,
         Float,
         FloatDefault,
         FloatRequired,
@@ -39,9 +41,6 @@ def register():
         TextRequired,
         TextSize,
         TextTranslate,
-        Sha,
-        ShaDefault,
-        ShaRequired,
         Date,
         DateDefault,
         DateRequired,
@@ -108,7 +107,6 @@ def register():
         ImportDataNumericRequired,
         ImportDataChar,
         ImportDataText,
-        ImportDataSha,
         ImportDataDate,
         ImportDataDateTime,
         ImportDataSelection,
@@ -134,8 +132,15 @@ def register():
         CopyOne2ManyTarget,
         CopyOne2ManyReference,
         CopyOne2ManyReferenceTarget,
+        CopyMany2Many,
+        CopyMany2ManyTarget,
+        CopyMany2ManyRelation,
+        CopyMany2ManyReference,
+        CopyMany2ManyReferenceTarget,
+        CopyMany2ManyReferenceRelation,
         Many2OneTarget,
         Many2OneDomainValidation,
+        TestHistory,
         module='tests', type_='model')
     Pool.register(
         TestWizard,

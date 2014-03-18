@@ -1,3 +1,13 @@
+* Add the multi selection widget
+* Add index to one2many's on_change
+* Remove auto-refresh on Action Window
+* Add support of domain for non-relation field
+* Manage microseconds in JSON-RPC and XML-RPC
+* Remove Sha field
+* Add password widget
+* Add Len to PYSON
+* Use bcrypt to hash password if possible
+* Use a sequence of ids, values to set fields
 * Client side actions on button and wizard
 * Add depends attribute to data tag
 * Add tree_invisible attribute to button in tree view
