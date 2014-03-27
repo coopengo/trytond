@@ -139,7 +139,13 @@ class SimpleJSONRPCDispatcher(SimpleXMLRPCServer.SimpleXMLRPCDispatcher):
             # report exception back to server
             response['error'] = (str(sys.exc_value), tb_s)
 
-        return json.dumps(response, cls=JSONEncoder)
+        try:
+            return json.dumps(response, cls=JSONEncoder)
+        except:
+            print 'Error occured while encoding the server\'s response :'
+            print response
+            traceback.print_exc()
+            raise
 
 
 class GenericJSONRPCRequestHandler:
