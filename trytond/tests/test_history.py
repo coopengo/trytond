@@ -104,6 +104,75 @@ class HistoryTestCase(unittest.TestCase):
                     history = History(history_id)
                     self.assertEqual(history.value, value)
 
+    def test0030history_revisions(self):
+        'Test history revisions'
+        History = POOL.get('test.history')
+
+        with Transaction().start(DB_NAME, USER,
+                context=CONTEXT) as transaction:
+            history = History(value=1)
+            history.save()
+            history_id = history.id
+            first = history.create_date
+
+            transaction.cursor.commit()
+
+        with Transaction().start(DB_NAME, USER,
+                context=CONTEXT) as transaction:
+            history = History(history_id)
+            history.value = 2
+            history.save()
+            second = history.write_date
+
+            transaction.cursor.commit()
+
+        with Transaction().start(DB_NAME, USER,
+                context=CONTEXT) as transaction:
+            history = History(history_id)
+            history.value = 3
+            history.save()
+            third = history.write_date
+
+            transaction.cursor.commit()
+
+        with Transaction().start(DB_NAME, USER, context=CONTEXT):
+            revisions = History.history_revisions([history_id])
+            self.assertEqual(revisions, [
+                    (third, history_id, u'Administrator'),
+                    (second, history_id, u'Administrator'),
+                    (first, history_id, u'Administrator'),
+                    ])
+
+    def test0040restore_history(self):
+        'Test restore history'
+        History = POOL.get('test.history')
+
+        with Transaction().start(DB_NAME, USER,
+                context=CONTEXT) as transaction:
+            history = History(value=1)
+            history.save()
+            history_id = history.id
+            first = history.create_date
+
+            transaction.cursor.commit()
+
+        with Transaction().start(DB_NAME, USER,
+                context=CONTEXT) as transaction:
+            history = History(history_id)
+            history.value = 2
+            history.save()
+
+            transaction.cursor.commit()
+
+        with Transaction().start(DB_NAME, USER, context=CONTEXT):
+            History.restore_history([history_id], first)
+            history = History(history_id)
+            self.assertEqual(history.value, 1)
+
+        with Transaction().start(DB_NAME, USER, context=CONTEXT):
+            History.restore_history([history_id], datetime.datetime.min)
+            self.assertRaises(UserError, History.read, [history_id])
+
 
 def suite():
     return unittest.TestLoader().loadTestsFromTestCase(HistoryTestCase)

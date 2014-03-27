@@ -1360,7 +1360,6 @@ class TranslationClean(Wizard):
                 'delete_xml_record',
                 'xml_record_desc',
                 'write_xml_record',
-                'not_found_in_selection',
                 'relation_not_found',
                 'too_many_relations_found',
                 'xml_id_syntax_error',
@@ -1522,7 +1521,7 @@ class TranslationUpdate(Wizard):
                 Translation.create(to_create)
         columns = [translation.name.as_('name'),
             translation.res_id.as_('res_id'), translation.type.as_('type'),
-            translation.src.as_('src')]
+            translation.src.as_('src'), translation.module.as_('module')]
         cursor.execute(*(translation.select(*columns,
                     where=(translation.lang == 'en_US')
                     & translation.type.in_(self._updatable_types))
@@ -1536,7 +1535,8 @@ class TranslationUpdate(Wizard):
                     where=(translation.name == row['name'])
                     & (translation.type == row['type'])
                     & (translation.lang == lang)
-                    & (translation.res_id == (row['res_id'] or -1))))
+                    & (translation.res_id == (row['res_id'] or -1))
+                    & (translation.module == row['module'])))
 
         cursor.execute(*translation.select(
                 translation.src.as_('src'),

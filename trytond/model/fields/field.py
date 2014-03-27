@@ -222,6 +222,9 @@ class Field(object):
     def sql_type(self):
         raise NotImplementedError
 
+    def sql_column(self, table):
+        return Column(table, self.name)
+
     def _domain_value(self, operator, value):
         if isinstance(value, (Select, CombiningQuery)):
             return value
@@ -244,8 +247,9 @@ class Field(object):
         "Return a SQL expression for the domain using tables"
         table, _ = tables[None]
         name, operator, value = domain
+        assert name == self.name
         Operator = SQL_OPERATORS[operator]
-        column = Column(table, name)
+        column = self.sql_column(table)
         expression = Operator(column, self._domain_value(operator, value))
         if isinstance(expression, operators.In) and not expression.right:
             expression = Literal(False)
@@ -256,12 +260,13 @@ class Field(object):
 
     def convert_order(self, name, tables, Model):
         "Return a SQL expression to order"
+        assert name == self.name
         table, _ = tables[None]
         method = getattr(Model, 'order_%s' % name, None)
         if method:
             return method(tables)
         else:
-            return [Column(table, name)]
+            return [self.sql_column(table)]
 
 
 class FieldTranslate(Field):
@@ -271,7 +276,8 @@ class FieldTranslate(Field):
         language = Transaction().language
         if Model.__name__ == 'ir.model':
             return table.join(translation, 'LEFT',
-                condition=(translation.name == Concat(table.model, name))
+                condition=(translation.name == Concat(Concat(
+                            table.model, ','), name))
                 & (translation.res_id == -1)
                 & (translation.lang == language)
                 & (translation.type == 'model')
@@ -313,8 +319,9 @@ class FieldTranslate(Field):
         join = self._get_translation_join(Model, name,
             translation, model, table)
         Operator = SQL_OPERATORS[operator]
+        assert name == self.name
         column = Coalesce(NullIf(translation.value, ''),
-            Column(table, name))
+            self.sql_column(table))
         where = Operator(column, self._domain_value(operator, value))
         if isinstance(where, operators.In) and not where.right:
             where = Literal(False)
@@ -330,6 +337,7 @@ class FieldTranslate(Field):
         if not self.translate:
             return super(FieldTranslate, self).convert_order(name, tables,
                 Model)
+        assert name == self.name
 
         table, _ = tables[None]
         key = name + '.translation'
@@ -344,6 +352,7 @@ class FieldTranslate(Field):
         else:
             translation, _ = tables[key][None]
 
-        return [Coalesce(NullIf(translation.value, ''), Column(table, name))]
+        return [Coalesce(NullIf(translation.value, ''),
+                self.sql_column(table))]
 
 SQLType = namedtuple('SQLType', 'base type')
