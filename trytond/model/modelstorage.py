@@ -5,6 +5,7 @@ import datetime
 import time
 import csv
 import warnings
+import logging
 try:
     import cStringIO as StringIO
 except ImportError:
