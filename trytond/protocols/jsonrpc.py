@@ -312,20 +312,8 @@ class SimpleJSONRPCServer(SocketServer.TCPServer,
 
     def server_close(self):
         SocketServer.TCPServer.server_close(self)
-        for handler in self.handlers:
+        for handler in self.handlers.copy():
             self.shutdown_request(handler.request)
-
-    if sys.version_info[:2] <= (2, 6):
-
-        def shutdown_request(self, request):
-            """Called to shutdown and close an individual request."""
-            try:
-                #explicitly shutdown.  socket.close() merely releases
-                #the socket and waits for GC to perform the actual close.
-                request.shutdown(socket.SHUT_WR)
-            except socket.error:
-                pass  # some platforms may raise ENOTCONN here
-            self.close_request(request)
 
 
 class SimpleThreadedJSONRPCServer(SocketServer.ThreadingMixIn,
