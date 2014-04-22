@@ -511,7 +511,7 @@ class AccountTemplate(ModelSQL, ModelView):
             if self.taxes:
                 Account.write([Account(template2account[self.id])], {
                         'taxes': [
-                            ('add', template2tax[x.id]) for x in self.taxes],
+                            ('add', [template2tax[x.id] for x in self.taxes])],
                         })
             template_done.append(self.id)
 
@@ -1210,10 +1210,12 @@ class GeneralLedger(Report):
             clause.append(('move.state', '=', 'posted'))
         lines = MoveLine.search(clause,
             order=[
-                ('account', 'ASC'),
+                ('account', 'ASC'),  # TODO replace by account.id
                 ('date', 'ASC'),
                 ])
-        return groupby(lines, operator.attrgetter('account'))
+        key = operator.attrgetter('account')
+        lines.sort(key=key)
+        return groupby(lines, key)
 
     @classmethod
     def lines(cls, accounts, periods, posted):

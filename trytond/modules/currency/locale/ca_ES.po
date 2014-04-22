@@ -12,13 +12,13 @@ msgstr "La taxa de canvi de la moneda ha de ser més gran o igual a 0."
 
 msgctxt "error:currency.currency:"
 msgid "Invalid grouping \"%(grouping)s\" on  currency \"%(currency)s\"."
-msgstr "Agrupació \"%(grouping)s\" de la moneda \"%(currency)s\" no és correcta."
+msgstr "L'agrupació \"%(grouping)s\" de la moneda \"%(currency)s\" no és correcta."
 
 msgctxt "error:currency.currency:"
 msgid "No rate found for currency \"%(currency)s\" on \"%(date)s\""
 msgstr ""
 "No s'ha trobat cap taxa de canvi per a la moneda \"%(currency)s\" a la data "
-"\"%(date)s\""
+"\"%(date)s\"."
 
 msgctxt "field:currency.currency,active:"
 msgid "Active"
