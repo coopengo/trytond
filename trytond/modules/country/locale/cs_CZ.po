@@ -218,7 +218,7 @@ msgstr "Brunej"
 
 msgctxt "model:country.country,name:bo"
 msgid "Bolivia, Plurinational State of"
-msgstr "Bolívie, mnohonárodnostní stát"
+msgstr "Mnohonárodní stát Bolívie"
 
 msgctxt "model:country.country,name:bq"
 msgid "Bonaire, Sint Eustatius and Saba"
@@ -622,7 +622,7 @@ msgstr "Lichtenštejnsko"
 
 msgctxt "model:country.country,name:lk"
 msgid "Sri Lanka"
-msgstr "Srí Lanka"
+msgstr "Šrí Lanka"
 
 msgctxt "model:country.country,name:lr"
 msgid "Liberia"
@@ -658,7 +658,7 @@ msgstr "Monako"
 
 msgctxt "model:country.country,name:md"
 msgid "Moldova, Republic of"
-msgstr "Moldavsko, republika"
+msgstr "Moldavská republika"
 
 msgctxt "model:country.country,name:me"
 msgid "Montenegro"
@@ -833,8 +833,8 @@ msgid "Puerto Rico"
 msgstr "Portoriko"
 
 msgctxt "model:country.country,name:ps"
-msgid "Palestinian Territory, Occupied"
-msgstr "Palestinské území, okupované"
+msgid "Palestine, State of"
+msgstr "Palestinský stát"
 
 msgctxt "model:country.country,name:pt"
 msgid "Portugal"
@@ -1054,7 +1054,7 @@ msgstr "Svatý Vincenc a Grenadiny"
 
 msgctxt "model:country.country,name:ve"
 msgid "Venezuela, Bolivarian Republic of"
-msgstr "Venezuela, bolívarovská republika"
+msgstr "Bolívarovská republika Venezuela"
 
 msgctxt "model:country.country,name:vg"
 msgid "Virgin Islands, British"
@@ -1100,9 +1100,10 @@ msgctxt "model:country.country,name:zw"
 msgid "Zimbabwe"
 msgstr "Zimbabwe"
 
+#, fuzzy
 msgctxt "model:country.subdivision,name:"
 msgid "Subdivision"
-msgstr ""
+msgstr "Ascension"
 
 msgctxt "model:country.subdivision,name:ad-02"
 msgid "Canillo"
@@ -16324,14 +16325,6 @@ msgctxt "model:country.subdivision,name:sc-25"
 msgid "Roche Caiman"
 msgstr "Roche Caiman"
 
-msgctxt "model:country.subdivision,name:sd-bn"
-msgid "Northern Bahr el-Ghazal"
-msgstr "Northern Bahr el-Ghazal"
-
-msgctxt "model:country.subdivision,name:sd-bw"
-msgid "Western Bahr el-Ghazal"
-msgstr "Western Bahr el-Ghazal"
-
 msgctxt "model:country.subdivision,name:sd-dc"
 msgid "Zalingei"
 msgstr "Zalingei"
@@ -16352,18 +16345,6 @@ msgctxt "model:country.subdivision,name:sd-dw"
 msgid "Gharb Dārfūr"
 msgstr "Gharb Dārfūr"
 
-msgctxt "model:country.subdivision,name:sd-ec"
-msgid "Central Equatoria"
-msgstr "Central Equatoria"
-
-msgctxt "model:country.subdivision,name:sd-ee8"
-msgid "Eastern Equatoria"
-msgstr "Eastern Equatoria"
-
-msgctxt "model:country.subdivision,name:sd-ew"
-msgid "Western Equatoria"
-msgstr "Western Equatoria"
-
 msgctxt "model:country.subdivision,name:sd-gd"
 msgid "Al Qaḑārif"
 msgstr "Al Qaḑārif"
@@ -16371,10 +16352,6 @@ msgstr "Al Qaḑārif"
 msgctxt "model:country.subdivision,name:sd-gz"
 msgid "Al Jazīrah"
 msgstr "Al Jazīrah"
-
-msgctxt "model:country.subdivision,name:sd-jg"
-msgid "Jonglei"
-msgstr "Jonglei"
 
 msgctxt "model:country.subdivision,name:sd-ka"
 msgid "Kassalā"
@@ -16392,10 +16369,6 @@ msgctxt "model:country.subdivision,name:sd-ks"
 msgid "Janūb Kurdufān"
 msgstr "Janūb Kurdufān"
 
-msgctxt "model:country.subdivision,name:sd-lk"
-msgid "Lakes"
-msgstr "Lakes"
-
 msgctxt "model:country.subdivision,name:sd-nb"
 msgid "An Nīl al Azraq"
 msgstr "An Nīl al Azraq"
@@ -16408,10 +16381,6 @@ msgctxt "model:country.subdivision,name:sd-nr"
 msgid "An Nīl"
 msgstr "An Nīl"
 
-msgctxt "model:country.subdivision,name:sd-nu"
-msgid "Upper Nile"
-msgstr "Upper Nile"
-
 msgctxt "model:country.subdivision,name:sd-nw"
 msgid "An Nīl al Abyaḑ"
 msgstr "An Nīl al Abyaḑ"
@@ -16423,14 +16392,6 @@ msgstr "Al Baḩr al Aḩmar"
 msgctxt "model:country.subdivision,name:sd-si"
 msgid "Sinnār"
 msgstr "Sinnār"
-
-msgctxt "model:country.subdivision,name:sd-uy"
-msgid "Unity"
-msgstr "Unity"
-
-msgctxt "model:country.subdivision,name:sd-wr"
-msgid "Warrap"
-msgstr "Warrap"
 
 msgctxt "model:country.subdivision,name:se-ab"
 msgid "Stockholms län"
@@ -16513,8 +16474,8 @@ msgid "Västernorrlands län"
 msgstr "Västernorrlands län"
 
 msgctxt "model:country.subdivision,name:se-z"
-msgid "Jämtlande län"
-msgstr "Jämtlande län"
+msgid "Jämtlands län"
+msgstr "Jämtlands län"
 
 msgctxt "model:country.subdivision,name:sg-01"
 msgid "Central Singapore"
@@ -16536,15 +16497,15 @@ msgctxt "model:country.subdivision,name:sg-05"
 msgid "South West"
 msgstr "South West"
 
-msgctxt "model:country.subdivision,name:sg-ac"
+msgctxt "model:country.subdivision,name:sh-ac"
 msgid "Ascension"
 msgstr "Ascension"
 
-msgctxt "model:country.subdivision,name:sg-hl"
+msgctxt "model:country.subdivision,name:sh-hl"
 msgid "Saint Helena"
 msgstr "Saint Helena"
 
-msgctxt "model:country.subdivision,name:sg-ta"
+msgctxt "model:country.subdivision,name:sh-ta"
 msgid "Tristan da Cunha"
 msgstr "Tristan da Cunha"
 
@@ -17639,6 +17600,46 @@ msgstr "Sipaliwini"
 msgctxt "model:country.subdivision,name:sr-wa"
 msgid "Wanica"
 msgstr "Wanica"
+
+msgctxt "model:country.subdivision,name:ss-bn"
+msgid "Northern Bahr el-Ghazal"
+msgstr "Northern Bahr el-Ghazal"
+
+msgctxt "model:country.subdivision,name:ss-bw"
+msgid "Western Bahr el-Ghazal"
+msgstr "Western Bahr el-Ghazal"
+
+msgctxt "model:country.subdivision,name:ss-ec"
+msgid "Central Equatoria"
+msgstr "Central Equatoria"
+
+msgctxt "model:country.subdivision,name:ss-ee8"
+msgid "Eastern Equatoria"
+msgstr "Eastern Equatoria"
+
+msgctxt "model:country.subdivision,name:ss-ew"
+msgid "Western Equatoria"
+msgstr "Western Equatoria"
+
+msgctxt "model:country.subdivision,name:ss-jg"
+msgid "Jonglei"
+msgstr "Jonglei"
+
+msgctxt "model:country.subdivision,name:ss-lk"
+msgid "Lakes"
+msgstr "Lakes"
+
+msgctxt "model:country.subdivision,name:ss-nu"
+msgid "Upper Nile"
+msgstr "Upper Nile"
+
+msgctxt "model:country.subdivision,name:ss-uy"
+msgid "Unity"
+msgstr "Unity"
+
+msgctxt "model:country.subdivision,name:ss-wr"
+msgid "Warrap"
+msgstr "Warrap"
 
 msgctxt "model:country.subdivision,name:st-p"
 msgid "Príncipe"
@@ -20908,9 +20909,10 @@ msgctxt "view:country.country:"
 msgid "Country"
 msgstr ""
 
+#, fuzzy
 msgctxt "view:country.subdivision:"
 msgid "Subdivision"
-msgstr ""
+msgstr "Ascension"
 
 msgctxt "view:country.subdivision:"
 msgid "Subdivisions"
