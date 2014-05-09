@@ -47,7 +47,14 @@ class Model(WarningErrorMixin, URLMixin, PoolBase):
             if not isinstance(getattr(cls, attr), fields.Field):
                 continue
             field_name = attr
-            field = copy.deepcopy(getattr(cls, field_name))
+            field = getattr(cls, field_name)
+            # Copy the original field definition to prevent side-effect with
+            # the mutable attributes
+            for parent_cls in cls.__mro__:
+                parent_field = getattr(parent_cls, field_name, None)
+                if isinstance(parent_field, fields.Field):
+                    field = parent_field
+            field = copy.deepcopy(field)
             setattr(cls, field_name, field)
 
             for attribute in ('on_change', 'on_change_with', 'autocomplete',
@@ -360,17 +367,20 @@ class Model(WarningErrorMixin, URLMixin, PoolBase):
                 res[field]['delete'] = accesses.get(field, {}).get('delete',
                     True)
             if res[field]['type'] == 'one2many' \
-                    and hasattr(cls._fields[field], 'field'):
+                    and getattr(cls._fields[field], 'field', None):
                 res[field]['relation_field'] = copy.copy(
                         cls._fields[field].field)
             if res[field]['type'] == 'many2one':
                 target = cls._fields[field].get_target()
+                relation_fields = []
                 for target_name, target_field in target._fields.iteritems():
                     if (target_field._type == 'one2many'
                             and target_field.model_name == cls.__name__
                             and target_field.field == field):
-                        res[field]['relation_field'] = target_name
-                        break
+                        relation_fields.append(target_name)
+                # Set relation_field only if there is no ambiguity
+                if len(relation_fields) == 1:
+                    res[field]['relation_field'], = relation_fields
             if res[field]['type'] in ('datetime', 'time'):
                 res[field]['format'] = copy.copy(cls._fields[field].format)
             if res[field]['type'] == 'selection':
