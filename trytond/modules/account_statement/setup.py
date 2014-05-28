@@ -31,7 +31,7 @@ version = info.get('version', '0.0.1')
 major_version, minor_version, _ = version.split('.', 2)
 major_version = int(major_version)
 minor_version = int(minor_version)
-name = 'trytond_party'
+name = 'trytond_account_statement'
 
 download_url = 'http://downloads.tryton.org/%s.%s/' % (
     major_version, minor_version)
@@ -41,30 +41,31 @@ if minor_version % 2:
         'hg+http://hg.tryton.org/modules/%s#egg=%s-%s' % (
             name[8:], name, version))
 
-requires = ['python-sql']
+requires = []
 for dep in info.get('depends', []):
     if not re.match(r'(ir|res|webdav)(\W|$)', dep):
         requires.append(get_require_version('trytond_%s' % dep))
 requires.append(get_require_version('trytond'))
 
+tests_require = [get_require_version('proteus')]
+
 setup(name=name,
     version=version,
-    description='Tryton module with parties and addresses',
+    description='Tryton module with account statements',
     long_description=read('README'),
     author='Tryton',
     author_email='issue_tracker@tryton.org',
     url='http://www.tryton.org/',
     download_url=download_url,
-    keywords='tryton party',
-    package_dir={'trytond.modules.party': '.'},
+    keywords='tryton account statement',
+    package_dir={'trytond.modules.account_statement': '.'},
     packages=[
-        'trytond.modules.party',
-        'trytond.modules.party.tests',
+        'trytond.modules.account_statement',
+        'trytond.modules.account_statement.tests',
         ],
     package_data={
-        'trytond.modules.party': (info.get('xml', [])
-            + ['tryton.cfg', 'view/*.xml', 'locale/*.po', '*.odt',
-                'icons/*.svg']),
+        'trytond.modules.account_statement': (info.get('xml', [])
+            + ['tryton.cfg', 'view/*.xml', 'locale/*.po', 'tests/*.rst']),
         },
     classifiers=[
         'Development Status :: 5 - Production/Stable',
@@ -73,7 +74,6 @@ setup(name=name,
         'Intended Audience :: Developers',
         'Intended Audience :: Financial and Insurance Industry',
         'Intended Audience :: Legal Industry',
-        'Intended Audience :: Manufacturing',
         'License :: OSI Approved :: GNU General Public License (GPL)',
         'Natural Language :: Bulgarian',
         'Natural Language :: Catalan',
@@ -88,17 +88,16 @@ setup(name=name,
         'Operating System :: OS Independent',
         'Programming Language :: Python :: 2.7',
         'Topic :: Office/Business',
+        'Topic :: Office/Business :: Financial :: Accounting',
         ],
     license='GPL-3',
     install_requires=requires,
-    extras_require={
-        'VAT': ['vatnumber'],
-        },
     zip_safe=False,
     entry_points="""
     [trytond.modules]
-    party = trytond.modules.party
+    account_statement = trytond.modules.account_statement
     """,
     test_suite='tests',
     test_loader='trytond.test_loader:Loader',
+    tests_require=tests_require,
     )
