@@ -25,6 +25,10 @@ hg clone http://hg.tryton.org/modules/account_product
 rm -r account_product/.hg
 rm -r account_product/.hgtags
 
+hg clone http://hg.tryton.org/modules/account_statement
+rm -r account_statement/.hg
+rm -r account_statement/.hgtags
+
 hg clone http://hg.tryton.org/modules/bank
 rm -r bank/.hg
 rm -r bank/.hgtags
