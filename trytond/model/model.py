@@ -4,6 +4,7 @@
 import copy
 import collections
 import warnings
+from functools import total_ordering
 
 from trytond.model import fields
 from trytond.error import WarningErrorMixin
@@ -16,6 +17,7 @@ from trytond.rpc import RPC
 __all__ = ['Model']
 
 
+@total_ordering
 class Model(WarningErrorMixin, URLMixin, PoolBase):
     """
     Define a model in Tryton.
@@ -30,6 +32,7 @@ class Model(WarningErrorMixin, URLMixin, PoolBase):
         cls.__rpc__ = {
             'default_get': RPC(),
             'fields_get': RPC(),
+            'on_change': RPC(instantiate=0),
             'on_change_with': RPC(instantiate=0),
             'pre_validate': RPC(instantiate=0),
             }
@@ -164,12 +167,10 @@ class Model(WarningErrorMixin, URLMixin, PoolBase):
         Translation.register_error_messages(cls, module_name)
 
     @classmethod
-    def default_get(cls, fields_names, with_rec_name=True,
-            with_on_change=True):
+    def default_get(cls, fields_names, with_rec_name=True):
         '''
         Return a dict with the default values for each field in fields_names.
         If with_rec_name is True, rec_name will be added.
-        If with_on_change is True, on_change will be added.
         '''
         pool = Pool()
         Property = pool.get('ir.property')
@@ -193,36 +194,11 @@ class Model(WarningErrorMixin, URLMixin, PoolBase):
                     value[field_name + '.rec_name'] = Target(
                         value[field_name]).rec_name
 
-        if with_on_change:
-            value = cls._default_on_change(value)
         if not with_rec_name:
             for field in value.keys():
                 if field.endswith('.rec_name'):
                     del value[field]
         return value
-
-    @classmethod
-    def _default_on_change(cls, value):
-        """
-        Call on_change function for the default value
-        and return new default value
-        """
-        pool = Pool()
-        res = value.copy()
-        val = {}
-        for field in value.keys():
-            if field in cls._fields:
-                if cls._fields[field].on_change:
-                    inst = cls()
-                    for fname in cls._fields[field].on_change:
-                        setattr(inst, fname, value.get(fname))
-                    val.update(getattr(inst, 'on_change_' + field)())
-                if cls._fields[field]._type in ('one2many',):
-                    Target = pool.get(cls._fields[field].model_name)
-                    for val2 in res[field]:
-                        val2.update(Target._default_on_change(val2))
-        res.update(val)
-        return res
 
     @classmethod
     def fields_get(cls, fields_names=None):
@@ -409,6 +385,14 @@ class Model(WarningErrorMixin, URLMixin, PoolBase):
                 del res[i]
         return res
 
+    def on_change(self, fieldnames):
+        changes = []
+        for fieldname in sorted(fieldnames):
+            method = getattr(self, 'on_change_%s' % fieldname, None)
+            if method:
+                changes.append(method())
+        return changes
+
     def on_change_with(self, fieldnames):
         changes = {}
         for fieldname in fieldnames:
@@ -489,11 +473,6 @@ class Model(WarningErrorMixin, URLMixin, PoolBase):
         if not isinstance(other, Model) or self.__name__ != other.__name__:
             return NotImplemented
         return self.id < other.id
-
-    # TODO: replace by total_ordering when 2.6 will be dropped
-    __gt__ = lambda self, other: not (self < other or self == other)
-    __le__ = lambda self, other: self < other or self == other
-    __ge__ = lambda self, other: not self < other
 
     def __ne__(self, other):
         if not isinstance(other, Model):

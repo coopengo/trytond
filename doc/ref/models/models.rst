@@ -76,19 +76,27 @@ Class methods:
         warning states by users.
     ..
 
-.. classmethod:: Model.default_get(fields_names[, with_rec_name[, with_on_change]])
+.. classmethod:: Model.default_get(fields_names[, with_rec_name])
 
-    Return a dictionary with the default values for each field in
+    Returns a dictionary with the default values for each field in
     ``fields_names``. Default values are defined by the returned value of each
     instance method with the pattern ``default_`field_name`()``.
     ``with_rec_name`` allow to add `rec_name` value for each many2one field.
-    ``with_on_change`` allow to add ``on_change`` value for each default value.
 
 .. classmethod:: Model.fields_get([fields_names])
 
     Return the definition of each field on the model.
 
 Instance methods:
+
+.. method:: Model.on_change(fieldnames)
+
+    Returns the list of changes by calling `on_change` method of each field.
+
+.. method:: Model.on_change_with(fieldnames)
+
+    Returns the new values of all fields by calling `on_change_with` method of
+    each field.
 
 .. method:: Model.pre_validate()
 
@@ -520,6 +528,10 @@ Class attributes are:
     couple of key and label when the type is `selection`.
     The format is a key/label separated by ":" per line.
 
+.. attribute:: DictSchemaMixin.selection_sorted
+
+    If the :attr:`selection` must be sorted on label by the client.
+
 .. attribute:: DictSchemaMixin.selection_json
 
     The definition of the :class:`trytond.model.fields.Function` field to
@@ -560,5 +572,41 @@ Instance methods:
 
     Return if the instance match the pattern
 
+==========
+UnionMixin
+==========
+
+.. class:: UnionMixin
+
+A mixin_ to create a :class:`ModelSQL` which is the UNION_ of some
+:class:`ModelSQL`'s. The ids of each models are sharded to be unique.
+
+Static methods:
+
+.. staticmethod:: UnionMixin.union_models()
+
+    Return the list of :class:`ModelSQL`'s names
+
+Class methods:
+
+.. classmethod:: UnionMixin.union_shard(column, model)
+
+    Return a SQL expression that shards the column containing record id of
+    model name.
+
+.. classmethod:: UnionMixin.union_unshard(record_id)
+
+    Return the original instance of the record for the sharded id.
+
+.. classmethod:: UnionMixin.union_column(field, table, Model)
+
+    Return the SQL column that corresponds to the field on the union model.
+
+.. classmethod:: UnionMixin.union_columns(model)
+
+    Return the SQL table and columns to use for the UNION for the model name.
+
+
 .. _mixin: http://en.wikipedia.org/wiki/Mixin
 .. _JSON: http://en.wikipedia.org/wiki/Json
+.. _UNION: http://en.wikipedia.org/wiki/Union_(SQL)#UNION_operator
