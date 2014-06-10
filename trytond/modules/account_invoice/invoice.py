@@ -1,9 +1,9 @@
 #This file is part of Tryton.  The COPYRIGHT file at the top level of
 #this repository contains the full copyright notices and license terms.
 from decimal import Decimal
+from collections import defaultdict
 import base64
 import itertools
-import operator
 from sql import Literal
 from sql.aggregate import Count, Sum
 from sql.conditionals import Coalesce, Case
@@ -637,15 +637,28 @@ class Invoice(Workflow, ModelSQL, ModelView):
                 return False
         return True
 
-    def get_lines_to_pay(self, name):
-        lines = []
-        if self.move:
-            for line in self.move.lines:
-                if (line.account.id == self.account.id
-                        and line.maturity_date):
-                    lines.append(line)
-        lines.sort(key=operator.attrgetter('maturity_date'))
-        return [x.id for x in lines]
+    @classmethod
+    def get_lines_to_pay(cls, invoices, name):
+        pool = Pool()
+        MoveLine = pool.get('account.move.line')
+        line = MoveLine.__table__()
+        invoice = cls.__table__()
+        cursor = Transaction().cursor
+        in_max = cursor.IN_MAX
+
+        lines = defaultdict(list)
+        for i in range(0, len(invoices), in_max):
+            sub_ids = [i.id for i in invoices[i:i + in_max]]
+            red_sql = reduce_ids(invoice.id, sub_ids)
+            cursor.execute(*invoice.join(line,
+                condition=((invoice.move == line.move)
+                    & (invoice.account == line.account))).select(
+                        invoice.id, line.id,
+                        where=(line.maturity_date != None) & red_sql,
+                        order_by=(invoice.id, line.maturity_date)))
+            for invoice_id, line_id in cursor.fetchall():
+                lines[invoice_id].append(line_id)
+        return lines
 
     @classmethod
     def get_amount_to_pay(cls, invoices, name):
@@ -827,12 +840,15 @@ class Invoice(Workflow, ModelSQL, ModelView):
     @classmethod
     def update_taxes(cls, invoices, exception=False):
         Tax = Pool().get('account.invoice.tax')
+        to_create = []
+        to_delete = []
+        to_write = []
         for invoice in invoices:
             if invoice.state in ('posted', 'paid', 'cancel'):
                 continue
             computed_taxes = invoice._compute_taxes()
             if not invoice.taxes:
-                Tax.create([tax for tax in computed_taxes.values()])
+                to_create.extend([tax for tax in computed_taxes.values()])
             else:
                 tax_keys = []
                 for tax in invoice.taxes:
@@ -848,7 +864,7 @@ class Invoice(Workflow, ModelSQL, ModelView):
                         if exception:
                             cls.raise_user_error('missing_tax_line',
                                 (invoice.rec_name,))
-                        Tax.delete([tax])
+                        to_delete.append(tax)
                         continue
                     tax_keys.append(key)
                     if not invoice.currency.is_zero(
@@ -856,13 +872,19 @@ class Invoice(Workflow, ModelSQL, ModelView):
                         if exception:
                             cls.raise_user_error('diff_tax_line',
                                 (invoice.rec_name,))
-                        Tax.write([tax], computed_taxes[key])
+                        to_write.extend(([tax], computed_taxes[key]))
                 for key in computed_taxes:
                     if not key in tax_keys:
                         if exception:
                             cls.raise_user_error('missing_tax_line2',
                                 (invoice.rec_name,))
-                        Tax.create([computed_taxes[key]])
+                        to_create.append(computed_taxes[key])
+        if to_create:
+            Tax.create(to_create)
+        if to_delete:
+            Tax.delete(to_delete)
+        if to_write:
+            Tax.write(*to_write)
 
     def _get_move_line_invoice_line(self):
         '''
