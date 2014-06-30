@@ -178,15 +178,44 @@ class AccountPaymentSepaTestCase(unittest.TestCase):
 
             mandate = Mandate(party=party, identification='')
             mandate.save()
+            self.assertEqual(mandate.identification, None)
+
+            Mandate.write([mandate], {
+                    'identification': '',
+                    })
+            self.assertEqual(mandate.identification, None)
 
             self.assertRaises(UserError, Mandate.create, [{
                         'party': party.id,
                         'identification': same_id,
                         }])
 
-            Mandate.write([mandate], {
-                    'identification': '',
-                    })
+    def test_payment_sepa_bank_account_number(self):
+        'Test Payment.sepa_bank_account_number'
+        with Transaction().start(DB_NAME, USER, context=CONTEXT):
+            Payment = POOL.get('account.payment')
+            Mandate = POOL.get('account.payment.sepa.mandate')
+            AccountNumber = POOL.get('bank.account.number')
+            Party = POOL.get('party.party')
+            BankAccount = POOL.get('bank.account')
+
+            account_number = AccountNumber()
+            mandate = Mandate(account_number=account_number)
+            payment = Payment(kind='receivable', sepa_mandate=mandate)
+
+            self.assertEqual(id(payment.sepa_bank_account_number),
+                id(account_number))
+
+            other_account_number = AccountNumber(type='other')
+            iban_account_number = AccountNumber(type='iban')
+            bank_account = BankAccount(
+                numbers=[other_account_number, iban_account_number])
+            party = Party(
+                bank_accounts=[bank_account])
+            payment = Payment(kind='payable', party=party)
+
+            self.assertEqual(id(payment.sepa_bank_account_number),
+                id(iban_account_number))
 
 
 def suite():
