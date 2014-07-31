@@ -1,21 +1,63 @@
 #This file is part of Tryton.  The COPYRIGHT file at the top level of
 #this repository contains the full copyright notices and license terms.
 from decimal import Decimal
+from collections import namedtuple
+from itertools import groupby
+
+from sql.aggregate import Sum
+
 from trytond.model import Workflow, ModelView, ModelSQL, fields
 from trytond.pyson import Eval, If, Bool
 from trytond.transaction import Transaction
 from trytond import backend
 from trytond.pool import Pool
+from trytond.modules.company import CompanyReport
+from trytond.tools import reduce_ids
 
-__all__ = ['Statement', 'Line']
+__all__ = ['Statement', 'Line', 'StatementReport']
 
 _STATES = {'readonly': Eval('state') != 'draft'}
 _DEPENDS = ['state']
+
+_BALANCE_STATES = _STATES.copy()
+_BALANCE_STATES.update({
+        'invisible': ~Eval('validation', '').in_(['balance']),
+        'required': Eval('validation', '').in_(['balance']),
+        })
+_BALANCE_DEPENDS = _DEPENDS + ['validation']
+
+_AMOUNT_STATES = _STATES.copy()
+_AMOUNT_STATES.update({
+        'invisible': ~Eval('validation', '').in_(['amount']),
+        'required': Eval('validation', '').in_(['amount']),
+        })
+_AMOUNT_DEPENDS = _DEPENDS + ['validation']
+
+_NUMBER_STATES = _STATES.copy()
+_NUMBER_STATES.update({
+        'invisible': ~Eval('validation', '').in_(['number_of_lines']),
+        'required': Eval('validation', '').in_(['number_of_lines']),
+        })
+_NUMBER_DEPENDS = _DEPENDS + ['validation']
+
+
+class Null(object):
+    "Always different"
+
+    def __eq__(self, other):
+        return False
+
+    def __ne__(self, other):
+        return True
+
+    def __str__(self):
+        return ''
 
 
 class Statement(Workflow, ModelSQL, ModelView):
     'Account Statement'
     __name__ = 'account.statement'
+    name = fields.Char('Name', required=True)
     company = fields.Many2One('company.company', 'Company', required=True,
         select=True, states=_STATES, domain=[
             ('id', If(Eval('context', {}).contains('company'), '=', '!='),
@@ -35,19 +77,25 @@ class Statement(Workflow, ModelSQL, ModelView):
         'on_change_with_currency_digits')
     date = fields.Date('Date', required=True, states=_STATES, depends=_DEPENDS,
         select=True)
-    start_balance = fields.Numeric('Start Balance', required=True,
+    start_balance = fields.Numeric('Start Balance',
         digits=(16, Eval('currency_digits', 2)),
-        states=_STATES, depends=['state', 'currency_digits'])
-    end_balance = fields.Numeric('End Balance', required=True,
+        states=_BALANCE_STATES, depends=_BALANCE_DEPENDS + ['currency_digits'])
+    end_balance = fields.Numeric('End Balance',
         digits=(16, Eval('currency_digits', 2)),
-        states=_STATES, depends=['state', 'currency_digits'])
+        states=_BALANCE_STATES, depends=_BALANCE_DEPENDS + ['currency_digits'])
     balance = fields.Function(
         fields.Numeric('Balance',
             digits=(16, Eval('currency_digits', 2)),
-            depends=['currency_digits']),
+            states=_BALANCE_STATES,
+            depends=_BALANCE_DEPENDS + ['currency_digits']),
         'on_change_with_balance')
+    total_amount = fields.Numeric('Total Amount',
+        digits=(16, Eval('currency_digits', 2)),
+        states=_AMOUNT_STATES, depends=_AMOUNT_DEPENDS + ['currency_digits'])
+    number_of_lines = fields.Integer('Number of Lines',
+        states=_NUMBER_STATES, depends=_NUMBER_DEPENDS)
     lines = fields.One2Many('account.statement.line', 'statement',
-        'Transactions', states={
+        'Lines', states={
             'readonly': (Eval('state') != 'draft') | ~Eval('journal'),
             },
         depends=['state', 'journal'])
@@ -57,6 +105,8 @@ class Statement(Workflow, ModelSQL, ModelView):
         ('cancel', 'Canceled'),
         ('posted', 'Posted'),
         ], 'State', readonly=True, select=True)
+    validation = fields.Function(fields.Char('Validation'),
+        'on_change_with_validation')
 
     @classmethod
     def __setup__(cls):
@@ -64,6 +114,8 @@ class Statement(Workflow, ModelSQL, ModelView):
         cls._order[0] = ('id', 'DESC')
         cls._error_messages.update({
                 'wrong_end_balance': 'End Balance must be "%s".',
+                'wrong_total_amount': 'Total Amount must be "%s".',
+                'wrong_number_of_lines': 'Number of Lines must be "%s".',
                 'delete_cancel': ('Statement "%s" must be cancelled before '
                     'deletion.'),
                 'paid_invoice_draft_statement': ('There are paid invoices on '
@@ -95,6 +147,7 @@ class Statement(Workflow, ModelSQL, ModelView):
     def __register__(cls, module_name):
         TableHandler = backend.get('TableHandler')
         cursor = Transaction().cursor
+        sql_table = cls.__table__()
 
         # Migration from 1.8: new field company
         table = TableHandler(cursor, cls, module_name)
@@ -116,6 +169,15 @@ class Statement(Workflow, ModelSQL, ModelView):
                             })
             table = TableHandler(cursor, cls, module_name)
             table.not_null_action('company', action='add')
+
+        # Migration from 3.2: remove required on start/end balance
+        table.not_null_action('start_balance', action='remove')
+        table.not_null_action('end_balance', action='remove')
+
+        # Migration from 3.2: add required name
+        cursor.execute(*sql_table.update([sql_table.name],
+                [sql_table.id.cast(cls.name.sql_type().base)],
+                where=sql_table.name == None))
 
     @staticmethod
     def default_company():
@@ -161,28 +223,6 @@ class Statement(Workflow, ModelSQL, ModelView):
         if self.journal:
             return self.journal.currency.digits
         return 2
-
-    @classmethod
-    def get_rec_name(cls, statements, name):
-        Lang = Pool().get('ir.lang')
-
-        lang, = Lang.search([
-                ('code', '=', Transaction().language),
-                ])
-
-        res = {}
-        for statement in statements:
-            res[statement.id] = (statement.journal.name + ' '
-                + Lang.currency(lang, statement.start_balance,
-                    statement.journal.currency, symbol=False, grouping=True)
-                + ' - '
-                + Lang.currency(lang, statement.end_balance,
-                    statement.journal.currency, symbol=False, grouping=True))
-        return res
-
-    @classmethod
-    def search_rec_name(cls, name, clause):
-        return [('journal',) + tuple(clause[1:])]
 
     def get_end_balance(self, name):
         end_balance = self.start_balance
@@ -266,6 +306,47 @@ class Statement(Workflow, ModelSQL, ModelView):
                                 })
         return res
 
+    @fields.depends('journal')
+    def on_change_with_validation(self, name=None):
+        if self.journal:
+            return self.journal.validation
+
+    def _group_key(self, line):
+        key = (
+            ('number', line.number or Null()),
+            ('date', line.date),
+            ('party', line.party),
+            )
+        return key
+
+    def _get_grouped_line(self):
+        "Return Line class for grouped lines"
+        assert self.lines
+
+        keys = [k[0] for k in self._group_key(self.lines[0])]
+
+        class Line(namedtuple('Line', keys + ['lines'])):
+
+            @property
+            def amount(self):
+                return sum((l.amount for l in self.lines))
+
+            @property
+            def descriptions(self):
+                done = set()
+                for line in self.lines:
+                    if line.description and line.description not in done:
+                        done.add(line.description)
+                        yield line.description
+        return Line
+
+    @property
+    def grouped_lines(self):
+        if self.lines:
+            Line = self._get_grouped_line()
+            for key, lines in groupby(self.lines, key=self._group_key):
+                yield Line(**dict(key + (('lines', list(lines)),)))
+
     @classmethod
     def delete(cls, statements):
         # Cancel before delete
@@ -281,32 +362,51 @@ class Statement(Workflow, ModelSQL, ModelView):
     def draft(cls, statements):
         pass
 
+    def validate_balance(self):
+        pool = Pool()
+        Lang = pool.get('ir.lang')
+
+        end_balance = (self.start_balance
+            + sum(l.amount for l in self.lines))
+        if end_balance != self.end_balance:
+            lang, = Lang.search([
+                    ('code', '=', Transaction().language),
+                    ])
+            amount = Lang.format(lang,
+                '%.' + str(self.journal.currency.digits) + 'f',
+                end_balance, True)
+            self.raise_user_error('wrong_end_balance', amount)
+
+    def validate_amount(self):
+        pool = Pool()
+        Lang = pool.get('ir.lang')
+
+        amount = sum(l.amount for l in self.lines)
+        if amount != self.total_amount:
+            lang, = Lang.search([
+                    ('code', '=', Transaction().language),
+                    ])
+            amount = Lang.format(lang,
+                '%.' + str(self.journal.currency.digits) + 'f',
+                amount, True)
+            self.raise_user_error('wrong_total_amount', amount)
+
+    def validate_number_of_lines(self):
+        number = len(list(self.grouped_lines))
+        if number != self.number_of_lines:
+            self.raise_user_error('wrong_number_of_lines', number)
+
     @classmethod
     @ModelView.button
     @Workflow.transition('validated')
     def validate_statement(cls, statements):
         pool = Pool()
-        Lang = pool.get('ir.lang')
         Line = pool.get('account.statement.line')
 
-        statement_lines = []
         for statement in statements:
-            computed_end_balance = statement.start_balance
-            for line in statement.lines:
-                computed_end_balance += line.amount
-            if computed_end_balance != statement.end_balance:
-                lang, = Lang.search([
-                        ('code', '=', Transaction().language),
-                        ])
-
-                amount = Lang.format(lang,
-                        '%.' + str(statement.journal.currency.digits) + 'f',
-                        computed_end_balance, True)
-                cls.raise_user_error('wrong_end_balance',
-                    error_args=(amount,))
+            getattr(statement, 'validate_%s' % statement.validation)()
             for line in statement.lines:
                 line.create_move()
-                statement_lines.append(line.id)
         cls.write(statements, {
                 'state': 'validated',
                 })
@@ -615,3 +715,7 @@ class Line(ModelSQL, ModelView):
                 amount_second_currency=amount_second_currency,
                 ))
         return move_lines
+
+
+class StatementReport(CompanyReport):
+    __name__ = 'account.statement'
