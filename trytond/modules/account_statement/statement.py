@@ -96,7 +96,7 @@ class Statement(Workflow, ModelSQL, ModelView):
     number_of_lines = fields.Integer('Number of Lines',
         states=_NUMBER_STATES, depends=_NUMBER_DEPENDS)
     lines = fields.One2Many('account.statement.line', 'statement',
-        'Transactions', states={
+        'Lines', states={
             'readonly': (Eval('state') != 'draft') | ~Eval('journal'),
             },
         depends=['state', 'journal'])
@@ -306,6 +306,11 @@ class Statement(Workflow, ModelSQL, ModelView):
                                 'invoice': None,
                                 })
         return res
+
+    @fields.depends('journal')
+    def on_change_with_validation(self, name=None):
+        if self.journal:
+            return self.journal.validation
 
     def _group_key(self, line):
         key = (

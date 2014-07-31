@@ -7,5 +7,7 @@ include tryton.cfg
 include *.xml
 include *.odt
 include view/*.xml
+include *.odt
 include locale/*.po
 include tests/*.rst
+include doc/*.rst
