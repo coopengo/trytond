@@ -70,8 +70,8 @@ class Model(WarningErrorMixin, URLMixin, PoolBase):
                         continue
                 else:
                     function_name = '%s_%s' % (attribute, field_name)
-                function = getattr(cls, function_name, None)
-                if function:
+                for parent_cls in cls.__mro__:
+                    function = getattr(parent_cls, function_name, None)
                     if getattr(function, 'depends', None):
                         setattr(field, attribute,
                             getattr(field, attribute) | function.depends)
