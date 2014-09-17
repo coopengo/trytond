@@ -1,18 +1,17 @@
 # -*- coding: utf-8 -*-
 #This file is part of Tryton.  The COPYRIGHT file at the top level of
 #this repository contains the full copyright notices and license terms.
-import traceback
 import logging
 import time
 import sys
 import pydoc
 
-from sql import Table, Flavor
+from sql import Table
 
 from trytond.pool import Pool
 from trytond import security
 from trytond import backend
-from trytond.config import CONFIG
+from trytond.config import config
 from trytond.version import VERSION
 from trytond.transaction import Transaction
 from trytond.cache import Cache
@@ -20,6 +19,7 @@ from trytond.exceptions import UserError, UserWarning, NotLogged, \
     ConcurrencyException
 from trytond.rpc import RPC
 
+logger = logging.getLogger(__name__)
 
 ir_configuration = Table('ir_configuration')
 ir_lang = Table('ir_lang')
@@ -40,16 +40,15 @@ def dispatch(host, port, protocol, database_name, user, session, object_type,
             except Exception:
                 return False
             res = security.login(database_name, user, session)
-            Cache.clean(database_name)
-            logger = logging.getLogger('dispatcher')
+            with Transaction().start(database_name, 0):
+                Cache.clean(database_name)
+                Cache.resets(database_name)
             msg = res and 'successful login' or 'bad login or password'
             logger.info('%s \'%s\' from %s:%d using %s on database \'%s\''
                 % (msg, user, host, port, protocol, database_name))
-            Cache.resets(database_name)
             return res or False
         elif method == 'logout':
             name = security.logout(database_name, user, session)
-            logger = logging.getLogger('dispatcher')
             logger.info(('logout \'%s\' from %s:%d '
                     'using %s on database \'%s\'')
                 % (name, host, port, protocol, database_name))
@@ -81,7 +80,7 @@ def dispatch(host, port, protocol, database_name, user, session, object_type,
             except Exception:
                 return False
         elif method == 'list':
-            if CONFIG['prevent_dblist']:
+            if not config.get('database', 'list'):
                 raise Exception('AccessDenied')
             with Transaction().start(None, 0, close=True) as transaction:
                 return transaction.database.list(transaction.cursor)
@@ -121,7 +120,7 @@ def dispatch(host, port, protocol, database_name, user, session, object_type,
             obj = pool.get(object_name, type=object_type)
             return pydoc.getdoc(getattr(obj, method))
 
-    for count in range(int(CONFIG['retry']), -1, -1):
+    for count in range(config.getint('database', 'retry'), -1, -1):
         try:
             user = security.check(database_name, user, session)
         except DatabaseOperationalError:
@@ -130,7 +129,6 @@ def dispatch(host, port, protocol, database_name, user, session, object_type,
             raise
         break
 
-    Cache.clean(database_name)
     database_list = Pool.database_list()
     pool = Pool(database_name)
     if not database_name in database_list:
@@ -147,9 +145,13 @@ def dispatch(host, port, protocol, database_name, user, session, object_type,
         raise UserError('Calling method %s on %s %s is not allowed!'
             % (method, object_type, object_name))
 
-    for count in range(int(CONFIG['retry']), -1, -1):
+    exception_message = ('Exception calling %s.%s.%s from %s@%s:%d/%s' %
+        (object_type, object_name, method, user, host, port, database_name))
+
+    for count in range(config.getint('database', 'retry'), -1, -1):
         with Transaction().start(database_name, user,
                 readonly=rpc.readonly) as transaction:
+            Cache.clean(database_name)
             try:
                 c_args, c_kwargs, transaction.context, transaction.timestamp \
                     = rpc.convert(obj, *args, **kwargs)
@@ -166,23 +168,20 @@ def dispatch(host, port, protocol, database_name, user, session, object_type,
                             for i in inst]
                 if not rpc.readonly:
                     transaction.cursor.commit()
-            except DatabaseOperationalError, exception:
+            except DatabaseOperationalError:
                 transaction.cursor.rollback()
                 if count and not rpc.readonly:
                     continue
                 raise
-            except Exception, exception:
-                if CONFIG['verbose'] and not isinstance(exception, (
-                            NotLogged, ConcurrencyException, UserError,
-                            UserWarning)):
-                    tb_s = ''.join(traceback.format_exception(*sys.exc_info()))
-                    logger = logging.getLogger('dispatcher')
-                    logger.error('Exception calling method %s on '
-                        '%s %s from %s@%s:%d/%s:\n'
-                        % (method, object_type, object_name, user, host, port,
-                            database_name) + tb_s)
+            except (NotLogged, ConcurrencyException, UserError, UserWarning):
+                logger.debug(exception_message, exc_info=sys.exc_info())
                 transaction.cursor.rollback()
                 raise
+            except Exception:
+                logger.error(exception_message, exc_info=sys.exc_info())
+                transaction.cursor.rollback()
+                raise
+            Cache.resets(database_name)
         with Transaction().start(database_name, 0) as transaction:
             pool = Pool(database_name)
             Session = pool.get('ir.session')
@@ -193,7 +192,6 @@ def dispatch(host, port, protocol, database_name, user, session, object_type,
                 transaction.cursor.rollback()
             else:
                 transaction.cursor.commit()
-        Cache.resets(database_name)
         return result
 
 
@@ -210,7 +208,6 @@ def create(database_name, password, lang, admin_password):
     Database = backend.get('Database')
     security.check_super(password)
     res = False
-    logger = logging.getLogger('database')
 
     try:
         with Transaction().start(None, 0, close=True, autocommit=True) \
@@ -225,7 +222,7 @@ def create(database_name, password, lang, admin_password):
             transaction.cursor.commit()
 
         pool = Pool(database_name)
-        pool.init(update=True, lang=[lang])
+        pool.init(update=['res', 'ir'], lang=[lang])
         with Transaction().start(database_name, 0) as transaction:
             User = pool.get('res.user')
             Lang = pool.get('ir.lang')
@@ -246,9 +243,8 @@ def create(database_name, password, lang, admin_password):
             transaction.cursor.commit()
             res = True
     except Exception:
-        logger.error('CREATE DB: %s failed' % (database_name,))
-        tb_s = ''.join(traceback.format_exception(*sys.exc_info()))
-        logger.error('Exception in call: \n' + tb_s)
+        logger.error('CREATE DB: %s failed' % database_name,
+            exc_info=sys.exc_info())
         raise
     else:
         logger.info('CREATE DB: %s' % (database_name,))
@@ -261,7 +257,6 @@ def drop(database_name, password):
     Database(database_name).close()
     # Sleep to let connections close
     time.sleep(1)
-    logger = logging.getLogger('database')
 
     with Transaction().start(None, 0, close=True, autocommit=True) \
         as transaction:
@@ -270,9 +265,8 @@ def drop(database_name, password):
             Database.drop(cursor, database_name)
             cursor.commit()
         except Exception:
-            logger.error('DROP DB: %s failed' % (database_name,))
-            tb_s = ''.join(traceback.format_exception(*sys.exc_info()))
-            logger.error('Exception in call: \n' + tb_s)
+            logger.error('DROP DB: %s failed' % database_name,
+                exc_info=sys.exc_info())
             raise
         else:
             logger.info('DROP DB: %s' % (database_name))
@@ -286,7 +280,6 @@ def dump(database_name, password):
     Database(database_name).close()
     # Sleep to let connections close
     time.sleep(1)
-    logger = logging.getLogger('database')
 
     data = Database.dump(database_name)
     logger.info('DUMP DB: %s' % (database_name))
@@ -295,7 +288,6 @@ def dump(database_name, password):
 
 def restore(database_name, password, data, update=False):
     Database = backend.get('Database')
-    logger = logging.getLogger('database')
     security.check_super(password)
     try:
         database = Database().connect()
