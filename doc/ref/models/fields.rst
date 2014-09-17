@@ -129,8 +129,12 @@ client will also read these fields even if they are not defined on the view.
 
 .. attribute:: Field.context
 
-A dictionary which will update the current context when opening a *relation
-field*.
+A dictionary which will update the current context for *relation field*.
+
+.. warning::
+    The context could only depend on direct field of the record and without
+    context.
+..
 
 ``loading``
 -----------
@@ -183,6 +187,18 @@ Default value
 =============
 
 See :ref:`default value <topics-fields_default_value>`
+
+Searching
+=========
+
+A class method could be defined for each field which must return a SQL
+expression for the given domain instead of the default one.
+The method signature is::
+
+    domain_<field name>(domain, tables)
+
+Where ``domain`` is the simple :ref:`domain <topics-domain>` clause and
+``tables`` is a nested dictionary, see :meth:`~Field.convert_domain`.
 
 Ordering
 ========
@@ -606,6 +622,10 @@ This field accepts as written value a list of tuples like the :class:`One2Many`.
 
     An integer or a PYSON expression denoting the maximum number of records
     allowed in the relation.
+
+.. attribute:: Many2Many.add_remove
+
+    An alias to the :attr:`domain` for compatibility with the :class:`One2Many`.
 
 Instance methods:
 

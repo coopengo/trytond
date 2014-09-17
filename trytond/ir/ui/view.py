@@ -131,11 +131,7 @@ class View(ModelSQL, ModelView):
             xml = view.arch.strip()
             if not xml:
                 continue
-            try:
-                tree = etree.fromstring(xml)
-            except etree.XMLSyntaxError:
-                print xml
-                raise
+            tree = etree.fromstring(xml)
 
             if hasattr(etree, 'RelaxNG'):
                 rng_type = view.inherit.type if view.inherit else view.type

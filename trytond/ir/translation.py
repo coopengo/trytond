@@ -9,10 +9,7 @@ import polib
 import xml.dom.minidom
 from difflib import SequenceMatcher
 import os
-try:
-    from hashlib import md5
-except ImportError:
-    from md5 import md5
+from hashlib import md5
 from lxml import etree
 from itertools import izip
 from sql import Column
