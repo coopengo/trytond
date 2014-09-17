@@ -240,26 +240,6 @@ class ModelView(Model):
         result['arch'] = xarch
         result['fields'] = xfields
 
-        if result['field_childs']:
-            child_field = result['field_childs']
-            result['children_definitions'] = defs = {}
-            model = cls
-            requisite_fields = result['fields'].keys()
-            requisite_fields.remove(child_field)
-            while model and model.__name__ not in defs:
-                has_fields = all(hasattr(model, rfield)
-                    for rfield in requisite_fields)
-                if has_fields:
-                    defs[model.__name__] = model.fields_get(requisite_fields
-                        + [child_field])
-                field = getattr(model, child_field, None)
-                if field:
-                    model = pool.get(field.model_name)
-                else:
-                    model = None
-        else:
-            result['children_definitions'] = {}
-
         cls._fields_view_get_cache.set(key, result)
         return result
 
@@ -404,8 +384,6 @@ class ModelView(Model):
                             relation = field.get_target().__name__
                     except Exception:
                         relation = False
-                    if element.get('relation'):
-                        relation = element.get('relation')
                     if relation and element.tag == 'field':
                         childs = False
                         views = {}
@@ -440,9 +418,8 @@ class ModelView(Model):
                         element.attrib['mode'] = ','.join(mode)
                         element.attrib['view_ids'] = ','.join(
                             map(str, view_ids))
-                        if not element.get('relation'):
-                            fields_attrs[element.get(attr)].setdefault('views', {}
-                                ).update(views)
+                        fields_attrs[element.get(attr)].setdefault('views', {}
+                            ).update(views)
             if element.get('name') in fields_width:
                 element.set('width', str(fields_width[element.get('name')]))
 
