@@ -191,22 +191,19 @@ class Attachment(ModelSQL, ModelView):
         return (self.write_date if self.write_date else self.create_date
             ).replace(microsecond=0)
 
-    @classmethod
-    def get_last_user(cls, attachments, name):
-        with Transaction().set_user(0):
-            return dict(
-                (x.id, x.write_uid.rec_name
-                    if x.write_uid else x.create_uid.rec_name)
-                for x in cls.browse(attachments))
+    def get_last_user(self, name):
+        return (self.write_uid.rec_name if self.write_uid
+            else self.create_uid.rec_name)
 
     @classmethod
     def check_access(cls, ids, mode='read'):
         pool = Pool()
         ModelAccess = pool.get('ir.model.access')
-        if Transaction().user == 0:
+        if ((Transaction().user == 0)
+                or not Transaction().context.get('_check_access')):
             return
         model_names = set()
-        with Transaction().set_user(0):
+        with Transaction().set_context(_check_access=False):
             for attachment in cls.browse(ids):
                 if attachment.resource:
                     model_names.add(attachment.resource.__name__)
