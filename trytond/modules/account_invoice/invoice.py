@@ -436,6 +436,10 @@ class Invoice(Workflow, ModelSQL, ModelView):
         InvoiceTax = pool.get('account.invoice.tax')
         Account = pool.get('account.account')
         TaxCode = pool.get('account.tax.code')
+        Configuration = pool.get('account.configuration')
+
+        config = Configuration(1)
+
         res = {
             'untaxed_amount': Decimal('0.0'),
             'tax_amount': Decimal('0.0'),
@@ -443,6 +447,13 @@ class Invoice(Workflow, ModelSQL, ModelView):
             'taxes': {},
             }
         computed_taxes = {}
+
+        def round_taxes():
+            if self.currency:
+                for value in computed_taxes.itervalues():
+                    for field in ('base', 'amount'):
+                        value[field] = self.currency.round(value[field])
+
         if self.lines:
             context = self.get_tax_context()
             for line in self.lines:
@@ -457,16 +468,16 @@ class Invoice(Workflow, ModelSQL, ModelView):
                 for tax in taxes:
                     key, val = self._compute_tax(tax,
                         self.type or 'out_invoice')
-                    if not key in computed_taxes:
+                    if key not in computed_taxes:
                         computed_taxes[key] = val
                     else:
                         computed_taxes[key]['base'] += val['base']
                         computed_taxes[key]['amount'] += val['amount']
-        if self.currency:
-            for key in computed_taxes:
-                for field in ('base', 'amount'):
-                    computed_taxes[key][field] = self.currency.round(
-                        computed_taxes[key][field])
+                if config.tax_rounding == 'line':
+                    round_taxes()
+        if config.tax_rounding == 'document':
+            round_taxes()
+
         tax_keys = []
         for tax in (self.taxes or []):
             if tax.manual:
@@ -808,31 +819,41 @@ class Invoice(Workflow, ModelSQL, ModelView):
         return key, val
 
     def _compute_taxes(self):
-        Tax = Pool().get('account.tax')
+        pool = Pool()
+        Tax = pool.get('account.tax')
+        Configuration = pool.get('account.configuration')
+
+        config = Configuration(1)
 
         context = self.get_tax_context()
 
-        res = {}
+        taxes = {}
+
+        def round_taxes():
+            for value in taxes.itervalues():
+                for field in ('base', 'amount'):
+                    value[field] = self.currency.round(value[field])
+
         for line in self.lines:
-            # Don't round on each line to handle rounding error
             if line.type != 'line':
                 continue
             with Transaction().set_context(**context):
-                taxes = Tax.compute(line.taxes, line.unit_price,
+                tax_list = Tax.compute(line.taxes, line.unit_price,
                     line.quantity,
                     date=self.accounting_date or self.invoice_date)
-            for tax in taxes:
+            for tax in tax_list:
                 key, val = self._compute_tax(tax, self.type)
                 val['invoice'] = self.id
-                if not key in res:
-                    res[key] = val
+                if key not in taxes:
+                    taxes[key] = val
                 else:
-                    res[key]['base'] += val['base']
-                    res[key]['amount'] += val['amount']
-        for key in res:
-            for field in ('base', 'amount'):
-                res[key][field] = self.currency.round(res[key][field])
-        return res
+                    taxes[key]['base'] += val['base']
+                    taxes[key]['amount'] += val['amount']
+            if config.tax_rounding == 'line':
+                round_taxes()
+        if config.tax_rounding == 'document':
+            round_taxes()
+        return taxes
 
     @classmethod
     def update_taxes(cls, invoices, exception=False):
@@ -1043,14 +1064,9 @@ class Invoice(Workflow, ModelSQL, ModelView):
             ('party',) + tuple(clause[1:]),
             ]
 
-    @classmethod
-    def get_origins(cls, invoices, name):
-        origins = {}
-        with Transaction().set_user(0, set_context=True):
-            for invoice in cls.browse(invoices):
-                origins[invoice.id] = ', '.join(set(itertools.ifilter(None,
-                            (l.origin_name for l in invoice.lines))))
-        return origins
+    def get_origins(self, name):
+        return ', '.join(set(itertools.ifilter(None,
+                    (l.origin_name for l in self.lines))))
 
     @classmethod
     def delete(cls, invoices):
@@ -1335,8 +1351,7 @@ class Invoice(Workflow, ModelSQL, ModelView):
             if invoice.move:
                 moves.append(invoice.move)
         if moves:
-            with Transaction().set_user(0, set_context=True):
-                Move.delete(moves)
+            Move.delete(moves)
 
     @classmethod
     @ModelView.button
@@ -1408,8 +1423,7 @@ class Invoice(Workflow, ModelSQL, ModelView):
                     invoice.save()
                     cancel_moves.append(invoice.cancel_move)
         if delete_moves:
-            with Transaction().set_user(0, set_context=True):
-                Move.delete(delete_moves)
+            Move.delete(delete_moves)
         if cancel_moves:
             Move.post(cancel_moves)
         # Write state before reconcile to prevent invoice to go to paid state

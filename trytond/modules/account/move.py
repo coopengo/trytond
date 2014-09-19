@@ -410,11 +410,13 @@ class Move(ModelSQL, ModelView):
                     move.period.post_move_sequence_used.id)
             cls.write([move], values)
 
+            keyfunc = lambda l: (l.party, l.account)
             to_reconcile = [l for l in move.lines
                 if ((l.debit == l.credit == Decimal('0'))
                     and l.account.reconcile)]
-            if to_reconcile:
-                Line.reconcile(to_reconcile)
+            to_reconcile = sorted(to_reconcile, key=keyfunc)
+            for _, zero_lines in groupby(to_reconcile, keyfunc):
+                Line.reconcile(list(zero_lines))
 
     @classmethod
     @ModelView.button
@@ -1089,17 +1091,15 @@ class Line(ModelSQL, ModelView):
         return res
 
     def get_move_field(self, name):
+        field = getattr(self.__class__, name)
         if name.startswith('move_'):
             name = name[5:]
-        if name in ('date', 'state', 'description'):
-            return getattr(self.move, name)
-        elif name == 'origin':
-            origin = getattr(self.move, name)
-            if origin:
-                return str(origin)
-            return None
-        else:
-            return getattr(self.move, name).id
+        value = getattr(self.move, name)
+        if isinstance(value, ModelSQL):
+            if field._type == 'reference':
+                return str(value)
+            return value.id
+        return value
 
     @classmethod
     def set_move_field(cls, lines, name, value):
@@ -1138,6 +1138,16 @@ class Line(ModelSQL, ModelView):
     order_date = _order_move_field('date')
     order_origin = _order_move_field('origin')
     order_move_state = _order_move_field('state')
+
+    def get_rec_name(self, name):
+        if self.debit > self.credit:
+            return self.account.rec_name
+        else:
+            return '(%s)' % self.account.rec_name
+
+    @classmethod
+    def search_rec_name(cls, name, clause):
+        return [('account.rec_name',) + tuple(clause[1:])]
 
     @classmethod
     def query_get(cls, table):
