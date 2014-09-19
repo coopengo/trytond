@@ -1064,6 +1064,9 @@ class ModelStorage(Model):
                             test.add('')
                             test.add(None)
                         if value not in test:
+                            logging.getLogger().debug('Bad Selection : field '
+                                    '%s of model %s : %s is not in %s' % (
+                                        field_name, cls.__name__, value, test))
                             error_args = cls._get_error_args(field_name)
                             error_args['value'] = value
                             cls.raise_user_error('selection_validation_record',
