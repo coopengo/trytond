@@ -1,3 +1,5 @@
+* Use literal_eval instead of safe_eval (CVE-2014-6633)
+* Prevent double underscore in safe_eval (CVE-2014-6633)
 * Add pre-validation on button
 * Model and Field access checked only if _check_access is set
 * Add check_access to RPC
@@ -17,6 +19,7 @@
 * Make global cache depends on explicit context keys
 * Don't add to global cache Binary fields
 * Add MatchMixin
+* Add image widget to tree
 * Remove context, current_date and time from record rule evaluation
 
 Version 3.2.0 - 2014-04-21
