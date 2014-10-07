@@ -16,10 +16,13 @@ from trytond.pyson import Eval, If
 from trytond.transaction import Transaction
 from trytond.tools import reduce_ids, grouped_slice
 from trytond import backend
+from trytond.modules.company import CompanyReport
+
 from .sepa_handler import CAMT054
 
 __metaclass__ = PoolMeta
-__all__ = ['Journal', 'Group', 'Payment', 'Mandate', 'Message']
+__all__ = ['Journal', 'Group', 'Payment', 'Mandate', 'Message',
+    'MandateReport']
 
 
 class Journal:
@@ -141,8 +144,11 @@ class Group:
             for payment, mandate in zip(payments, mandates):
                 if not mandate:
                     self.raise_user_error('no_mandate', payment.rec_name)
+                # Write one by one becasue mandate.sequence_type must be
+                # recomputed each time
                 Payment.write([payment], {
                         'sepa_mandate': mandate,
+                        'sepa_mandate_sequence_type': mandate.sequence_type,
                         })
         tmpl = self.get_sepa_template()
         if not tmpl:
@@ -161,7 +167,7 @@ class Group:
     def sepa_group_payment_key(self, payment):
         key = (('date', payment.date),)
         if self.kind == 'receivable':
-            key += (('sequence_type', payment.sepa_mandate.sequence_type),)
+            key += (('sequence_type', payment.sepa_mandate_sequence_type),)
             key += (('scheme', payment.sepa_mandate.scheme),)
         return key
 
@@ -188,6 +194,8 @@ class Payment:
             ('party', '=', Eval('party', -1)),
             ],
         depends=['party'])
+    sepa_mandate_sequence_type = fields.Char('Mandate Sequence Type',
+        readonly=True)
     sepa_return_reason_code = fields.Char('Return Reason Code', readonly=True,
         states={
             'invisible': (~Eval('sepa_return_reason_code')
@@ -219,7 +227,7 @@ class Payment:
         return mandates
 
     def get_sepa_end_to_end_id(self, name):
-        return str(id)
+        return str(self.id)
 
     @classmethod
     def search_end_to_end_id(cls, name, domain):
@@ -302,6 +310,7 @@ class Mandate(Workflow, ModelSQL, ModelView):
             ('CORE', 'Core'),
             ('B2B', 'Business to Business'),
             ], 'Scheme', required=True)
+    scheme_string = scheme.translated('scheme')
     signature_date = fields.Date('Signature Date',
         states={
             'readonly': Eval('state').in_(['validated', 'canceled']),
@@ -409,6 +418,17 @@ class Mandate(Workflow, ModelSQL, ModelView):
             args.extend((mandates, values))
         super(Mandate, cls).write(*args)
 
+    @classmethod
+    def copy(cls, mandates, default=None):
+        if default is None:
+            default = {}
+        default = default.copy()
+        default.setdefault('state', 'draft')
+        default.setdefault('payments', [])
+        default.setdefault('signature_date', None)
+        default.setdefault('identification', None)
+        return super(Mandate, cls).copy(mandates, default=default)
+
     @property
     def is_valid(self):
         if self.state == 'validated':
@@ -423,7 +443,7 @@ class Mandate(Workflow, ModelSQL, ModelView):
     def sequence_type(self):
         if self.type == 'one-off':
             return 'OOFF'
-        elif len(self.payments) == 1:
+        elif not self.payments:
             return 'FRST'
         # TODO manage FNAL
         else:
@@ -477,6 +497,10 @@ class Mandate(Workflow, ModelSQL, ModelView):
             if mandate.state not in ('draft', 'canceled'):
                 cls.raise_user_error('delete_draft_canceled', mandate.rec_name)
         super(Mandate, cls).delete(mandates)
+
+
+class MandateReport(CompanyReport):
+    __name__ = 'account.payment.sepa.mandate'
 
 
 class Message(Workflow, ModelSQL, ModelView):

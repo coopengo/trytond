@@ -461,7 +461,8 @@ class Invoice(Workflow, ModelSQL, ModelView):
                     continue
                 res['untaxed_amount'] += getattr(line, 'amount', None) or 0
                 with Transaction().set_context(**context):
-                    taxes = Tax.compute(getattr(line, 'taxes', []) or [],
+                    taxes = Tax.compute(
+                        Tax.browse(getattr(line, 'taxes', []) or []),
                         getattr(line, 'unit_price', None) or Decimal('0.0'),
                         getattr(line, 'quantity', None) or 0.0,
                         date=self.accounting_date or self.invoice_date)
@@ -838,8 +839,8 @@ class Invoice(Workflow, ModelSQL, ModelView):
             if line.type != 'line':
                 continue
             with Transaction().set_context(**context):
-                tax_list = Tax.compute(line.taxes, line.unit_price,
-                    line.quantity,
+                tax_list = Tax.compute(Tax.browse(line.taxes),
+                    line.unit_price, line.quantity,
                     date=self.accounting_date or self.invoice_date)
             for tax in tax_list:
                 key, val = self._compute_tax(tax, self.type)
@@ -948,9 +949,10 @@ class Invoice(Workflow, ModelSQL, ModelView):
             res['debit'] = - amount
             res['credit'] = Decimal('0.0')
         res['account'] = self.account.id
+        if self.account.party_required:
+            res['party'] = self.party.id
         res['maturity_date'] = date
         res['description'] = self.description
-        res['party'] = self.party.id
         return res
 
     def create_move(self):
@@ -1222,7 +1224,8 @@ class Invoice(Workflow, ModelSQL, ModelView):
             lines.append({
                     'description': description,
                     'account': self.account.id,
-                    'party': self.party.id,
+                    'party': (self.party.id
+                        if self.account.party_required else None),
                     'debit': Decimal('0.0'),
                     'credit': amount,
                     'amount_second_currency': amount_second_currency,
@@ -1231,7 +1234,8 @@ class Invoice(Workflow, ModelSQL, ModelView):
             lines.append({
                     'description': description,
                     'account': journal.debit_account.id,
-                    'party': self.party.id,
+                    'party': (self.party.id
+                        if journal.debit_account.party_required else None),
                     'debit': amount,
                     'credit': Decimal('0.0'),
                     'amount_second_currency': amount_second_currency,
@@ -1250,7 +1254,8 @@ class Invoice(Workflow, ModelSQL, ModelView):
             lines.append({
                     'description': description,
                     'account': self.account.id,
-                    'party': self.party.id,
+                    'party': (self.party.id
+                        if self.account.party_required else None),
                     'debit': amount,
                     'credit': Decimal('0.0'),
                     'amount_second_currency': amount_second_currency,
@@ -1259,7 +1264,8 @@ class Invoice(Workflow, ModelSQL, ModelView):
             lines.append({
                     'description': description,
                     'account': journal.credit_account.id,
-                    'party': self.party.id,
+                    'party': (self.party.id
+                        if journal.credit_account.party_required else None),
                     'debit': Decimal('0.0'),
                     'credit': amount,
                     'amount_second_currency': amount_second_currency,
@@ -1737,7 +1743,8 @@ class InvoiceLine(ModelSQL, ModelView):
         context = self.invoice.get_tax_context()
         taxes_keys = []
         with Transaction().set_context(**context):
-            taxes = Tax.compute(self.taxes, self.unit_price, self.quantity)
+            taxes = Tax.compute(Tax.browse(self.taxes),
+                self.unit_price, self.quantity)
         for tax in taxes:
             key, _ = Invoice._compute_tax(tax, self.invoice.type)
             taxes_keys.append(key)
@@ -2014,7 +2021,8 @@ class InvoiceLine(ModelSQL, ModelView):
         if self.type != 'line':
             return res
         with Transaction().set_context(**context):
-            taxes = Tax.compute(self.taxes, self.unit_price, self.quantity)
+            taxes = Tax.compute(Tax.browse(self.taxes),
+                self.unit_price, self.quantity)
         for tax in taxes:
             if self.invoice.type in ('out_invoice', 'in_invoice'):
                 base_code_id = (tax['tax'].invoice_base_code.id
@@ -2076,7 +2084,8 @@ class InvoiceLine(ModelSQL, ModelView):
                 res['debit'] = - amount
                 res['credit'] = Decimal('0.0')
         res['account'] = self.account.id
-        res['party'] = self.invoice.party.id
+        if self.account.party_required:
+            res['party'] = self.invoice.party.id
         computed_taxes = self._compute_taxes()
         if computed_taxes:
             res['tax_lines'] = [('create', [tax for tax in computed_taxes])]
@@ -2367,7 +2376,8 @@ class InvoiceTax(ModelSQL, ModelView):
                 res['debit'] = - amount
                 res['credit'] = Decimal('0.0')
         res['account'] = self.account.id
-        res['party'] = self.invoice.party.id
+        if self.account.party_required:
+            res['party'] = self.invoice.party.id
         if self.tax_code:
             res['tax_lines'] = [('create', [{
                             'code': self.tax_code.id,
