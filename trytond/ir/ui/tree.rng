@@ -121,6 +121,7 @@
           <value>reference</value>
           <value>one2one</value>
           <value>binary</value>
+          <value>image</value>
         </choice>
       </attribute>
     </optional>
@@ -158,6 +159,11 @@
   <define name="attlist.field" combine="interleave">
     <optional>
       <attribute name="width"/>
+    </optional>
+  </define>
+  <define name="attlist.field" combine="interleave">
+    <optional>
+      <attribute name="height"/>
     </optional>
   </define>
   <define name="attlist.field" combine="interleave">
