@@ -21,6 +21,10 @@ hg clone http://hg.tryton.org/modules/account_payment_sepa
 rm -r account_payment_sepa/.hg
 rm -r account_payment_sepa/.hgtags
 
+hg clone http://hg.tryton.org/modules/account_payment_clearing
+rm -r account_payment_clearing/.hg
+rm -r account_payment_clearing/.hgtags
+
 hg clone http://hg.tryton.org/modules/account_product
 rm -r account_product/.hg
 rm -r account_product/.hgtags
