@@ -4,6 +4,7 @@ from decimal import Decimal
 from collections import namedtuple
 from itertools import groupby
 
+from sql import Null
 from sql.aggregate import Sum
 
 from trytond.model import Workflow, ModelView, ModelSQL, fields
@@ -41,7 +42,7 @@ _NUMBER_STATES.update({
 _NUMBER_DEPENDS = _DEPENDS + ['validation']
 
 
-class Null(object):
+class Unequal(object):
     "Always different"
 
     def __eq__(self, other):
@@ -178,7 +179,7 @@ class Statement(Workflow, ModelSQL, ModelView):
         # Migration from 3.2: add required name
         cursor.execute(*sql_table.update([sql_table.name],
                 [sql_table.id.cast(cls.name.sql_type().base)],
-                where=sql_table.name == None))
+                where=sql_table.name == Null))
 
     @staticmethod
     def default_company():
@@ -293,7 +294,7 @@ class Statement(Workflow, ModelSQL, ModelView):
 
     def _group_key(self, line):
         key = (
-            ('number', line.number or Null()),
+            ('number', line.number or Unequal()),
             ('date', line.date),
             ('party', line.party),
             )
@@ -474,7 +475,7 @@ class Line(ModelSQL, ModelView):
     @staticmethod
     def order_sequence(tables):
         table, _ = tables[None]
-        return [table.sequence == None, table.sequence]
+        return [table.sequence == Null, table.sequence]
 
     @staticmethod
     def default_amount():
