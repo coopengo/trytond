@@ -1,5 +1,5 @@
-#This file is part of Tryton.  The COPYRIGHT file at the top level of
-#this repository contains the full copyright notices and license terms.
+# This file is part of Tryton.  The COPYRIGHT file at the top level of
+# this repository contains the full copyright notices and license terms.
 "User"
 import copy
 import string
@@ -301,7 +301,6 @@ class User(ModelSQL, ModelView):
         ModelData = pool.get('ir.model.data')
         Action = pool.get('ir.action')
         ConfigItem = pool.get('ir.module.module.config_wizard.item')
-        Config = pool.get('ir.configuration')
 
         res = {}
         if context_only:
@@ -314,7 +313,7 @@ class User(ModelSQL, ModelView):
                     if user.language:
                         res['language'] = user.language.code
                     else:
-                        res['language'] = Config.get_language()
+                        res['language'] = None
                 else:
                     res[field] = None
                     if getattr(user, field):

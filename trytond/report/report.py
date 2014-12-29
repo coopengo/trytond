@@ -1,5 +1,5 @@
-#This file is part of Tryton.  The COPYRIGHT file at the top level of
-#this repository contains the full copyright notices and license terms.
+# This file is part of Tryton.  The COPYRIGHT file at the top level of
+# this repository contains the full copyright notices and license terms.
 try:
     import cStringIO as StringIO
 except ImportError:
@@ -130,13 +130,18 @@ class Report(URLMixin, PoolBase):
         '''
         pool = Pool()
         ActionReport = pool.get('ir.action.report')
-        action_reports = ActionReport.search([
-                ('report_name', '=', cls.__name__)
-                ])
-        if not action_reports:
-            raise Exception('Error', 'Report (%s) not find!' % cls.__name__)
         cls.check_access()
-        action_report = action_reports[0]
+
+        action_id = data.get('action_id')
+        if action_id is None:
+            action_reports = ActionReport.search([
+                    ('report_name', '=', cls.__name__)
+                    ])
+            assert action_reports, '%s not found' % cls
+            action_report = action_reports[0]
+        else:
+            action_report = ActionReport(action_id)
+
         records = None
         model = action_report.model or data.get('model')
         if model:
@@ -281,10 +286,10 @@ class Report(URLMixin, PoolBase):
         rel_report = relatorio.reporting.Report(path, mimetype,
                 ReportFactory(), relatorio.reporting.MIMETemplateLoader())
         rel_report.filters.insert(0, translator)
-        #convert unicode key into str
+        # convert unicode key into str
         localcontext = dict(map(lambda x: (str(x[0]), x[1]),
             localcontext.iteritems()))
-        #Test compatibility with old relatorio version <= 0.3.0
+        # Test compatibility with old relatorio version <= 0.3.0
         if len(inspect.getargspec(rel_report.__call__)[0]) == 2:
             data = rel_report(records, **localcontext).render().getvalue()
         else:
