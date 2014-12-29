@@ -1,5 +1,5 @@
-#This file is part of Tryton.  The COPYRIGHT file at the top level of
-#this repository contains the full copyright notices and license terms.
+# This file is part of Tryton.  The COPYRIGHT file at the top level of
+# this repository contains the full copyright notices and license terms.
 """
 %prog [options]
 """
@@ -49,7 +49,7 @@ class TrytonServer(object):
         self.webdavd = []
         self.options = options
 
-        if time.tzname != ('UTC', 'UTC'):
+        if time.tzname[0] != 'UTC':
             self.logger.error('timezone is not set to UTC')
 
     def run(self):
@@ -154,9 +154,10 @@ class TrytonServer(object):
                     if not pool.lock.acquire(0):
                         continue
                     try:
-                        if 'ir.cron' not in pool.object_name_list():
+                        try:
+                            Cron = pool.get('ir.cron')
+                        except KeyError:
                             continue
-                        Cron = pool.get('ir.cron')
                     finally:
                         pool.lock.release()
                     thread = threading.Thread(

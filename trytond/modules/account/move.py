@@ -1,5 +1,5 @@
-#This file is part of Tryton.  The COPYRIGHT file at the top level of
-#this repository contains the full copyright notices and license terms.
+# This file is part of Tryton.  The COPYRIGHT file at the top level of
+# this repository contains the full copyright notices and license terms.
 from decimal import Decimal
 import datetime
 from itertools import groupby, combinations
@@ -49,8 +49,12 @@ class Move(ModelSQL, ModelView):
     number = fields.Char('Number', required=True, readonly=True)
     post_number = fields.Char('Post Number', readonly=True,
         help='Also known as Folio Number')
+    company = fields.Many2One('company.company', 'Company', required=True)
     period = fields.Many2One('account.period', 'Period', required=True,
-            states=_MOVE_STATES, depends=_MOVE_DEPENDS, select=True)
+        domain=[
+            ('company', '=', Eval('company', -1)),
+            ],
+        states=_MOVE_STATES, depends=_MOVE_DEPENDS + ['company'], select=True)
     journal = fields.Many2One('account.journal', 'Journal', required=True,
             states=_MOVE_STATES, depends=_MOVE_DEPENDS)
     date = fields.Date('Effective Date', required=True, states=_MOVE_STATES,
@@ -65,7 +69,10 @@ class Move(ModelSQL, ModelView):
         ('posted', 'Posted'),
         ], 'State', required=True, readonly=True, select=True)
     lines = fields.One2Many('account.move.line', 'move', 'Lines',
-            states=_MOVE_STATES, depends=_MOVE_DEPENDS,
+        domain=[
+            ('account.company', '=', Eval('company', -1)),
+            ],
+        states=_MOVE_STATES, depends=_MOVE_DEPENDS + ['company'],
             context={
                 'journal': Eval('journal'),
                 'period': Eval('period'),
@@ -87,8 +94,6 @@ class Move(ModelSQL, ModelView):
                     '"%(move)s" to draft in journal "%(journal)s".'),
                 'modify_posted_move': ('You can not modify move "%s" because '
                     'it is already posted.'),
-                'company_in_move': ('You can not create lines on accounts'
-                    'of different companies in move "%s".'),
                 'date_outside_period': ('You can not create move "%(move)s" '
                     'because it\'s date is outside its period.'),
                 'draft_closed_period': ('You can not set to draft move '
@@ -111,6 +116,12 @@ class Move(ModelSQL, ModelView):
         TableHandler = backend.get('TableHandler')
         cursor = Transaction().cursor
         table = TableHandler(cursor, cls, module_name)
+        sql_table = cls.__table__()
+        pool = Pool()
+        Period = pool.get('account.period')
+        period = Period.__table__()
+        FiscalYear = pool.get('account.fiscalyear')
+        fiscalyear = FiscalYear.__table__()
 
         # Migration from 2.4:
         #   - name renamed into number
@@ -120,13 +131,28 @@ class Move(ModelSQL, ModelView):
         if table.column_exist('reference'):
             table.column_rename('reference', 'post_number')
 
+        created_company = not table.column_exist('company')
+
         super(Move, cls).__register__(module_name)
+
+        # Migration from 3.4: new company field
+        if created_company:
+            # Don't use UPDATE FROM because SQLite nor MySQL support it.
+            value = period.join(fiscalyear,
+                condition=period.fiscalyear == fiscalyear.id).select(
+                    fiscalyear.company,
+                    where=period.id == sql_table.period)
+            cursor.execute(*sql_table.update([sql_table.company], [value]))
 
         table = TableHandler(cursor, cls, module_name)
         table.index_action(['journal', 'period'], 'add')
 
         # Add index on create_date
         table.index_action('create_date', action='add')
+
+    @staticmethod
+    def default_company():
+        return Transaction().context.get('company')
 
     @staticmethod
     def default_period():
@@ -181,16 +207,7 @@ class Move(ModelSQL, ModelView):
     def validate(cls, moves):
         super(Move, cls).validate(moves)
         for move in moves:
-            move.check_company()
             move.check_date()
-
-    def check_company(self):
-        company_id = -1
-        for line in self.lines:
-            if company_id < 0:
-                company_id = line.account.company.id
-            if line.account.company.id != company_id:
-                self.raise_user_error('company_in_move', (self.rec_name,))
 
     def check_date(self):
         if (self.date < self.period.start_date
@@ -286,17 +303,10 @@ class Move(ModelSQL, ModelView):
         '''
         pool = Pool()
         MoveLine = pool.get('account.move.line')
-        User = pool.get('res.user')
         line = MoveLine.__table__()
 
         cursor = Transaction().cursor
 
-        if (Transaction().user == 0
-                and Transaction().context.get('user')):
-            user = Transaction().context.get('user')
-        else:
-            user = Transaction().user
-        company = User(user).company
         amounts = {}
         move2draft_lines = {}
         for sub_move_ids in grouped_slice([m.id for m in moves]):
@@ -325,7 +335,7 @@ class Move(ModelSQL, ModelView):
                 amount = Decimal(amount)
             draft_lines = MoveLine.browse(
                 list(move2draft_lines.get(move.id, [])))
-            if not company.currency.is_zero(amount):
+            if not move.company.currency.is_zero(amount):
                 draft_moves.append(move.id)
                 continue
             if not draft_lines:
@@ -571,8 +581,8 @@ class Line(ModelSQL, ModelView):
         'get_move_field', setter='set_move_field',
         searcher='search_move_field')
     amount_second_currency = fields.Numeric('Amount Second Currency',
-            digits=(16, Eval('second_currency_digits', 2)),
-            help='The amount expressed in a second currency',
+        digits=(16, Eval('second_currency_digits', 2)),
+        help='The amount expressed in a second currency',
         states={
             'required': Bool(Eval('second_currency')),
             },
@@ -589,7 +599,7 @@ class Line(ModelSQL, ModelView):
             'invisible': ~Eval('party_required', False),
             },
         depends=['party_required'])
-    party_required= fields.Function(fields.Boolean('Party Required'),
+    party_required = fields.Function(fields.Boolean('Party Required'),
         'on_change_with_party_required')
     maturity_date = fields.Date('Maturity Date',
         help='This field is used for payable and receivable lines. \n'
@@ -721,7 +731,7 @@ class Line(ModelSQL, ModelView):
                 with_rec_name=with_rec_name)
 
         if 'move' not in fields:
-            #Not manual entry
+            # Not manual entry
             if 'date' in values:
                 values = values.copy()
                 del values['date']
@@ -950,7 +960,7 @@ class Line(ModelSQL, ModelView):
         TaxLine = pool.get('account.tax.line')
 
         if self.move:
-            #Only for first line
+            # Only for first line
             return
         tax_lines = []
         if self.account:
@@ -1148,6 +1158,7 @@ class Line(ModelSQL, ModelView):
             fiscalyears = FiscalYear.search([
                     ('start_date', '<=', Transaction().context['date']),
                     ('end_date', '>=', Transaction().context['date']),
+                    ('company', '=', Transaction().context.get('company')),
                     ], limit=1)
 
             fiscalyear_id = fiscalyears and fiscalyears[0].id or 0
@@ -1194,6 +1205,7 @@ class Line(ModelSQL, ModelView):
             if not Transaction().context.get('fiscalyear'):
                 fiscalyears = FiscalYear.search([
                     ('state', '=', 'open'),
+                    ('company', '=', Transaction().context.get('company')),
                     ])
                 fiscalyear_ids = [f.id for f in fiscalyears] or [0]
             else:

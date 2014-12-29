@@ -1,5 +1,5 @@
-#This file is part of Tryton.  The COPYRIGHT file at the top level of
-#this repository contains the full copyright notices and license terms.
+# This file is part of Tryton.  The COPYRIGHT file at the top level of
+# this repository contains the full copyright notices and license terms.
 from types import NoneType
 
 from trytond.model.fields.field import Field
@@ -43,7 +43,6 @@ class One2One(Many2Many):
                     ])
             to_delete.extend(relations)
             if value:
-                to_create = []
                 for record_id in ids:
                     to_create.append({
                             self.origin: record_id,

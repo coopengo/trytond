@@ -1,5 +1,5 @@
-#This file is part of Tryton.  The COPYRIGHT file at the top level of
-#this repository contains the full copyright notices and license terms.
+# This file is part of Tryton.  The COPYRIGHT file at the top level of
+# this repository contains the full copyright notices and license terms.
 import time
 from xml import sax
 import logging
@@ -325,7 +325,7 @@ class Fs2bdAccessor:
         Whe call the prefetch function here to. Like that whe are sure
         not to erase data when get is called.
         """
-        if not module in self.fetched_modules:
+        if module not in self.fetched_modules:
             self.fetch_new_module(module)
         if fs_id not in self.fs2db[module]:
             self.fs2db[module][fs_id] = {}
@@ -366,13 +366,12 @@ class Fs2bdAccessor:
             record_ids.setdefault(rec.model, [])
             record_ids[rec.model].append(rec.db_id)
 
-        object_name_list = set(self.pool.object_name_list())
-
         self.browserecord[module] = {}
         for model_name in record_ids.keys():
-            if model_name not in object_name_list:
+            try:
+                Model = self.pool.get(model_name)
+            except KeyError:
                 continue
-            Model = self.pool.get(model_name)
             self.browserecord[module][model_name] = {}
             for sub_record_ids in grouped_slice(record_ids[model_name]):
                 with Transaction().set_context(active_test=False):
@@ -613,7 +612,7 @@ class TrytondXmlHandler(sax.handler.ContentHandler):
                     % (fs_id, module))
 
             record = self.fs2db.get_browserecord(module, Model.__name__, db_id)
-            #Re-create record if it was deleted
+            # Re-create record if it was deleted
             if not record:
                 with Transaction().set_context(
                         module=module, language='en_US'):
@@ -792,7 +791,6 @@ def post_import(pool, module, to_delete):
             ('module', '=', module),
             ], order=[('id', 'DESC')])
 
-    object_name_list = set(pool.object_name_list())
     for mrec in mdata:
         model, db_id = mrec.model, mrec.db_id
 
@@ -800,8 +798,11 @@ def post_import(pool, module, to_delete):
                 'Deleting %s@%s' % (db_id, model))
         try:
             # Deletion of the record
-            if model in object_name_list:
+            try:
                 Model = pool.get(model)
+            except KeyError:
+                Model = None
+            if Model:
                 Model.delete([Model(db_id)])
                 mdata_delete.append(mrec)
             else:
@@ -814,12 +815,12 @@ def post_import(pool, module, to_delete):
             tb_s = ''.join(traceback.format_exception(*sys.exc_info()))
             logging.getLogger("convert").error(
                 'Could not delete id: %d of model %s\n'
-                    'There should be some relation '
-                    'that points to this resource\n'
-                    'You should manually fix this '
-                    'and restart --update=module\n'
-                    'Exception: %s' %
-                    (db_id, model, tb_s))
+                'There should be some relation '
+                'that points to this resource\n'
+                'You should manually fix this '
+                'and restart --update=module\n'
+                'Exception: %s' %
+                (db_id, model, tb_s))
             if 'active' in Model._fields:
                 Model.write([Model(db_id)], {
                         'active': False,

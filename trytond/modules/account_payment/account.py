@@ -1,5 +1,5 @@
-#This file is part of Tryton.  The COPYRIGHT file at the top level of
-#this repository contains the full copyright notices and license terms.
+# This file is part of Tryton.  The COPYRIGHT file at the top level of
+# this repository contains the full copyright notices and license terms.
 from sql import Null
 from sql.aggregate import Sum
 from sql.conditionals import Case, Coalesce
@@ -148,6 +148,7 @@ class PayLine(Wizard):
             kind = 'payable'
 
         return Payment(
+            company=line.move.company,
             journal=self.start.journal,
             party=line.party,
             kind=kind,

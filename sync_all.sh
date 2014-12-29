@@ -65,5 +65,13 @@ hg clone http://hg.tryton.org/modules/product
 rm -r product/.hg
 rm -r product/.hgtags
 
+hg clone http://hg.tryton.org/modules/commission
+rm -r commission/.hg
+rm -r commission/.hgtags
+
+hg clone http://hg.tryton.org/modules/commission_waiting
+rm -r commission_waiting/.hg
+rm -r commission_waiting/.hgtags
+
 mv ../tmp__init__ __init__.py
 rm /tmp/sync_all.sh

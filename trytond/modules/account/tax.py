@@ -1,6 +1,7 @@
-#This file is part of Tryton.  The COPYRIGHT file at the top level of
-#this repository contains the full copyright notices and license terms.
+# This file is part of Tryton.  The COPYRIGHT file at the top level of
+# this repository contains the full copyright notices and license terms.
 import datetime
+from collections import namedtuple
 from decimal import Decimal
 
 from sql import Null
@@ -407,7 +408,7 @@ class TaxTemplate(ModelSQL, ModelView):
         # Migration from 1.0 group is no more required
         table.not_null_action('group', action='remove')
 
-        #Migration from 2.4: drop required on sequence
+        # Migration from 2.4: drop required on sequence
         table.not_null_action('sequence', action='remove')
 
         # Migration from 2.8: rename percentage into rate
@@ -627,9 +628,13 @@ class Tax(ModelSQL, ModelView):
         depends=['company', 'type'])
     invoice_base_code = fields.Many2One('account.tax.code',
         'Invoice Base Code',
+        domain=[
+            ('company', '=', Eval('company', -1)),
+            ],
         states={
             'readonly': Eval('type') == 'none',
-            }, depends=['type'])
+            },
+        depends=['type', 'company'])
     invoice_base_sign = fields.Numeric('Invoice Base Sign', digits=(2, 0),
         help='Usualy 1 or -1',
         states={
@@ -638,9 +643,13 @@ class Tax(ModelSQL, ModelView):
             }, depends=['type'])
     invoice_tax_code = fields.Many2One('account.tax.code',
         'Invoice Tax Code',
+        domain=[
+            ('company', '=', Eval('company', -1)),
+            ],
         states={
             'readonly': Eval('type') == 'none',
-            }, depends=['type'])
+            },
+        depends=['type', 'company'])
     invoice_tax_sign = fields.Numeric('Invoice Tax Sign', digits=(2, 0),
         help='Usualy 1 or -1',
         states={
@@ -654,15 +663,23 @@ class Tax(ModelSQL, ModelView):
             }, depends=['type'])
     credit_note_base_sign = fields.Numeric('Credit Note Base Sign',
         digits=(2, 0), help='Usualy 1 or -1',
+        domain=[
+            ('company', '=', Eval('company', -1)),
+            ],
         states={
             'required': Eval('type') != 'none',
             'readonly': Eval('type') == 'none',
-            }, depends=['type'])
+            },
+        depends=['type', 'company'])
     credit_note_tax_code = fields.Many2One('account.tax.code',
         'Credit Note Tax Code',
+        domain=[
+            ('company', '=', Eval('company', -1)),
+            ],
         states={
             'readonly': Eval('type') == 'none',
-            }, depends=['type'])
+            },
+        depends=['type', 'company'])
     credit_note_tax_sign = fields.Numeric('Credit Note Tax Sign',
         digits=(2, 0), help='Usualy 1 or -1',
         states={
@@ -910,6 +927,113 @@ class Tax(ModelSQL, ModelView):
                 template2tax=template2tax)
 
 
+class _TaxKey(dict):
+
+    def __init__(self, **kwargs):
+        self.update(kwargs)
+
+    def _key(self):
+        return (self['base_code'], self['base_sign'],
+            self['tax_code'], self['tax_sign'],
+            self['account'], self['tax'])
+
+    def __eq__(self, other):
+        if isinstance(other, _TaxKey):
+            return self._key() == other._key()
+        return self._key() == other
+
+    def __hash__(self):
+        return hash(self._key())
+
+_TaxableLine = namedtuple('_TaxableLine', ('taxes', 'unit_price', 'quantity'))
+
+
+class TaxableMixin(object):
+
+    @property
+    def taxable_lines(self):
+        """A list of tuples where
+            - the first element is the taxes applicable
+            - the second element is the line unit price
+            - the third element is the line quantity
+        """
+        return []
+
+    @property
+    def tax_type(self):
+        "The taxation type it can be 'invoice' or 'credit_note'"
+        return None
+
+    @property
+    def currency(self):
+        "The currency used by the taxable object"
+        return None
+
+    @property
+    def tax_date(self):
+        "Date to use when computing the tax"
+        pool = Pool()
+        Date = pool.get('ir.date')
+        return Date.today()
+
+    def _get_tax_context(self):
+        return {}
+
+    @staticmethod
+    def _compute_tax_line(type_, amount, base, tax):
+        assert type_ in ('invoice', 'credit_note')
+
+        line = {}
+        line['manual'] = False
+        line['description'] = tax.description
+        line['base'] = base
+        line['amount'] = amount
+        line['tax'] = tax.id if tax else None
+
+        for attribute in ['base_code', 'tax_code', 'account']:
+            value = getattr(tax, '%s_%s' % (type_, attribute), None)
+            line[attribute] = value.id if value else None
+
+        for attribute in ['base_sign', 'tax_sign']:
+            value = getattr(tax, '%s_%s' % (type_, attribute), None)
+            line[attribute] = value
+
+        return _TaxKey(**line)
+
+    def _round_taxes(self, taxes):
+        if not self.currency:
+            return
+        for taxline in taxes.itervalues():
+            for attribute in ('base', 'amount'):
+                taxline[attribute] = self.currency.round(taxline[attribute])
+
+    def _get_taxes(self):
+        pool = Pool()
+        Tax = pool.get('account.tax')
+        Configuration = pool.get('account.configuration')
+
+        config = Configuration(1)
+        taxes = {}
+        with Transaction().set_context(self._get_tax_context()):
+            taxable_lines = [_TaxableLine(*params)
+                for params in self.taxable_lines]
+            for line in taxable_lines:
+                l_taxes = Tax.compute(line.taxes, line.unit_price,
+                    line.quantity, self.tax_date)
+                for tax in l_taxes:
+                    taxline = self._compute_tax_line(self.tax_type, **tax)
+                    if taxline not in taxes:
+                        taxes[taxline] = taxline
+                    else:
+                        taxes[taxline]['base'] += taxline['base']
+                        taxes[taxline]['amount'] += taxline['amount']
+                if config.tax_rounding == 'line':
+                    self._round_taxes(taxes)
+        if config.tax_rounding == 'document':
+            self._round_taxes(taxes)
+        return taxes
+
+
 class TaxLine(ModelSQL, ModelView):
     'Tax Line'
     __name__ = 'account.tax.line'
@@ -919,11 +1043,21 @@ class TaxLine(ModelSQL, ModelView):
     amount = fields.Numeric('Amount', digits=(16, Eval('currency_digits', 2)),
         required=True, depends=['currency_digits'])
     code = fields.Many2One('account.tax.code', 'Code', select=True,
-        required=True)
+        required=True,
+        domain=[
+            ('company', '=', Eval('company', -1)),
+            ],
+        depends=['company'])
     tax = fields.Many2One('account.tax', 'Tax', select=True,
-        ondelete='RESTRICT')
+        ondelete='RESTRICT',
+        domain=[
+            ('company', '=', Eval('company', -1)),
+            ],
+        depends=['company'])
     move_line = fields.Many2One('account.move.line', 'Move Line',
             required=True, select=True, ondelete='CASCADE')
+    company = fields.Function(fields.Many2One('company.company', 'Company'),
+        'on_change_with_company')
 
     @fields.depends('move_line')
     def on_change_with_currency_digits(self, name=None):
@@ -934,6 +1068,11 @@ class TaxLine(ModelSQL, ModelView):
     @fields.depends('tax')
     def on_change_tax(self):
         self.code = None
+
+    @fields.depends('_parent_move_line.account')
+    def on_change_with_company(self, name=None):
+        if self.move_line:
+            return self.move_line.account.company.id
 
 
 class TaxRuleTemplate(ModelSQL, ModelView):
