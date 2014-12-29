@@ -1,11 +1,10 @@
-#This file is part of Tryton.  The COPYRIGHT file at the top level of
-#this repository contains the full copyright notices and license terms.
+# This file is part of Tryton.  The COPYRIGHT file at the top level of
+# this repository contains the full copyright notices and license terms.
 from decimal import Decimal
 from collections import namedtuple
 from itertools import groupby
 
 from sql import Null
-from sql.aggregate import Sum
 
 from trytond.model import Workflow, ModelView, ModelSQL, fields
 from trytond.pyson import Eval, If, Bool
@@ -13,7 +12,6 @@ from trytond.transaction import Transaction
 from trytond import backend
 from trytond.pool import Pool
 from trytond.modules.company import CompanyReport
-from trytond.tools import reduce_ids
 
 __all__ = ['Statement', 'Line', 'StatementReport']
 
@@ -68,12 +66,12 @@ class Statement(Workflow, ModelSQL, ModelView):
     journal = fields.Many2One('account.statement.journal', 'Journal',
         required=True, select=True,
         domain=[
-            ('company', '=', Eval('context', {}).get('company', -1)),
+            ('company', '=', Eval('company', -1)),
             ],
         states={
             'readonly': (Eval('state') != 'draft') | Eval('lines', [0]),
             },
-        depends=['state'])
+        depends=['state', 'company'])
     currency_digits = fields.Function(fields.Integer('Currency Digits'),
         'on_change_with_currency_digits')
     date = fields.Date('Date', required=True, states=_STATES, depends=_DEPENDS,
@@ -437,7 +435,10 @@ class Line(ModelSQL, ModelView):
             ('kind', '!=', 'view'),
             ])
     description = fields.Char('Description')
-    move = fields.Many2One('account.move', 'Account Move', readonly=True)
+    move = fields.Many2One('account.move', 'Account Move', readonly=True,
+        domain=[
+            ('company', '=', Eval('_parent_statement', {}).get('company', -1)),
+            ])
     invoice = fields.Many2One('account.invoice', 'Invoice',
         domain=[
             If(Bool(Eval('party')), [('party', '=', Eval('party'))], []),
@@ -573,6 +574,7 @@ class Line(ModelSQL, ModelView):
             journal=self.statement.journal.journal,
             date=self.date,
             origin=self,
+            company=self.statement.company,
             lines=move_lines,
             )
         move.save()

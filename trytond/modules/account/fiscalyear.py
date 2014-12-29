@@ -1,5 +1,5 @@
-#This file is part of Tryton.  The COPYRIGHT file at the top level of
-#this repository contains the full copyright notices and license terms.
+# This file is part of Tryton.  The COPYRIGHT file at the top level of
+# this repository contains the full copyright notices and license terms.
 from dateutil.relativedelta import relativedelta
 from trytond.model import ModelView, ModelSQL, fields
 from trytond.wizard import Wizard, StateView, StateTransition, StateAction, \
@@ -270,8 +270,8 @@ class FiscalYear(ModelSQL, ModelView):
                         ]):
                 cls.raise_user_error('close_error', (fiscalyear.rec_name,))
 
-            #First close the fiscalyear to be sure
-            #it will not have new period created between.
+            # First close the fiscalyear to be sure
+            # it will not have new period created between.
             cls.write([fiscalyear], {
                 'state': 'close',
                 })
@@ -326,6 +326,8 @@ class BalanceNonDeferralStart(ModelView):
     __name__ = 'account.fiscalyear.balance_non_deferral.start'
     fiscalyear = fields.Many2One('account.fiscalyear', 'Fiscal Year',
         required=True, domain=[('state', '=', 'open')])
+    company = fields.Function(fields.Many2One('company.company', 'Company'),
+        'on_change_with_company')
     journal = fields.Many2One('account.journal', 'Journal', required=True,
         domain=[
             ('type', '=', 'situation'),
@@ -340,16 +342,23 @@ class BalanceNonDeferralStart(ModelView):
         required=True,
         domain=[
             ('kind', '!=', 'view'),
-            ('company', '=', Eval('context', {}).get('company', -1)),
+            ('company', '=', Eval('company', -1)),
             ('deferral', '=', True),
-            ])
+            ],
+        depends=['company'])
     debit_account = fields.Many2One('account.account', 'Debit Account',
         required=True,
         domain=[
             ('kind', '!=', 'view'),
-            ('company', '=', Eval('context', {}).get('company', -1)),
+            ('company', '=', Eval('company', -1)),
             ('deferral', '=', True),
-            ])
+            ],
+        depends=['company'])
+
+    @fields.depends('fiscalyear')
+    def on_change_with_company(self, name=None):
+        if self.fiscalyear:
+            return self.fiscalyear.company.id
 
 
 class BalanceNonDeferral(Wizard):

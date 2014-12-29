@@ -1,5 +1,5 @@
-#This file is part of Tryton.  The COPYRIGHT file at the top level of
-#this repository contains the full copyright notices and license terms.
+# This file is part of Tryton.  The COPYRIGHT file at the top level of
+# this repository contains the full copyright notices and license terms.
 from trytond.model import ModelView, ModelSQL, fields
 from trytond.wizard import Wizard, StateTransition
 from trytond.pyson import Eval
@@ -34,15 +34,21 @@ class Period(ModelSQL, ModelView):
         ('close', 'Close'),
         ], 'State', readonly=True, required=True)
     post_move_sequence = fields.Many2One('ir.sequence', 'Post Move Sequence',
-        domain=[('code', '=', 'account.move')],
-        context={'code': 'account.move'})
+        domain=[
+            ('code', '=', 'account.move'),
+            ['OR',
+                ('company', '=', None),
+                ('company', '=', Eval('company', -1)),
+                ],
+            ],
+        depends=['company'])
     type = fields.Selection([
             ('standard', 'Standard'),
             ('adjustment', 'Adjustment'),
             ], 'Type', required=True,
         states=_STATES, depends=_DEPENDS, select=True)
     company = fields.Function(fields.Many2One('company.company', 'Company',),
-        'get_company', searcher='search_company')
+        'on_change_with_company', searcher='search_company')
 
     @classmethod
     def __register__(cls, module_name):
@@ -78,9 +84,6 @@ class Period(ModelSQL, ModelView):
                     'overlap.'),
                 'check_move_sequence': ('Period "%(first)s" and "%(second)s" '
                     'have the same sequence.'),
-                'check_move_sequence_company': ('Company of sequence '
-                    '"%(sequence)s" does not match the company of period '
-                    '"%(period)s" to which it is assigned to.'),
                 'fiscalyear_dates': ('Dates of period "%s" are outside '
                     'are outside it\'s fiscal year dates.'),
                 })
@@ -93,8 +96,10 @@ class Period(ModelSQL, ModelView):
     def default_type():
         return 'standard'
 
-    def get_company(self, name):
-        return self.fiscalyear.company.id
+    @fields.depends('fiscalyear')
+    def on_change_with_company(self, name=None):
+        if self.fiscalyear:
+            return self.fiscalyear.company.id
 
     @classmethod
     def search_company(cls, name, clause):
@@ -147,12 +152,6 @@ class Period(ModelSQL, ModelView):
             self.raise_user_error('check_move_sequence', {
                     'first': self.rec_name,
                     'second': periods[0].rec_name,
-                    })
-        if (self.post_move_sequence.company and
-                self.post_move_sequence.company != self.fiscalyear.company):
-            self.raise_user_error('check_move_sequence_company', {
-                    'sequence': self.post_move_sequence.rec_name,
-                    'period': self.rec_name,
                     })
 
     @classmethod
@@ -295,10 +294,10 @@ class Period(ModelSQL, ModelView):
             unposted_move, = unposted_moves
             cls.raise_user_error('close_period_non_posted_move', {
                     'period': unposted_move.period.rec_name,
-                    'move':  unposted_move.rec_name,
+                    'move': unposted_move.rec_name,
                     })
-        #First close the period to be sure
-        #it will not have new journal.period created between.
+        # First close the period to be sure
+        # it will not have new journal.period created between.
         cls.write(periods, {
                 'state': 'close',
                 })

@@ -21,6 +21,10 @@ hg clone http://hg.tryton.org/modules/account_payment_sepa
 rm -r account_payment_sepa/.hg
 rm -r account_payment_sepa/.hgtags
 
+hg clone http://hg.tryton.org/modules/account_payment_clearing
+rm -r account_payment_clearing/.hg
+rm -r account_payment_clearing/.hgtags
+
 hg clone http://hg.tryton.org/modules/account_product
 rm -r account_product/.hg
 rm -r account_product/.hgtags
@@ -60,6 +64,14 @@ rm -r party_siret/.hgtags
 hg clone http://hg.tryton.org/modules/product
 rm -r product/.hg
 rm -r product/.hgtags
+
+hg clone http://hg.tryton.org/modules/commission
+rm -r commission/.hg
+rm -r commission/.hgtags
+
+hg clone http://hg.tryton.org/modules/commission_waiting
+rm -r commission_waiting/.hg
+rm -r commission_waiting/.hgtags
 
 mv ../tmp__init__ __init__.py
 rm /tmp/sync_all.sh

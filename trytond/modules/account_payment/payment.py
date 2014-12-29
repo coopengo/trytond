@@ -1,5 +1,5 @@
-#This file is part of Tryton.  The COPYRIGHT file at the top level of
-#this repository contains the full copyright notices and license terms.
+# This file is part of Tryton.  The COPYRIGHT file at the top level of
+# this repository contains the full copyright notices and license terms.
 from itertools import groupby
 
 from trytond.model import Workflow, ModelView, ModelSQL, fields
@@ -118,6 +118,7 @@ class Payment(Workflow, ModelSQL, ModelView):
         depends=_DEPENDS + ['currency_digits'])
     line = fields.Many2One('account.move.line', 'Line', ondelete='RESTRICT',
         domain=[
+            ('move.company', '=', Eval('company', -1)),
             If(Eval('kind') == 'receivable',
                 ['OR', ('debit', '>', 0), ('credit', '<', 0)],
                 ['OR', ('credit', '>', 0), ('debit', '<', 0)],
@@ -138,7 +139,8 @@ class Payment(Workflow, ModelSQL, ModelView):
                 ],
             ('move_state', '=', 'posted'),
             ],
-        states=_STATES, depends=_DEPENDS + ['party', 'currency', 'kind'])
+        states=_STATES, depends=_DEPENDS + ['party', 'currency', 'kind',
+            'company'])
     description = fields.Char('Description', states=_STATES, depends=_DEPENDS)
     group = fields.Many2One('account.payment.group', 'Group', readonly=True,
         ondelete='RESTRICT',
