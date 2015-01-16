@@ -97,8 +97,9 @@ class One2Many(Field):
         targets = list(chain(*targets))
 
         for target in targets:
-            origin_id = getattr(target, self.field).id
-            res[origin_id].append(target.id)
+            if getattr(target, self.field):
+                origin_id = getattr(target, self.field).id
+                res[origin_id].append(target.id)
         return dict((key, tuple(value)) for key, value in res.iteritems())
 
     def set(self, Model, name, ids, values, *args):
