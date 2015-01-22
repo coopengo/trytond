@@ -51,7 +51,9 @@ class Transaction(object):
 
     _local = _Local()
 
-    cache_keys = {'language', 'fuzzy_translation', '_datetime'}
+    cache_keys = {
+        'language', 'fuzzy_translation', '_datetime', '_datetime_exclude',
+        }
 
     database = None
     readonly = False
