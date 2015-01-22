@@ -105,7 +105,8 @@ class CursorInterface(object):
     Define generic interface for database cursor
     '''
     IN_MAX = 1000
-    cache_keys = {'language', 'fuzzy_translation', '_datetime'}
+    cache_keys = {'language', 'fuzzy_translation', '_datetime',
+        '_datetime_exclude'}
 
     def __init__(self):
         self.cache = {}
