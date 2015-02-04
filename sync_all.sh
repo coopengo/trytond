@@ -33,6 +33,14 @@ hg clone http://hg.tryton.org/modules/account_statement
 rm -r account_statement/.hg
 rm -r account_statement/.hgtags
 
+hg clone http://hg.tryton.org/modules/account_dunning
+rm -r account_dunning/.hg
+rm -r account_dunning/.hgtags
+
+hg clone http://hg.tryton.org/modules/account_dunning_letter
+rm -r account_dunning_letter/.hg
+rm -r account_dunning_letter/.hgtags
+
 hg clone http://hg.tryton.org/modules/bank
 rm -r bank/.hg
 rm -r bank/.hgtags
