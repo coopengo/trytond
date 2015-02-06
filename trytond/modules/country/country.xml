@@ -106,11 +106,6 @@ this repository contains the full copyright notices and license terms. -->
             <field name="code">MC</field>
         </record>
 
-        <record model="country.country" id="re">
-            <field name="name">Réunion</field>
-            <field name="code">RE</field>
-        </record>
-
         <record model="country.country" id="es">
             <field name="name">Spain</field>
             <field name="code">ES</field>
