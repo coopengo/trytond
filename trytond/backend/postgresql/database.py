@@ -9,9 +9,9 @@ from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 from psycopg2.extensions import register_type, register_adapter
 from psycopg2.extensions import UNICODE, AsIs
 try:
-    from psycopg2.extensions import PYDATE, PYDATETIME, PYTIME
+    from psycopg2.extensions import PYDATE, PYDATETIME, PYTIME, PYINTERVAL
 except ImportError:
-    PYDATE, PYDATETIME, PYTIME = None, None, None
+    PYDATE, PYDATETIME, PYTIME, PYINTERVAL = None, None, None, None
 from psycopg2 import IntegrityError as DatabaseIntegrityError
 from psycopg2 import OperationalError as DatabaseOperationalError
 import time
@@ -117,7 +117,7 @@ class Database(DatabaseInterface):
         if uri.hostname:
             cmd.append('--host=' + uri.hostname)
         if uri.port:
-            cmd.append('--port=' + uri.port)
+            cmd.append('--port=' + str(uri.port))
         if uri.password:
             # if db_password is set in configuration we should pass
             # an environment variable PGPASSWORD to our subprocess
@@ -151,7 +151,7 @@ class Database(DatabaseInterface):
         if uri.hostname:
             cmd.append('--host=' + uri.hostname)
         if uri.port:
-            cmd.append('--port=' + uri.port)
+            cmd.append('--port=' + str(uri.port))
         if uri.password:
             env['PGPASSWORD'] = uri.password
         cmd.append('--dbname=' + database_name)
@@ -192,7 +192,7 @@ class Database(DatabaseInterface):
         if res and abs(Database._list_cache_timestamp - now) < timeout:
             return res
         uri = parse_uri(config.get('database', 'uri'))
-        db_user = uri.username
+        db_user = uri.username or os.environ.get('PGUSER')
         if not db_user and os.name == 'posix':
             db_user = pwd.getpwuid(os.getuid())[0]
         if db_user:
@@ -356,7 +356,7 @@ class Cursor(CursorInterface):
         return self.cursor.fetchone()[0]
 
     def lock(self, table):
-        self.cursor.execute('LOCK "%s" IN EXCLUSIVE MODE' % table)
+        self.cursor.execute('LOCK "%s" IN EXCLUSIVE MODE NOWAIT' % table)
 
     def has_constraint(self):
         return True
@@ -379,5 +379,7 @@ if PYDATETIME:
     register_type(PYDATETIME)
 if PYTIME:
     register_type(PYTIME)
+if PYINTERVAL:
+    register_type(PYINTERVAL)
 register_adapter(float, lambda value: AsIs(repr(value)))
 register_adapter(Decimal, lambda value: AsIs(str(value)))

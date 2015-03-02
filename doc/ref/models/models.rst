@@ -289,7 +289,7 @@ Class methods:
 
 .. classmethod:: ModelStorage.search_global(cls, text)
 
-    Yield tuples (id, rec_name, icon) for records matching text.
+    Yield tuples (record, name, icon) for records matching text.
     It is used for the global search.
 
 .. classmethod:: ModelStorage.browse(ids)
@@ -366,6 +366,10 @@ Class attributes are:
     where the first element of the tuple is a field name of the model and the
     second is the sort ordering as `ASC` for ascending or `DESC` for
     descending.
+
+    In case the field used for the first element is a :class:`fields.Many2One`,
+    it is also possible to use the dotted notation to sort on a specific field
+    from the target record.
 
 .. attribute:: ModelSQL._order_name
 

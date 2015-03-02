@@ -97,7 +97,7 @@
           <value>selection</value>
           <value>float</value>
           <value>numeric</value>
-          <value>float_time</value>
+          <value>timedelta</value>
           <value>integer</value>
           <value>datetime</value>
           <value>time</value>
@@ -170,11 +170,6 @@
   </define>
   <define name="attlist.field" combine="interleave">
     <optional>
-      <attribute name="float_time"/>
-    </optional>
-  </define>
-  <define name="attlist.field" combine="interleave">
-    <optional>
       <attribute name="pre_validate" a:defaultValue="0">
         <choice>
           <value>0</value>
@@ -191,6 +186,11 @@
           <value>1</value>
         </choice>
       </attribute>
+    </optional>
+  </define>
+  <define name="attlist.field" combine="interleave">
+    <optional>
+      <attribute name="string"/>
     </optional>
   </define>
   <define name="attlist.field" combine="interleave">
