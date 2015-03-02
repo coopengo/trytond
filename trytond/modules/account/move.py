@@ -49,7 +49,8 @@ class Move(ModelSQL, ModelView):
     number = fields.Char('Number', required=True, readonly=True)
     post_number = fields.Char('Post Number', readonly=True,
         help='Also known as Folio Number')
-    company = fields.Many2One('company.company', 'Company', required=True)
+    company = fields.Many2One('company.company', 'Company', required=True,
+        states=_MOVE_STATES, depends=_MOVE_DEPENDS)
     period = fields.Many2One('account.period', 'Period', required=True,
         domain=[
             ('company', '=', Eval('company', -1)),
@@ -179,6 +180,11 @@ class Move(ModelSQL, ModelView):
     def on_change_with_date(self):
         Line = Pool().get('account.move.line')
         date = self.date
+        if date:
+            if self.period and not (
+                    self.period.start_date <= date <= self.period.end_date):
+                date = self.period.start_date
+            return date
         lines = Line.search([
                 ('journal', '=', self.journal),
                 ('period', '=', self.period),
@@ -320,7 +326,7 @@ class Move(ModelSQL, ModelView):
             cursor.execute(*line.select(line.move, line.id,
                     where=red_sql & (line.state == 'draft'),
                     order_by=line.move))
-            move2draft_lines.update(dict((k, (j[1] for j in g))
+            move2draft_lines.update(dict((k, [j[1] for j in g])
                     for k, g in groupby(cursor.fetchall(), itemgetter(0))))
 
         valid_moves = []
@@ -332,8 +338,7 @@ class Move(ModelSQL, ModelView):
             # SQLite uses float for SUM
             if not isinstance(amount, Decimal):
                 amount = Decimal(amount)
-            draft_lines = MoveLine.browse(
-                list(move2draft_lines.get(move.id, [])))
+            draft_lines = MoveLine.browse(move2draft_lines.get(move.id, []))
             if not move.company.currency.is_zero(amount):
                 draft_moves.append(move.id)
                 continue
@@ -597,7 +602,7 @@ class Line(ModelSQL, ModelView):
             'required': Eval('party_required', False),
             'invisible': ~Eval('party_required', False),
             },
-        depends=['party_required'])
+        depends=['party_required'], ondelete='RESTRICT')
     party_required = fields.Function(fields.Boolean('Party Required'),
         'on_change_with_party_required')
     maturity_date = fields.Date('Maturity Date',
@@ -618,6 +623,14 @@ class Line(ModelSQL, ModelView):
             'get_currency_digits')
     second_currency_digits = fields.Function(fields.Integer(
         'Second Currency Digits'), 'get_currency_digits')
+    amount = fields.Function(fields.Numeric('Amount',
+            digits=(16, Eval('amount_currency_digits', 2)),
+            depends=['amount_currency_digits']),
+        'get_amount')
+    amount_currency = fields.Function(fields.Many2One('currency.currency',
+            'Amount Currency'), 'get_amount_currency')
+    amount_currency_digits = fields.Function(fields.Integer(
+            'Amount Currency Digits'), 'get_amount_currency')
 
     @classmethod
     def __setup__(cls):
@@ -630,6 +643,10 @@ class Line(ModelSQL, ModelView):
             ('credit_debit',
                 'CHECK(credit * debit = 0.0)',
                 'Wrong credit/debit values.'),
+            ('second_currency_sign',
+                'CHECK(COALESCE(amount_second_currency, 0) '
+                '* (debit - credit) >= 0)',
+                'wrong_second_currency_sign'),
             ]
         cls.__rpc__.update({
                 'on_write': RPC(instantiate=0),
@@ -652,6 +669,7 @@ class Line(ModelSQL, ModelView):
                 'already_reconciled': 'Line "%s" (%d) already reconciled.',
                 'party_required': 'Party is required on line "%s"',
                 'party_set': 'Party must not be set on line "%s"',
+                'wrong_second_currency_sign': 'Wrong second currency sign.',
                 })
 
     @classmethod
@@ -910,7 +928,7 @@ class Line(ModelSQL, ModelView):
         return Move.get_origin()
 
     @fields.depends('account', 'debit', 'credit', 'tax_lines', 'journal',
-        'move')
+        'move', 'amount_second_currency')
     def on_change_debit(self):
         Journal = Pool().get('account.journal')
         if self.journal or Transaction().context.get('journal'):
@@ -919,9 +937,10 @@ class Line(ModelSQL, ModelView):
                 self._compute_tax_lines(journal.type)
         if self.debit:
             self.credit = Decimal('0.0')
+        self._amount_second_currency_sign()
 
     @fields.depends('account', 'debit', 'credit', 'tax_lines', 'journal',
-        'move')
+        'move', 'amount_second_currency')
     def on_change_credit(self):
         Journal = Pool().get('account.journal')
         if self.journal or Transaction().context.get('journal'):
@@ -930,6 +949,17 @@ class Line(ModelSQL, ModelView):
                 self._compute_tax_lines(journal.type)
         if self.credit:
             self.debit = Decimal('0.0')
+        self._amount_second_currency_sign()
+
+    @fields.depends('amount_second_currency', 'debit', 'credit')
+    def on_change_amount_second_currency(self):
+        self._amount_second_currency_sign()
+
+    def _amount_second_currency_sign(self):
+        'Set correct sign to amount_second_currency'
+        if self.amount_second_currency:
+            self.amount_second_currency = \
+                self.amount_second_currency.copy_sign(self.debit - self.credit)
 
     @fields.depends('account', 'debit', 'credit', 'tax_lines', 'journal',
         'move')
@@ -946,6 +976,8 @@ class Line(ModelSQL, ModelView):
             if self.account.second_currency:
                 self.second_currency_digits = \
                     self.account.second_currency.digits
+            if not self.account.party_required:
+                self.party = None
 
     @fields.depends('account')
     def on_change_with_party_required(self, name=None):
@@ -1128,6 +1160,23 @@ class Line(ModelSQL, ModelView):
     order_date = _order_move_field('date')
     order_origin = _order_move_field('origin')
     order_move_state = _order_move_field('state')
+
+    def get_amount(self, name):
+        sign = 1 if self.account.type.display_balance == 'debit-credit' else -1
+        if self.amount_second_currency is not None:
+            return self.amount_second_currency * sign
+        else:
+            return self.debit - self.credit * sign
+
+    def get_amount_currency(self, name):
+        if self.second_currency:
+            currency = self.second_currency
+        else:
+            currency = self.account.currency
+        if name == 'amount_currency':
+            return currency.id
+        elif name == 'amount_currency_digits':
+            return currency.digits
 
     def get_rec_name(self, name):
         if self.debit > self.credit:
@@ -2022,15 +2071,16 @@ class GeneralJournal(Report):
                 order=[('date', 'ASC'), ('id', 'ASC')])
 
     @classmethod
-    def parse(cls, report, moves, data, localcontext):
+    def get_context(cls, records, data):
+        report_context = super(GeneralJournal, cls).get_context(records, data)
+
         Company = Pool().get('company.company')
 
         company = Company(data['company'])
 
-        localcontext['company'] = company
-        localcontext['digits'] = company.currency.digits
-        localcontext['from_date'] = data['from_date']
-        localcontext['to_date'] = data['to_date']
+        report_context['company'] = company
+        report_context['digits'] = company.currency.digits
+        report_context['from_date'] = data['from_date']
+        report_context['to_date'] = data['to_date']
 
-        return super(GeneralJournal, cls).parse(report, moves, data,
-            localcontext)
+        return report_context

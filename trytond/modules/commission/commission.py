@@ -18,6 +18,8 @@ from trytond.pool import Pool
 from trytond.wizard import Wizard, StateView, StateAction, Button
 from trytond.transaction import Transaction
 
+from trytond.modules.product import price_digits
+
 __all__ = ['Agent', 'Plan', 'PlanLines', 'Commission',
     'CreateInvoice', 'CreateInvoiceAsk']
 
@@ -39,7 +41,7 @@ class Agent(ModelSQL, ModelView):
             },
         depends=['plan'])
     pending_amount = fields.Function(fields.Numeric('Pending Amount',
-            digits=(16, 4)), 'get_pending_amount')
+            digits=price_digits), 'get_pending_amount')
 
     @staticmethod
     def default_company():
@@ -213,7 +215,7 @@ class Commission(ModelSQL, ModelView):
         states=_readonly_states, depends=_readonly_depends)
     product = fields.Many2One('product.product', 'Product', required=True,
         states=_readonly_states, depends=_readonly_depends)
-    amount = fields.Numeric('Amount', required=True, digits=(16, 4),
+    amount = fields.Numeric('Amount', required=True, digits=price_digits,
         domain=[('amount', '!=', 0)],
         states=_readonly_states, depends=_readonly_depends)
     currency = fields.Function(fields.Many2One('currency.currency',
@@ -318,7 +320,6 @@ class Commission(ModelSQL, ModelView):
         if to_write:
             cls.write(*to_write)
         Invoice.update_taxes(invoices)
-        return invoices
 
     def _group_to_invoice_key(self):
         direction = {
@@ -454,10 +455,11 @@ class CreateInvoice(Wizard):
         Commission = pool.get('commission')
         commissions = Commission.search(self.get_domain(),
             order=[('agent', 'DESC'), ('date', 'DESC')])
-        invoices = Commission.invoice(commissions)
+        Commission.invoice(commissions)
+        invoice_ids = list({c.invoice_line.invoice.id for c in commissions})
         encoder = PYSONEncoder()
         action['pyson_domain'] = encoder.encode(
-            [('id', 'in', [i.id for i in invoices])])
+            [('id', 'in', invoice_ids)])
         action['pyson_search_value'] = encoder.encode([])
         return action, {}
 

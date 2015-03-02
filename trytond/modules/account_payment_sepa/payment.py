@@ -296,6 +296,11 @@ class Payment:
             and self.sepa_return_reason_code
             and self.sepa_return_reason_information == '/RTYP/RJCT')
 
+    def create_clearing_move(self, date=None):
+        if not date:
+            date = Transaction().context.get('date_value')
+        return super(Payment, self).create_clearing_move(date=date)
+
 
 class Mandate(Workflow, ModelSQL, ModelView):
     'SEPA Mandate'
@@ -307,6 +312,7 @@ class Mandate(Workflow, ModelSQL, ModelView):
             },
         depends=['state'])
     account_number = fields.Many2One('bank.account.number', 'Account Number',
+        ondelete='RESTRICT',
         states={
             'readonly': Eval('state').in_(['validated', 'canceled']),
             'required': Eval('state') == 'validated',
@@ -480,6 +486,7 @@ class Mandate(Workflow, ModelSQL, ModelView):
         if self.type == 'one-off':
             return 'OOFF'
         elif (not self.payments
+                or all(not p.sepa_mandate_sequence_type for p in self.payments)
                 or all(p.rejected for p in self.payments)):
             return 'FRST'
         # TODO manage FNAL

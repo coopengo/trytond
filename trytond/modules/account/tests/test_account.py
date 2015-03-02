@@ -5,18 +5,20 @@ import doctest
 import datetime
 from decimal import Decimal
 from dateutil.relativedelta import relativedelta
+from trytond.pool import Pool
 import trytond.tests.test_tryton
-from trytond.tests.test_tryton import test_view, test_depends
+from trytond.tests.test_tryton import ModuleTestCase
 from trytond.tests.test_tryton import doctest_setup, doctest_teardown
 from trytond.tests.test_tryton import POOL, DB_NAME, USER, CONTEXT
 from trytond.transaction import Transaction
 
 
-class AccountTestCase(unittest.TestCase):
+class AccountTestCase(ModuleTestCase):
     'Test Account module'
+    module = 'account'
 
     def setUp(self):
-        trytond.tests.test_tryton.install_module('account')
+        super(AccountTestCase, self).setUp()
         self.account_template = POOL.get('account.account.template')
         self.tax_code_template = POOL.get('account.tax.code.template')
         self.tax_template = POOL.get('account.tax.code.template')
@@ -35,14 +37,6 @@ class AccountTestCase(unittest.TestCase):
             'account.fiscalyear.balance_non_deferral', type='wizard')
         self.tax = POOL.get('account.tax')
         self.party = POOL.get('party.party')
-
-    def test0005views(self):
-        'Test views'
-        test_view('account')
-
-    def test0006depends(self):
-        'Test depends'
-        test_depends()
 
     def test0010account_chart(self):
         'Test creation of minimal chart of accounts'
@@ -325,7 +319,7 @@ class AccountTestCase(unittest.TestCase):
             transaction.cursor.rollback()
 
     def test0040tax_compute(self):
-        'Test tax compute'
+        'Test tax compute/reverse_compute'
         with Transaction().start(DB_NAME, USER, context=CONTEXT):
             today = datetime.date.today()
 
@@ -368,6 +362,10 @@ class AccountTestCase(unittest.TestCase):
                         'tax': child2,
                         }])
 
+            self.assertEqual(
+                self.tax.reverse_compute(Decimal('130'), [tax]),
+                Decimal('100'))
+
             child1.end_date = today + relativedelta(days=5)
             child1.save()
             self.assertEqual(self.tax.compute([tax], Decimal('100'), 2, today),
@@ -381,6 +379,10 @@ class AccountTestCase(unittest.TestCase):
                         'tax': child2,
                         }])
 
+            self.assertEqual(
+                self.tax.reverse_compute(Decimal('130'), [tax], today),
+                Decimal('100'))
+
             child1.start_date = today + relativedelta(days=1)
             child1.save()
             self.assertEqual(self.tax.compute([tax], Decimal('100'), 2, today),
@@ -389,6 +391,9 @@ class AccountTestCase(unittest.TestCase):
                         'amount': Decimal('20'),
                         'tax': child2,
                         }])
+            self.assertEqual(
+                self.tax.reverse_compute(Decimal('110'), [tax], today),
+                Decimal('100'))
             self.assertEqual(self.tax.compute([tax], Decimal('100'), 2,
                     today + relativedelta(days=1)), [{
                         'base': Decimal('200'),
@@ -399,6 +404,10 @@ class AccountTestCase(unittest.TestCase):
                         'amount': Decimal('20'),
                         'tax': child2,
                         }])
+            self.assertEqual(
+                self.tax.reverse_compute(
+                    Decimal('130'), [tax], today + relativedelta(days=1)),
+                Decimal('100'))
             self.assertEqual(self.tax.compute([tax], Decimal('100'), 2,
                     today + relativedelta(days=5)), [{
                         'base': Decimal('200'),
@@ -409,12 +418,20 @@ class AccountTestCase(unittest.TestCase):
                         'amount': Decimal('20'),
                         'tax': child2,
                         }])
+            self.assertEqual(
+                self.tax.reverse_compute(Decimal('130'), [tax],
+                    today + relativedelta(days=5)),
+                Decimal('100'))
             self.assertEqual(self.tax.compute([tax], Decimal('100'), 2,
                     today + relativedelta(days=6)), [{
                         'base': Decimal('200'),
                         'amount': Decimal('20'),
                         'tax': child2,
                         }])
+            self.assertEqual(
+                self.tax.reverse_compute(Decimal('110'), [tax],
+                    today + relativedelta(days=6)),
+                Decimal('100'))
 
             child1.end_date = None
             child1.save()
@@ -428,6 +445,320 @@ class AccountTestCase(unittest.TestCase):
                         'amount': Decimal('20'),
                         'tax': child2,
                         }])
+            self.assertEqual(
+                self.tax.reverse_compute(Decimal('130'), [tax],
+                    today + relativedelta(days=6)),
+                Decimal('100'))
+
+            ecotax1 = self.tax()
+            ecotax1.name = ecotax1.description = 'EcoTax 1'
+            ecotax1.type = 'fixed'
+            ecotax1.amount = Decimal(5)
+            ecotax1.invoice_account = tax_account
+            ecotax1.credit_note_account = tax_account
+            ecotax1.sequence = 10
+            ecotax1.save()
+
+            vat0 = self.tax()
+            vat0.name = vat0.description = 'VAT0'
+            vat0.type = 'percentage'
+            vat0.rate = Decimal('0.1')
+            vat0.invoice_account = tax_account
+            vat0.credit_note_account = tax_account
+            vat0.sequence = 5
+            vat0.save()
+
+            vat1 = self.tax()
+            vat1.name = vat1.description = 'VAT1'
+            vat1.type = 'percentage'
+            vat1.rate = Decimal('0.2')
+            vat1.invoice_account = tax_account
+            vat1.credit_note_account = tax_account
+            vat1.sequence = 20
+            vat1.save()
+
+            self.assertEqual(
+                self.tax.compute([vat0, ecotax1, vat1], Decimal(100), 1),
+                [{
+                        'base': Decimal(100),
+                        'amount': Decimal(10),
+                        'tax': vat0,
+                        }, {
+                        'base': Decimal(100),
+                        'amount': Decimal(5),
+                        'tax': ecotax1,
+                        }, {
+                        'base': Decimal(100),
+                        'amount': Decimal(20),
+                        'tax': vat1,
+                        }])
+            self.assertEqual(
+                self.tax.reverse_compute(Decimal(135), [vat0, ecotax1, vat1]),
+                Decimal(100))
+
+    def test0045tax_compute_with_update_unit_price(self):
+        'Test tax compute with unit_price modifying tax'
+        with Transaction().start(DB_NAME, USER, context=CONTEXT):
+            tax_account, = self.account.search([
+                    ('name', '=', 'Main Tax'),
+                    ])
+            ecotax1 = self.tax()
+            ecotax1.name = ecotax1.description = 'EcoTax 1'
+            ecotax1.type = 'fixed'
+            ecotax1.amount = Decimal(5)
+            ecotax1.invoice_account = tax_account
+            ecotax1.credit_note_account = tax_account
+            ecotax1.update_unit_price = True
+            ecotax1.sequence = 10
+            ecotax1.save()
+
+            vat1 = self.tax()
+            vat1.name = vat1.description = 'VAT1'
+            vat1.type = 'percentage'
+            vat1.rate = Decimal('0.2')
+            vat1.invoice_account = tax_account
+            vat1.credit_note_account = tax_account
+            vat1.sequence = 20
+            vat1.save()
+
+            self.assertEqual(
+                self.tax.compute([ecotax1, vat1], Decimal(100), 5),
+                [{
+                        'base': Decimal(500),
+                        'amount': Decimal(25),
+                        'tax': ecotax1,
+                        }, {
+                        'base': Decimal(525),
+                        'amount': Decimal(105),
+                        'tax': vat1,
+                        }])
+            self.assertEqual(
+                self.tax.reverse_compute(Decimal(126), [ecotax1, vat1]),
+                Decimal(100))
+
+            ecotax2 = self.tax()
+            ecotax2.name = ecotax2.description = 'EcoTax 2'
+            ecotax2.type = 'percentage'
+            ecotax2.rate = Decimal('0.5')
+            ecotax2.invoice_account = tax_account
+            ecotax2.credit_note_account = tax_account
+            ecotax2.update_unit_price = True
+            ecotax2.sequence = 10
+            ecotax2.save()
+
+            self.assertEqual(
+                self.tax.compute([ecotax1, ecotax2, vat1], Decimal(100), 1),
+                [{
+                        'base': Decimal(100),
+                        'amount': Decimal(5),
+                        'tax': ecotax1,
+                        }, {
+                        'base': Decimal(100),
+                        'amount': Decimal(50),
+                        'tax': ecotax2,
+                        }, {
+                        'base': Decimal(155),
+                        'amount': Decimal(31),
+                        'tax': vat1,
+                        }])
+            self.assertEqual(
+                self.tax.reverse_compute(Decimal(186),
+                    [ecotax1, ecotax2, vat1]),
+                Decimal(100))
+
+            vat0 = self.tax()
+            vat0.name = vat0.description = 'VAT0'
+            vat0.type = 'percentage'
+            vat0.rate = Decimal('0.1')
+            vat0.invoice_account = tax_account
+            vat0.credit_note_account = tax_account
+            vat0.sequence = 5
+            vat0.save()
+
+            self.assertEqual(
+                self.tax.compute([vat0, ecotax1, vat1], Decimal(100), 1),
+                [{
+                        'base': Decimal(100),
+                        'amount': Decimal(10),
+                        'tax': vat0,
+                        }, {
+                        'base': Decimal(100),
+                        'amount': Decimal(5),
+                        'tax': ecotax1,
+                        }, {
+                        'base': Decimal(105),
+                        'amount': Decimal(21),
+                        'tax': vat1,
+                        }])
+            self.assertEqual(
+                self.tax.reverse_compute(Decimal(136),
+                    [vat0, ecotax1, vat1]),
+                Decimal(100))
+
+            self.assertEqual(
+                self.tax.compute([vat0, ecotax1, ecotax2, vat1],
+                    Decimal(100), 1),
+                [{
+                        'base': Decimal(100),
+                        'amount': Decimal(10),
+                        'tax': vat0,
+                        }, {
+                        'base': Decimal(100),
+                        'amount': Decimal(5),
+                        'tax': ecotax1,
+                        }, {
+                        'base': Decimal(100),
+                        'amount': Decimal(50),
+                        'tax': ecotax2,
+                        }, {
+                        'base': Decimal(155),
+                        'amount': Decimal(31),
+                        'tax': vat1,
+                        }])
+            self.assertEqual(
+                self.tax.reverse_compute(Decimal(196),
+                    [vat0, ecotax1, ecotax2, vat1]),
+                Decimal(100))
+
+            vat2 = self.tax()
+            vat2.name = vat2.description = 'VAT2'
+            vat2.type = 'percentage'
+            vat2.rate = Decimal('0.3')
+            vat2.invoice_account = tax_account
+            vat2.credit_note_account = tax_account
+            vat2.sequence = 30
+            vat2.save()
+
+            self.assertEqual(
+                self.tax.compute([vat0, ecotax1, vat1, vat2],
+                    Decimal(100), 1),
+                [{
+                        'base': Decimal(100),
+                        'amount': Decimal(10),
+                        'tax': vat0,
+                        }, {
+                        'base': Decimal(100),
+                        'amount': Decimal(5),
+                        'tax': ecotax1,
+                        }, {
+                        'base': Decimal(105),
+                        'amount': Decimal(21),
+                        'tax': vat1,
+                        }, {
+                        'base': Decimal(105),
+                        'amount': Decimal('31.5'),
+                        'tax': vat2,
+                        }])
+            self.assertEqual(
+                self.tax.reverse_compute(Decimal('167.5'),
+                    [vat0, ecotax1, vat1, vat2]),
+                Decimal(100))
+
+            ecotax3 = self.tax()
+            ecotax3.name = ecotax3.description = 'ECOTAX3'
+            ecotax3.type = 'percentage'
+            ecotax3.rate = Decimal('0.4')
+            ecotax3.invoice_account = tax_account
+            ecotax3.credit_note_account = tax_account
+            ecotax3.update_unit_price = True
+            ecotax3.sequence = 25
+            ecotax3.save()
+
+            self.assertEqual(
+                self.tax.compute([vat0, ecotax1, vat1, ecotax3, vat2],
+                    Decimal(100), 1),
+                [{
+                        'base': Decimal(100),
+                        'amount': Decimal(10),
+                        'tax': vat0,
+                        }, {
+                        'base': Decimal(100),
+                        'amount': Decimal(5),
+                        'tax': ecotax1,
+                        }, {
+                        'base': Decimal(105),
+                        'amount': Decimal(21),
+                        'tax': vat1,
+                        }, {
+                        'base': Decimal(105),
+                        'amount': Decimal('42'),
+                        'tax': ecotax3,
+                        }, {
+                        'base': Decimal(147),
+                        'amount': Decimal('44.1'),
+                        'tax': vat2
+                        }])
+            self.assertEqual(
+                self.tax.reverse_compute(Decimal('222.1'),
+                    [vat0, ecotax1, vat1, ecotax3, vat2]),
+                Decimal(100))
+
+    def test0050_receivable_payable(self):
+        'Test party receivable payable'
+        with Transaction().start(DB_NAME, USER, context=CONTEXT):
+            pool = Pool()
+            Party = pool.get('party.party')
+            fiscalyear, = self.fiscalyear.search([])
+            period = fiscalyear.periods[0]
+            journal_revenue, = self.journal.search([
+                    ('code', '=', 'REV'),
+                    ])
+            journal_expense, = self.journal.search([
+                    ('code', '=', 'EXP'),
+                    ])
+            revenue, = self.account.search([
+                    ('kind', '=', 'revenue'),
+                    ])
+            receivable, = self.account.search([
+                    ('kind', '=', 'receivable'),
+                    ])
+            expense, = self.account.search([
+                    ('kind', '=', 'expense'),
+                    ])
+            payable, = self.account.search([
+                    ('kind', '=', 'payable'),
+                    ])
+            party, = Party.create([{
+                        'name': 'Receivable/Payable party',
+                        }])
+            tomorrow = datetime.date.today() + datetime.timedelta(days=1)
+
+            def get_move(journal, amount, credit_account, debit_account, party,
+                    maturity_date=None):
+                return {
+                    'period': period.id,
+                    'journal': journal.id,
+                    'date': period.start_date,
+                    'lines': [
+                        ('create', [{
+                                    'account': credit_account.id,
+                                    'credit': amount,
+                                    }, {
+                                    'account': debit_account.id,
+                                    'debit': amount,
+                                    'party': party.id,
+                                    'maturity_date': maturity_date,
+                                    }]),
+                        ],
+                    }
+            vlist = [
+                get_move(journal_revenue, Decimal(100), revenue, receivable,
+                    party),
+                get_move(journal_expense, Decimal(30), expense, payable,
+                    party),
+                get_move(journal_revenue, Decimal(200), revenue, receivable,
+                    party, tomorrow),
+                get_move(journal_revenue, Decimal(60), expense, payable,
+                    party, tomorrow),
+                ]
+            moves = self.move.create(vlist)
+            self.move.post(moves)
+
+            party = Party(party.id)
+            self.assertEqual(party.receivable, Decimal('300'))
+            self.assertEqual(party.receivable_today, Decimal('100'))
+            self.assertEqual(party.payable, Decimal('90'))
+            self.assertEqual(party.payable_today, Decimal('30'))
 
 
 def suite():
@@ -444,6 +775,10 @@ def suite():
             optionflags=doctest.REPORT_ONLY_FIRST_FAILURE))
     suite.addTests(doctest.DocFileSuite(
             'scenario_move_cancel.rst',
+            setUp=doctest_setup, tearDown=doctest_teardown, encoding='utf-8',
+            optionflags=doctest.REPORT_ONLY_FIRST_FAILURE))
+    suite.addTests(doctest.DocFileSuite(
+            'scenario_reports.rst',
             setUp=doctest_setup, tearDown=doctest_teardown, encoding='utf-8',
             optionflags=doctest.REPORT_ONLY_FIRST_FAILURE))
     return suite
