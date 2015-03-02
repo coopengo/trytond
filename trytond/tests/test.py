@@ -16,6 +16,7 @@ __all__ = [
     'Date', 'DateDefault', 'DateRequired',
     'DateTime', 'DateTimeDefault', 'DateTimeRequired', 'DateTimeFormat',
     'Time', 'TimeDefault', 'TimeRequired', 'TimeFormat',
+    'TimeDelta', 'TimeDeltaDefault', 'TimeDeltaRequired',
     'One2One', 'One2OneTarget', 'One2OneRelation', 'One2OneRequired',
     'One2OneRequiredRelation', 'One2OneDomain', 'One2OneDomainRelation',
     'One2Many', 'One2ManyTarget',
@@ -34,7 +35,7 @@ __all__ = [
     'Selection', 'SelectionRequired',
     'DictSchema', 'Dict', 'DictDefault', 'DictRequired',
     'Binary', 'BinaryDefault', 'BinaryRequired',
-    'Many2OneDomainValidation', 'Many2OneTarget',
+    'Many2OneDomainValidation', 'Many2OneTarget', 'Many2OneOrderBy',
     ]
 
 
@@ -313,6 +314,31 @@ class TimeFormat(ModelSQL):
     'Time Format'
     __name__ = 'test.time_format'
     time = fields.Time(string='Time', format='%H:%M')
+
+
+class TimeDelta(ModelSQL):
+    'TimeDelta'
+    __name__ = 'test.timedelta'
+    timedelta = fields.TimeDelta(string='TimeDelta', help='Test timedelta',
+        required=False)
+
+
+class TimeDeltaDefault(ModelSQL):
+    'TimeDelta Default'
+    __name__ = 'test.timedelta_default'
+    timedelta = fields.TimeDelta(string='TimeDelta', help='Test timedelta',
+        required=False)
+
+    @staticmethod
+    def default_timedelta():
+        return datetime.timedelta(seconds=3600)
+
+
+class TimeDeltaRequired(ModelSQL):
+    'TimeDelta Required'
+    __name__ = 'test.timedelta_required'
+    timedelta = fields.TimeDelta(string='TimeDelta', help='Test timedelta',
+        required=True)
 
 
 class One2One(ModelSQL):
@@ -683,6 +709,7 @@ class BinaryRequired(ModelSQL):
 class Many2OneTarget(ModelSQL):
     "Many2One Domain Validation Target"
     __name__ = 'test.many2one_target'
+    _order_name = 'value'
 
     active = fields.Boolean('Active')
     value = fields.Integer('Value')
@@ -701,3 +728,9 @@ class Many2OneDomainValidation(ModelSQL):
             ('value', '>', 5),
             ])
     dummy = fields.Char('Dummy')
+
+
+class Many2OneOrderBy(ModelSQL):
+    "Many2One OrderBy"
+    __name__ = 'test.many2one_orderby'
+    many2one = fields.Many2One('test.many2one_target', 'many2one')

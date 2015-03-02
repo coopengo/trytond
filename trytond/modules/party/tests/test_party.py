@@ -2,27 +2,20 @@
 # this repository contains the full copyright notices and license terms.
 import unittest
 import trytond.tests.test_tryton
-from trytond.tests.test_tryton import POOL, DB_NAME, USER, CONTEXT, test_view,\
-    test_depends
+from trytond.tests.test_tryton import ModuleTestCase
+from trytond.tests.test_tryton import POOL, DB_NAME, USER, CONTEXT
 from trytond.transaction import Transaction
 
 
-class PartyTestCase(unittest.TestCase):
+class PartyTestCase(ModuleTestCase):
     'Test Party module'
+    module = 'party'
 
     def setUp(self):
-        trytond.tests.test_tryton.install_module('party')
+        super(PartyTestCase, self).setUp()
         self.category = POOL.get('party.category')
         self.party = POOL.get('party.party')
         self.address = POOL.get('party.address')
-
-    def test0005views(self):
-        'Test views'
-        test_view('party')
-
-    def test0006depends(self):
-        'Test depends'
-        test_depends()
 
     def test0010category(self):
         'Create category'
@@ -89,6 +82,15 @@ class PartyTestCase(unittest.TestCase):
                         'city': 'City',
                         }])
             self.assert_(address.id)
+
+    def test0060party_label_report(self):
+        'Test party label report'
+        with Transaction().start(DB_NAME, USER, context=CONTEXT):
+            party1, = self.party.search([], limit=1)
+            report = POOL.get('party.label', type='report')
+            oext, content, _, _ = report.execute([party1.id], {})
+            self.assertEqual(oext, 'odt')
+            self.assertTrue(content)
 
 
 def suite():

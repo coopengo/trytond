@@ -336,6 +336,9 @@ DateTime
 .. class:: DateTime(string[, format, \**options])
 
 A date and time, represented in Python by a ``datetime.datetime`` instance.
+It is stored in `UTC`_ while displayed in the user timezone.
+
+.. _`UTC`: https://en.wikipedia.org/wiki/Coordinated_Universal_Time
 
 .. attribute:: DateTime.format
 
@@ -360,6 +363,20 @@ A time, represented in Python by a ``datetime.time`` instance.
 .. attribute:: Time.format
 
     Same as :attr:`DateTime.format`
+
+TimeDelta
+---------
+
+.. class::TimeDelta(string[, converter[, \**options]])
+
+An interval, represented in Python by a ``datetime.timedelta`` instance.
+
+.. attribute:: TimeDelta.converter
+
+    The name of the context key containing the time converter.
+    A time converter is a dictionary with the keys: ``s`` (second), ``m``
+    (minute), ``h`` (hour), ``d`` (day), ``w`` (week), ``M`` (month), ``Y``
+    (year) and the value in second.
 
 Binary
 ------

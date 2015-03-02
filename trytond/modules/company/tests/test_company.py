@@ -1,30 +1,25 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
 import unittest
+import doctest
+
 import trytond.tests.test_tryton
-from trytond.tests.test_tryton import POOL, DB_NAME, USER, CONTEXT, test_view,\
-    test_depends
+from trytond.tests.test_tryton import ModuleTestCase
+from trytond.tests.test_tryton import POOL, DB_NAME, USER, CONTEXT
 from trytond.transaction import Transaction
 
 
-class CompanyTestCase(unittest.TestCase):
+class CompanyTestCase(ModuleTestCase):
     'Test Company module'
+    module = 'company'
 
     def setUp(self):
-        trytond.tests.test_tryton.install_module('company')
+        super(CompanyTestCase, self).setUp()
         self.party = POOL.get('party.party')
         self.company = POOL.get('company.company')
         self.employee = POOL.get('company.employee')
         self.currency = POOL.get('currency.currency')
         self.user = POOL.get('res.user')
-
-    def test0005views(self):
-        'Test views'
-        test_view('company')
-
-    def test0006depends(self):
-        'Test depends'
-        test_depends()
 
     def test0010company(self):
         'Create company'
@@ -36,6 +31,7 @@ class CompanyTestCase(unittest.TestCase):
 
             party1, = self.party.create([{
                         'name': 'Dunder Mifflin',
+                        'addresses': [('create', [{}])],
                         }])
             company1, = self.company.create([{
                         'party': party1.id,
@@ -140,7 +136,7 @@ def suite():
     suite = trytond.tests.test_tryton.suite()
     from trytond.modules.currency.tests import test_currency
     for test in test_currency.suite():
-        if test not in suite:
+        if test not in suite and not isinstance(test, doctest.DocTestCase):
             suite.addTest(test)
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(
             CompanyTestCase))

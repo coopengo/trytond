@@ -78,7 +78,7 @@ An Account is defined by these fields:
   - Other: For other accounts.
 
 - Type: The Account Type of the account.
-- Deferral: A checkbox. If set to true, credits and debits are carried
+- Deferral: A checkbox. If set to true, credit and debit are carried
   over form fiscal year to fiscal year.
 - Second currency: Force all moves for the account to have this
   secondary currency.
@@ -205,6 +205,8 @@ the following fields:
 - Amount: If Type is *Fixed*, defines a fix amount for the tax.
 - Percentage: If Type is *Percentage*, defines the percentage of the
   tax.
+- Update Unit Price: If checked then the unit price for further tax calculation
+  will be increased by the amount of this tax.
 - Parent, Children: Parent and children taxes
 - Company: The company for which the tax is defined.
 - Invoice Account: The account to use when creating move lines for

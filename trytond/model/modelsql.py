@@ -4,6 +4,7 @@ import re
 import datetime
 from functools import reduce
 from itertools import islice, izip, chain, ifilter
+from collections import OrderedDict
 
 from sql import Table, Column, Literal, Desc, Asc, Expression, Flavor, Null
 from sql.functions import Now, Extract
@@ -756,7 +757,9 @@ class ModelSQL(ModelStorage):
         Config = pool.get('ir.configuration')
 
         assert not len(args) % 2
-        all_records = sum(((records, values) + args)[0:None:2], [])
+        # Remove possible duplicates from all records
+        all_records = list(OrderedDict.fromkeys(
+                sum(((records, values) + args)[0:None:2], [])))
         all_ids = [r.id for r in all_records]
         all_field_names = set()
 
@@ -1000,10 +1003,11 @@ class ModelSQL(ModelStorage):
             }
         if order is None or order is False:
             order = cls._order
-        for fname, otype in order:
+        for oexpr, otype in order:
+            fname, _, extra_expr = oexpr.partition('.')
             field = cls._fields[fname]
             Order = order_types[otype.upper()]
-            forder = field.convert_order(fname, tables, cls)
+            forder = field.convert_order(oexpr, tables, cls)
             order_by.extend((Order(o) for o in forder))
 
         main_table, _ = tables[None]
@@ -1106,30 +1110,34 @@ class ModelSQL(ModelStorage):
             return ifilter(lambda r: history_key(r) == ids_history[r['id']]
                 and r['id'] not in to_delete, rows)
 
-        rows = list(filter_history(rows))
-        keys = None
-        for data in islice(rows, 0, cache.size_limit):
-            if data['id'] in delete_records:
-                continue
-            if keys is None:
-                keys = data.keys()
-                for k in keys[:]:
-                    if k in ('_timestamp', '_datetime', '__id'):
-                        keys.remove(k)
-                        continue
-                    field = cls._fields[k]
-                    if not getattr(field, 'datetime_field', None):
-                        keys.remove(k)
-                        continue
-            for k in keys:
-                del data[k]
-            cache[cls.__name__].setdefault(data['id'], {}).update(data)
+        # Can not cache the history value if we are not sure to have fetch all
+        # the rows for each records
+        if (not (cls._history and transaction.context.get('_datetime'))
+                or len(rows) < cursor.IN_MAX):
+            rows = list(filter_history(rows))
+            keys = None
+            for data in islice(rows, 0, cache.size_limit):
+                if data['id'] in delete_records:
+                    continue
+                if keys is None:
+                    keys = data.keys()
+                    for k in keys[:]:
+                        if k in ('_timestamp', '_datetime', '__id'):
+                            keys.remove(k)
+                            continue
+                        field = cls._fields[k]
+                        if not getattr(field, 'datetime_field', None):
+                            keys.remove(k)
+                            continue
+                for k in keys:
+                    del data[k]
+                cache[cls.__name__].setdefault(data['id'], {}).update(data)
 
         if len(rows) >= cursor.IN_MAX:
             if (cls._history
                     and Transaction().context.get('_datetime')
                     and not query):
-                columns = columns[:2]
+                columns = columns[:3]
             else:
                 columns = columns[:1]
             cursor.execute(*table.select(*columns,

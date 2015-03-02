@@ -11,7 +11,7 @@ from io import BytesIO
 from mock import Mock, patch
 
 import trytond.tests.test_tryton
-from trytond.tests.test_tryton import test_view, test_depends
+from trytond.tests.test_tryton import ModuleTestCase
 from trytond.tests.test_tryton import DB_NAME, USER, CONTEXT
 from trytond.transaction import Transaction
 from trytond.exceptions import UserError
@@ -153,19 +153,9 @@ def validate_file(flavor, kind, xsd=None):
     schema.assertValid(sepa_xml)
 
 
-class AccountPaymentSepaTestCase(unittest.TestCase):
+class AccountPaymentSepaTestCase(ModuleTestCase):
     'Test Account Payment SEPA module'
-
-    def setUp(self):
-        trytond.tests.test_tryton.install_module('account_payment_sepa')
-
-    def test0005views(self):
-        'Test views'
-        test_view('account_payment_sepa')
-
-    def test0006depends(self):
-        'Test depends'
-        test_depends()
+    module = 'account_payment_sepa'
 
     def test_pain001_001_03(self):
         'Test pain001.001.03 xsd validation'
@@ -399,6 +389,24 @@ class AccountPaymentSepaTestCase(unittest.TestCase):
     def test_camt054_001_04(self):
         'Test camt.054.001.04 handling'
         self.handle_camt054('camt.054.001.04')
+
+    def test_sepa_mandate_report(self):
+        'Test sepa mandate report'
+        with Transaction().start(DB_NAME, USER, context=CONTEXT):
+            pool = Pool()
+            Report = pool.get('account.payment.sepa.mandate', type='report')
+
+            environment = setup_environment()
+            company = environment['company']
+            bank = environment['bank']
+            customer = environment['customer']
+            company_account, customer_account = setup_accounts(
+                bank, company, customer)
+            mandate = setup_mandate(company, customer, customer_account)
+
+            oext, content, _, _ = Report.execute([mandate.id], {})
+            self.assertEqual(oext, 'odt')
+            self.assertTrue(content)
 
 
 def suite():

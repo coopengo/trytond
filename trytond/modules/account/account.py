@@ -4,6 +4,7 @@ from decimal import Decimal
 import datetime
 import operator
 from itertools import izip, groupby
+from functools import wraps
 
 from sql import Column, Literal, Null
 from sql.aggregate import Sum
@@ -29,6 +30,14 @@ __all__ = ['TypeTemplate', 'Type', 'OpenType', 'AccountTemplate', 'Account',
     'CreateChart', 'UpdateChartStart', 'UpdateChartSucceed', 'UpdateChart',
     'OpenThirdPartyBalanceStart', 'OpenThirdPartyBalance', 'ThirdPartyBalance',
     'OpenAgedBalanceStart', 'OpenAgedBalance', 'AgedBalance']
+
+
+def inactive_records(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        with Transaction().set_context(active_test=False):
+            return func(*args, **kwargs)
+    return wrapper
 
 
 class TypeTemplate(ModelSQL, ModelView):
@@ -378,6 +387,12 @@ class AccountTemplate(ModelSQL, ModelView):
             'invisible': Eval('kind') == 'view',
             },
         depends=['kind'])
+    general_ledger_balance = fields.Boolean('General Ledger Balance',
+        states={
+            'invisible': Eval('kind') == 'view',
+            },
+        depends=['kind'],
+        help="Display only the balance in the general ledger report")
 
     @classmethod
     def __setup__(cls):
@@ -404,6 +419,10 @@ class AccountTemplate(ModelSQL, ModelView):
 
     @staticmethod
     def default_party_required():
+        return False
+
+    @staticmethod
+    def default_general_ledger_balance():
         return False
 
     def get_rec_name(self, name):
@@ -436,6 +455,10 @@ class AccountTemplate(ModelSQL, ModelView):
             res['deferral'] = self.deferral
         if not account or account.party_required != self.party_required:
             res['party_required'] = self.party_required
+        if (not account
+                or account.general_ledger_balance !=
+                self.general_ledger_balance):
+            res['general_ledger_balance'] = self.general_ledger_balance
         if not account or account.template != self:
             res['template'] = self.id
         return res
@@ -599,6 +622,12 @@ class Account(ModelSQL, ModelView):
             'invisible': Eval('kind') == 'view',
             },
         depends=['kind'])
+    general_ledger_balance = fields.Boolean('General Ledger Balance',
+        states={
+            'invisible': Eval('kind') == 'view',
+            },
+        depends=['kind'],
+        help="Display only the balance in the general ledger report")
     template = fields.Many2One('account.account.template', 'Template')
 
     @classmethod
@@ -646,6 +675,10 @@ class Account(ModelSQL, ModelView):
 
     @staticmethod
     def default_party_required():
+        return False
+
+    @staticmethod
+    def default_general_ledger_balance():
         return False
 
     @staticmethod
@@ -1129,7 +1162,9 @@ class GeneralLedger(Report):
     __name__ = 'account.general_ledger'
 
     @classmethod
-    def parse(cls, report, objects, data, localcontext):
+    def get_context(cls, records, data):
+        report_context = super(GeneralLedger, cls).get_context(records, data)
+
         pool = Pool()
         Account = pool.get('account.account')
         Period = pool.get('account.period')
@@ -1194,21 +1229,22 @@ class GeneralLedger(Report):
             accounts = Account.browse([a.id for a in accounts
                     if a in account2lines])
 
-        account_id2lines = cls.lines(accounts,
+        account_id2lines = cls.lines(
+            [a for a in accounts if not a.general_ledger_balance],
             list(set(end_periods).difference(set(start_periods))),
             data['posted'])
 
-        localcontext['accounts'] = accounts
-        localcontext['id2start_account'] = id2start_account
-        localcontext['id2end_account'] = id2end_account
-        localcontext['digits'] = company.currency.digits
-        localcontext['lines'] = lambda account_id: account_id2lines[account_id]
-        localcontext['company'] = company
-        localcontext['start_period'] = start_period
-        localcontext['end_period'] = end_period
+        report_context['accounts'] = accounts
+        report_context['id2start_account'] = id2start_account
+        report_context['id2end_account'] = id2end_account
+        report_context['digits'] = company.currency.digits
+        report_context['lines'] = \
+            lambda account_id: account_id2lines[account_id]
+        report_context['company'] = company
+        report_context['start_period'] = start_period
+        report_context['end_period'] = end_period
 
-        return super(GeneralLedger, cls).parse(report, objects, data,
-            localcontext)
+        return report_context
 
     @classmethod
     def get_lines(cls, accounts, periods, posted):
@@ -1222,12 +1258,10 @@ class GeneralLedger(Report):
             clause.append(('move.state', '=', 'posted'))
         lines = MoveLine.search(clause,
             order=[
-                ('account', 'ASC'),  # TODO replace by account.id
+                ('account.id', 'ASC'),
                 ('date', 'ASC'),
                 ])
-        key = operator.attrgetter('account')
-        lines.sort(key=key)
-        return groupby(lines, key)
+        return groupby(lines, operator.attrgetter('account'))
 
     @classmethod
     def lines(cls, accounts, periods, posted):
@@ -1342,7 +1376,9 @@ class TrialBalance(Report):
     __name__ = 'account.trial_balance'
 
     @classmethod
-    def parse(cls, report, objects, data, localcontext):
+    def get_context(cls, records, data):
+        report_context = super(TrialBalance, cls).get_context(records, data)
+
         pool = Pool()
         Account = pool.get('account.account')
         Period = pool.get('account.period')
@@ -1424,17 +1460,17 @@ class TrialBalance(Report):
 
         periods = end_periods
 
-        localcontext['accounts'] = accounts
+        report_context['accounts'] = accounts
         periods.sort(key=operator.attrgetter('start_date'))
-        localcontext['start_period'] = periods[0]
+        report_context['start_period'] = periods[0]
         periods.sort(key=operator.attrgetter('end_date'))
-        localcontext['end_period'] = periods[-1]
-        localcontext['company'] = company
-        localcontext['digits'] = company.currency.digits
-        localcontext['sum'] = lambda accounts, field: cls.sum(accounts, field)
+        report_context['end_period'] = periods[-1]
+        report_context['company'] = company
+        report_context['digits'] = company.currency.digits
+        report_context['sum'] = \
+            lambda accounts, field: cls.sum(accounts, field)
 
-        return super(TrialBalance, cls).parse(report, objects, data,
-            localcontext)
+        return report_context
 
     @classmethod
     def sum(cls, accounts, field):
@@ -1787,6 +1823,7 @@ class UpdateChart(Wizard):
             Button('Ok', 'end', 'tryton-ok', default=True),
             ])
 
+    @inactive_records
     def transition_update(self):
         pool = Pool()
         TaxCode = pool.get('account.tax.code')
@@ -1945,7 +1982,10 @@ class ThirdPartyBalance(Report):
     __name__ = 'account.third_party_balance'
 
     @classmethod
-    def parse(cls, report, objects, data, localcontext):
+    def get_context(cls, records, data):
+        report_context = super(ThirdPartyBalance, cls).get_context(records,
+            data)
+
         pool = Pool()
         Party = pool.get('party.party')
         MoveLine = pool.get('account.move.line')
@@ -1960,10 +2000,10 @@ class ThirdPartyBalance(Report):
         account = Account.__table__()
 
         company = Company(data['company'])
-        localcontext['company'] = company
-        localcontext['digits'] = company.currency.digits
-        localcontext['fiscalyear'] = data['fiscalyear']
-        with Transaction().set_context(context=localcontext):
+        report_context['company'] = company
+        report_context['digits'] = company.currency.digits
+        report_context['fiscalyear'] = data['fiscalyear']
+        with Transaction().set_context(context=report_context):
             line_query, _ = MoveLine.query_get(line)
         if data['posted']:
             posted_clause = move.state == 'posted'
@@ -1994,12 +2034,11 @@ class ThirdPartyBalance(Report):
             'solde': x[1] - x[2],
             } for x in res]
         objects.sort(lambda x, y: cmp(x['name'], y['name']))
-        localcontext['total_debit'] = sum((x['debit'] for x in objects))
-        localcontext['total_credit'] = sum((x['credit'] for x in objects))
-        localcontext['total_solde'] = sum((x['solde'] for x in objects))
+        report_context['total_debit'] = sum((x['debit'] for x in objects))
+        report_context['total_credit'] = sum((x['credit'] for x in objects))
+        report_context['total_solde'] = sum((x['solde'] for x in objects))
 
-        return super(ThirdPartyBalance, cls).parse(report, objects, data,
-            localcontext)
+        return report_context
 
 
 class OpenAgedBalanceStart(ModelView):
@@ -2086,7 +2125,9 @@ class AgedBalance(Report):
     __name__ = 'account.aged_balance'
 
     @classmethod
-    def parse(cls, report, objects, data, localcontext):
+    def get_context(cls, records, data):
+        report_context = super(AgedBalance, cls).get_context(records, data)
+
         pool = Pool()
         Party = pool.get('party.party')
         MoveLine = pool.get('account.move.line')
@@ -2101,9 +2142,9 @@ class AgedBalance(Report):
         account = Account.__table__()
 
         company = Company(data['company'])
-        localcontext['digits'] = company.currency.digits
-        localcontext['posted'] = data['posted']
-        with Transaction().set_context(context=localcontext):
+        report_context['digits'] = company.currency.digits
+        report_context['posted'] = data['posted']
+        with Transaction().set_context(context=report_context):
             line_query, _ = MoveLine.query_get(line)
 
         terms = (data['term1'], data['term2'], data['term3'])
@@ -2146,20 +2187,19 @@ class AgedBalance(Report):
             ('id', 'in', [k for k in res.iterkeys()]),
             ])
 
-        localcontext['main_title'] = data['balance_type']
-        localcontext['unit'] = data['unit']
+        report_context['main_title'] = data['balance_type']
+        report_context['unit'] = data['unit']
         for i in range(3):
-            localcontext['total' + str(i)] = sum(
+            report_context['total' + str(i)] = sum(
                 (v[i] for v in res.itervalues()))
-            localcontext['term' + str(i)] = terms[i]
+            report_context['term' + str(i)] = terms[i]
 
-        localcontext['company'] = company
-        localcontext['parties'] = [{
+        report_context['company'] = company
+        report_context['parties'] = [{
                 'name': p.rec_name,
                 'amount0': res[p.id][0],
                 'amount1': res[p.id][1],
                 'amount2': res[p.id][2],
                 } for p in parties]
 
-        return super(AgedBalance, cls).parse(report, objects, data,
-            localcontext)
+        return report_context

@@ -1,28 +1,19 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
 import unittest
+import doctest
 from decimal import Decimal
 
 import trytond.tests.test_tryton
-from trytond.tests.test_tryton import test_view, test_depends
+from trytond.tests.test_tryton import ModuleTestCase
 from trytond.tests.test_tryton import POOL, DB_NAME, USER, CONTEXT
 from trytond.transaction import Transaction
 from trytond.exceptions import UserError
 
 
-class AccountProductTestCase(unittest.TestCase):
+class AccountProductTestCase(ModuleTestCase):
     'Test AccountProduct module'
-
-    def setUp(self):
-        trytond.tests.test_tryton.install_module('account_product')
-
-    def test0005views(self):
-        'Test views'
-        test_view('account_product')
-
-    def test0006depends(self):
-        'Test depends'
-        test_depends()
+    module = 'account_product'
 
     def test_account_used(self):
         'Test account used'
@@ -118,7 +109,7 @@ def suite():
     suite = trytond.tests.test_tryton.suite()
     from trytond.modules.account.tests import test_account
     for test in test_account.suite():
-        if test not in suite:
+        if test not in suite and not isinstance(test, doctest.DocTestCase):
             suite.addTest(test)
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(
         AccountProductTestCase))

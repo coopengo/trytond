@@ -92,6 +92,7 @@ class Model(WarningErrorMixin, URLMixin, PoolBase):
         '''
         Returns the first non-empty line of the model docstring.
         '''
+        assert cls.__doc__, '%s has no docstring' % cls
         lines = cls.__doc__.splitlines()
         for line in lines:
             line = line.strip()
@@ -211,6 +212,7 @@ class Model(WarningErrorMixin, URLMixin, PoolBase):
                     'filename',
                     'selection_change_with',
                     'domain',
+                    'converter',
                     ):
                 if getattr(cls._fields[field], arg, None) is not None:
                     value = getattr(cls._fields[field], arg)
