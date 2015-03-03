@@ -8,6 +8,7 @@ from .configuration import *
 from .period import *
 from .journal import *
 from .move import *
+from .move_template import *
 from .tax import *
 from .party import *
 
@@ -66,6 +67,12 @@ def register():
         AccountTemplate2,
         AccountTax,
         Account2,
+        MoveTemplate,
+        MoveTemplateKeyword,
+        MoveLineTemplate,
+        TaxLineTemplate,
+        CreateMoveTemplate,
+        CreateMoveKeywords,
         Party,
         module='account', type_='model')
     Pool.register(
@@ -92,6 +99,7 @@ def register():
         Reconcile,
         CancelMoves,
         PrintGeneralJournal,
+        CreateMove,
         OpenChartTaxCode,
         OpenTaxCode,
         module='account', type_='wizard')

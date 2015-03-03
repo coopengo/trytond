@@ -12,6 +12,9 @@ def register():
     Pool.register(
         PaymentTerm,
         PaymentTermLine,
+        PaymentTermLineRelativeDelta,
+        TestPaymentTermView,
+        TestPaymentTermViewResult,
         Invoice,
         InvoicePaymentLine,
         InvoiceLine,
@@ -31,6 +34,7 @@ def register():
         ConfigurationTaxRounding,
         module='account_invoice', type_='model')
     Pool.register(
+        TestPaymentTerm,
         PrintInvoice,
         PayInvoice,
         CreditInvoice,
