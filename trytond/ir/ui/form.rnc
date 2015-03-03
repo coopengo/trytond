@@ -91,6 +91,7 @@ attlist.field &= attribute group { text }?
 attlist.field &= attribute relation { text }?
 attlist.field &= attribute relation_field { text }?
 attlist.field &= attribute view_ids { text }?
+attlist.field &= attribute product { text }?
 attlist.field &=
   [ a:defaultValue = "0" ] attribute invisible { "0" | "1" }?
 attlist.field &= attribute sum { text }?
