@@ -167,6 +167,7 @@
           <value>dict</value>
           <value>multiselection</value>
           <value>source</value>
+          <value>many2many_selection</value>
         </choice>
       </attribute>
     </optional>
