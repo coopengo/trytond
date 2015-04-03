@@ -1,6 +1,14 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
 import sys
+import os
+import logging
+
+if 'LOGCONFIG' in os.environ:
+    logging.config.fileConfig(os.environ['LOGCONFIG'])
+    logging.getLogger('server').info('using %s as logging '
+        'configuration file', os.environ['LOGCONFIG'])
+
 import json
 import traceback
 import StringIO
