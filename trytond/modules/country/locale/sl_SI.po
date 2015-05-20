@@ -2,14 +2,6 @@
 msgid ""
 msgstr "Content-Type: text/plain; charset=utf-8\n"
 
-msgctxt "error:country.country:"
-msgid "The code of the country must be unique."
-msgstr "Šifra države mora biti enolična."
-
-msgctxt "error:country.country:"
-msgid "The name of the country must be unique."
-msgstr "Naziv države mora biti enolično."
-
 msgctxt "field:country.country,code:"
 msgid "Code"
 msgstr "Šifra"
@@ -874,6 +866,7 @@ msgctxt "model:country.country,name:pr"
 msgid "Puerto Rico"
 msgstr "Portoriko"
 
+#, fuzzy
 msgctxt "model:country.country,name:ps"
 msgid "Palestine, State of"
 msgstr "Palestina, država"
@@ -16514,6 +16507,7 @@ msgctxt "model:country.subdivision,name:se-y"
 msgid "Västernorrlands län"
 msgstr "Västernorrlands län"
 
+#, fuzzy
 msgctxt "model:country.subdivision,name:se-z"
 msgid "Jämtlands län"
 msgstr "Jämtlands län"

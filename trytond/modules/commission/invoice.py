@@ -29,8 +29,11 @@ class Invoice:
     @ModelView.button
     @Workflow.transition('posted')
     def post(cls, invoices):
+        # Create commission only the first time the invoice is posted
+        to_commission = [i for i in invoices
+            if i.state not in ['posted', 'paid']]
         super(Invoice, cls).post(invoices)
-        cls.create_commissions(invoices)
+        cls.create_commissions(to_commission)
 
     @classmethod
     def create_commissions(cls, invoices):
@@ -185,6 +188,13 @@ class InvoiceLine:
                     self.principal = self.product.default_principal
             elif self.principal:
                 self.principal = None
+
+    @classmethod
+    def view_attributes(cls):
+        return super(InvoiceLine, cls).view_attributes() + [
+            ('//page[@id="commissions"]', 'state', {
+                    'invisible': Eval('type') != 'line',
+                    })]
 
     @classmethod
     def copy(cls, lines, default=None):

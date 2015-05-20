@@ -149,7 +149,7 @@ msgstr "Privzeta ME"
 
 msgctxt "field:product.template,default_uom_category:"
 msgid "Default UOM Category"
-msgstr "Kategorija privzete ME"
+msgstr "Privzeta kategorija ME"
 
 msgctxt "field:product.template,id:"
 msgid "ID"
