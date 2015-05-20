@@ -5,14 +5,17 @@ import os
 import sys
 import unittest
 import doctest
+from itertools import chain
 import operator
 from lxml import etree
 
 from trytond.pool import Pool
 from trytond import backend
+from trytond.model import Workflow
+from trytond.model.fields import get_eval_fields
 from trytond.protocols.dispatcher import create, drop
+from trytond.tools import is_instance_method
 from trytond.transaction import Transaction
-from trytond.pyson import PYSONEncoder, Eval
 from trytond import security
 
 __all__ = ['POOL', 'DB_NAME', 'USER', 'USER_PASSWORD', 'CONTEXT',
@@ -72,6 +75,21 @@ class ModuleTestCase(unittest.TestCase):
     def setUp(self):
         install_module(self.module)
 
+    def test_rec_name(self):
+        with Transaction().start(DB_NAME, USER, context=CONTEXT):
+            for mname, model in Pool().iterobject():
+                # Don't test model not registered by the module
+                if not any(issubclass(model, cls) for cls in
+                        Pool().classes['model'].get(self.module, [])):
+                    continue
+                # Skip testing default value even if the field doesn't exist
+                # as there is a fallback to id
+                if model._rec_name == 'name':
+                    continue
+                assert model._rec_name in model._fields, (
+                    'Wrong _rec_name "%s" for %s'
+                    % (model._rec_name, mname))
+
     def test_view(self):
         'Test validity of all views of the module'
         with Transaction().start(DB_NAME, USER,
@@ -101,19 +119,6 @@ class ModuleTestCase(unittest.TestCase):
 
     def test_depends(self):
         'Test for missing depends'
-        class Encoder(PYSONEncoder):
-
-            def __init__(self, *args, **kwargs):
-                super(Encoder, self).__init__(*args, **kwargs)
-                self.fields = set()
-
-            def default(self, obj):
-                if isinstance(obj, Eval):
-                    fname = obj._value
-                    if not fname.startswith('_parent_'):
-                        self.fields.add(fname)
-                return super(Encoder, self).default(obj)
-
         with Transaction().start(DB_NAME, USER, context=CONTEXT):
             for mname, model in Pool().iterobject():
                 # Don't test model not registered by the module
@@ -121,19 +126,19 @@ class ModuleTestCase(unittest.TestCase):
                         Pool().classes['model'].get(self.module, [])):
                     continue
                 for fname, field in model._fields.iteritems():
-                    encoder = Encoder()
-                    encoder.encode(field.domain)
+                    fields = set()
+                    fields |= get_eval_fields(field.domain)
                     if hasattr(field, 'digits'):
-                        encoder.encode(field.digits)
+                        fields |= get_eval_fields(field.digits)
                     if hasattr(field, 'add_remove'):
-                        encoder.encode(field.add_remove)
-                    encoder.fields.discard(fname)
-                    encoder.fields.discard('context')
-                    encoder.fields.discard('_user')
+                        fields |= get_eval_fields(field.add_remove)
+                    fields.discard(fname)
+                    fields.discard('context')
+                    fields.discard('_user')
                     depends = set(field.depends)
-                    assert encoder.fields <= depends, (
+                    assert fields <= depends, (
                         'Missing depends %s in "%s"."%s"' % (
-                            list(encoder.fields - depends), mname, fname))
+                            list(fields - depends), mname, fname))
                     assert depends <= set(model._fields), (
                         'Unknown depends %s in "%s"."%s"' % (
                             list(depends - set(model._fields)), mname, fname))
@@ -183,20 +188,32 @@ class ModuleTestCase(unittest.TestCase):
                     'models': list(with_groups - no_groups),
                     })
 
-
-class IrTestCase(ModuleTestCase):
-    'Test ir module'
-    module = 'ir'
-
-
-class ResTestCase(ModuleTestCase):
-    'Test res module'
-    module = 'res'
-
-
-class WebDAVTestCase(ModuleTestCase):
-    'Test webdav module'
-    module = 'webdav'
+    def test_workflow_transitions(self):
+        'Test all workflow transitions exist'
+        with Transaction().start(DB_NAME, USER, context=CONTEXT):
+            for mname, model in Pool().iterobject():
+                # Don't test model not registered by the module
+                if not any(issubclass(model, cls) for cls in
+                        Pool().classes['model'].get(self.module, [])):
+                    continue
+                if not issubclass(model, Workflow):
+                    continue
+                field = getattr(model, model._transition_state)
+                if isinstance(field.selection, (tuple, list)):
+                    values = field.selection
+                else:
+                    # instance method may not return all the possible values
+                    if is_instance_method(model, field.selection):
+                        continue
+                    values = getattr(model, field.selection)()
+                states = set(dict(values))
+                transition_states = set(chain(*model._transitions))
+                assert transition_states <= states, (
+                    ('Unknown transition states "%(states)s" '
+                        'in model "%(model)s". ') % {
+                        'states': list(transition_states - states),
+                        'model': model.__name__,
+                        })
 
 
 def db_exist():
@@ -219,7 +236,7 @@ def drop_db():
 
 
 def drop_create():
-    if db_exist:
+    if db_exist():
         drop_db()
     create_db()
 
@@ -239,8 +256,6 @@ def all_suite(modules=None):
     Return all tests suite of current module
     '''
     suite_ = suite()
-    for case in [IrTestCase, ResTestCase, WebDAVTestCase]:
-        suite_.addTests(unittest.TestLoader().loadTestsFromTestCase(case))
     for fn in os.listdir(os.path.dirname(__file__)):
         if fn.startswith('test_') and fn.endswith('.py'):
             if modules and fn[:-3] not in modules:

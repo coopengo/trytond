@@ -24,7 +24,7 @@ from ..wizard import Wizard, StateView, StateTransition, StateAction, \
     Button
 from ..tools import file_open, reduce_ids, grouped_slice
 from .. import backend
-from ..pyson import PYSONEncoder
+from ..pyson import PYSONEncoder, Eval
 from ..transaction import Transaction
 from ..pool import Pool
 from ..cache import Cache
@@ -337,13 +337,15 @@ class Translation(ModelSQL, ModelView):
     @classmethod
     def search_rec_name(cls, name, clause):
         clause = tuple(clause)
-        translations = cls.search(['OR',
-                ('src',) + clause[1:],
-                ('value',) + clause[1:],
-                ])
-        if translations:
-            return [('id', 'in', [t.id for t in translations])]
-        return [(cls._rec_name,) + clause[1:]]
+        if clause[1].startswith('!') or clause[1].startswith('not '):
+            bool_op = 'AND'
+        else:
+            bool_op = 'OR'
+        return [bool_op,
+            ('src',) + clause[1:],
+            ('value',) + clause[1:],
+            (cls._rec_name,) + clause[1:],
+            ]
 
     @classmethod
     def search_model(cls, name, clause):
@@ -371,6 +373,10 @@ class Translation(ModelSQL, ModelView):
     @classmethod
     def get_src_md5(cls, src):
         return md5((src or '').encode('utf-8')).hexdigest()
+
+    @classmethod
+    def view_attributes(cls):
+        return [('/form//field[@name="value"]', 'spell', Eval('lang'))]
 
     @classmethod
     def get_ids(cls, name, ttype, lang, ids):
@@ -975,7 +981,7 @@ class TranslationSet(Wizard):
     set_ = StateTransition()
     succeed = StateView('ir.translation.set.succeed',
         'ir.translation_set_succeed_view_form', [
-            Button('Ok', 'end', 'tryton-ok', default=True),
+            Button('OK', 'end', 'tryton-ok', default=True),
             ])
 
     def _translate_report(self, node):
@@ -1221,7 +1227,7 @@ class TranslationClean(Wizard):
     clean = StateTransition()
     succeed = StateView('ir.translation.clean.succeed',
         'ir.translation_clean_succeed_view_form', [
-            Button('Ok', 'end', 'tryton-ok', default=True),
+            Button('OK', 'end', 'tryton-ok', default=True),
             ])
 
     @staticmethod
@@ -1612,9 +1618,8 @@ class TranslationExport(Wizard):
     def transition_export(self):
         pool = Pool()
         Translation = pool.get('ir.translation')
-        file_data = Translation.translation_export(
+        self.result.file = Translation.translation_export(
             self.start.language.code, self.start.module.name)
-        self.result.file = buffer(file_data) if file_data else None
         return 'result'
 
     def default_result(self, fields):

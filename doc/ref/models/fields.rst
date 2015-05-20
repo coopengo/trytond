@@ -269,7 +269,7 @@ A single line string field.
     method ``autocomplete_<field name>`` of the model when the user changes one
     of those field value. The method signature is::
 
-        autocomplete_<field name>(values)
+        autocomplete_<field name>()
 
     This method must return a list of string that will populate the
     ComboboxEntry in the client.
@@ -367,7 +367,7 @@ A time, represented in Python by a ``datetime.time`` instance.
 TimeDelta
 ---------
 
-.. class::TimeDelta(string[, converter[, \**options]])
+.. class:: TimeDelta(string[, converter[, \**options]])
 
 An interval, represented in Python by a ``datetime.timedelta`` instance.
 
@@ -383,7 +383,7 @@ Binary
 
 .. class:: Binary(string[, \**options])
 
-A binary field. It will be represented in Python by a ``str`` instance.
+A binary field. It will be represented in Python by a ``bytes`` instance.
 
 :class:`Binary` has one extra optional argument:
 

@@ -11,8 +11,8 @@ except ImportError:
 from lxml import etree
 from trytond.model import ModelView, ModelSQL, fields
 from trytond import backend
-from trytond.pyson import CONTEXT, Eval, Bool, PYSONDecoder
-from trytond.tools import safe_eval, file_open
+from trytond.pyson import Eval, Bool, PYSONDecoder
+from trytond.tools import file_open
 from trytond.transaction import Transaction
 from trytond.wizard import Wizard, StateView, Button
 from trytond.pool import Pool
@@ -141,8 +141,8 @@ class View(ModelSQL, ModelView):
                 if not validator.validate(tree):
                     error_log = reduce(lambda x, y: str(x) + '\n' + str(y),
                             validator.error_log.filter_from_errors())
-                    logger.error('Invalid xml view:\n%s'
-                        % (str(error_log) + '\n' + xml))
+                    logger.error('Invalid xml view:\n%s',
+                        str(error_log) + '\n' + xml)
                     cls.raise_user_error('invalid_xml', (view.rec_name,))
             root_element = tree.getroottree().getroot()
 
@@ -155,13 +155,13 @@ class View(ModelSQL, ModelView):
                 for attr in ('states', 'domain', 'spell', 'colors'):
                     if element.get(attr):
                         try:
-                            value = safe_eval(element.get(attr), CONTEXT)
+                            value = PYSONDecoder().decode(element.get(attr))
                             validates.get(attr, lambda a: True)(value)
                         except Exception, e:
                             logger.error('Invalid pyson view element "%s:%s":'
-                                '\n%s\n%s'
-                                % (element.get('id') or element.get('name'),
-                                    attr, str(e), xml))
+                                '\n%s\n%s',
+                                element.get('id') or element.get('name'), attr,
+                                str(e), xml)
                             return False
                 for child in element:
                     if not encode(child):
@@ -221,7 +221,7 @@ class ShowView(Wizard):
         def __init__(self, model_name, buttons):
             StateView.__init__(self, model_name, None, buttons)
 
-        def get_view(self):
+        def get_view(self, wizard, state_name):
             pool = Pool()
             View = pool.get('ir.ui.view')
             view = View(Transaction().context.get('active_id'))
@@ -339,6 +339,8 @@ class ViewTreeState(ModelSQL, ModelView):
 
     @classmethod
     def set(cls, model, domain, child_name, nodes, selected_nodes):
+        # Normalize the json domain
+        domain = json.dumps(json.loads(domain))
         current_user = Transaction().user
         records = cls.search([
                 ('user', '=', current_user),

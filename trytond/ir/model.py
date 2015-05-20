@@ -22,6 +22,7 @@ from ..pyson import Bool, Eval
 from ..rpc import RPC
 from .. import backend
 from ..protocols.jsonrpc import JSONDecoder, JSONEncoder
+from ..tools import is_instance_method
 try:
     from ..tools.StringMatcher import StringMatcher
 except ImportError:
@@ -563,7 +564,12 @@ class ModelAccess(ModelSQL, ModelView):
         elif field._type == 'reference':
             selection = field.selection
             if isinstance(selection, basestring):
-                selection = getattr(Model, field.selection)()
+                sel_func = getattr(Model, field.selection)
+                if not is_instance_method(Model, field.selection):
+                    selection = sel_func()
+                else:
+                    # XXX Can not check access right on instance method
+                    selection = []
             for model_name, _ in selection:
                 if not cls.check(model_name, mode=mode,
                         raise_exception=False):
@@ -912,10 +918,9 @@ class ModelData(ModelSQL, ModelView):
             return dict(json.loads(values, object_hook=JSONDecoder()))
         except ValueError:
             # Migration from 3.2
-            from ..tools import safe_eval
             from decimal import Decimal
             import datetime
-            return safe_eval(values, {
+            return eval(values, {
                     'Decimal': Decimal,
                     'datetime': datetime,
                     })
@@ -1004,7 +1009,7 @@ class ModelGraph(Report):
         graph.set('ratio', 'auto')
         cls.fill_graph(models, graph, level=data['level'], filter=filter)
         data = graph.create(prog='dot', format='png')
-        return ('png', buffer(data), False, action_report.name)
+        return ('png', fields.Binary.cast(data), False, action_report.name)
 
     @classmethod
     def fill_graph(cls, models, graph, level=1, filter=None):

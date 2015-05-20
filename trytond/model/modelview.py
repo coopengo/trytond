@@ -6,8 +6,8 @@ import copy
 import collections
 
 from trytond.model import Model, fields
-from trytond.tools import safe_eval, ClassProperty
-from trytond.pyson import PYSONEncoder, CONTEXT
+from trytond.tools import ClassProperty, is_instance_method
+from trytond.pyson import PYSONDecoder, PYSONEncoder
 from trytond.transaction import Transaction
 from trytond.cache import Cache
 from trytond.pool import Pool
@@ -43,26 +43,26 @@ def _inherit_apply(src, inherit):
                         index = parent.index(enext)
                         parent.insert(index, child)
                 else:
-                    parent.extend(element2.getchildren())
+                    parent.extend(list(element2))
                 parent.remove(element)
             elif pos == 'replace_attributes':
-                child = element2.getchildren()[0]
+                child = element2[0]
                 for attr in child.attrib:
                     element.set(attr, child.get(attr))
             elif pos == 'inside':
-                element.extend(element2.getchildren())
+                element.extend(list(element2))
             elif pos == 'after':
                 parent = element.getparent()
                 enext = element.getnext()
                 if enext is not None:
-                    for child in element2:
+                    for child in list(element2):
                         index = parent.index(enext)
                         parent.insert(index, child)
                 else:
-                    parent.extend(element2.getchildren())
+                    parent.extend(list(element2))
             elif pos == 'before':
                 parent = element.getparent()
-                for child in element2:
+                for child in list(element2):
                     index = parent.index(element)
                     parent.insert(index, child)
             else:
@@ -125,10 +125,12 @@ class ModelView(Model):
         else:
             cls.__depend_methods = collections.defaultdict(set)
 
-        for field_name in dir(cls):
-            field = getattr(cls, field_name)
-            if not isinstance(field, fields.Field):
-                continue
+        if hasattr(cls, '__change_buttons'):
+            cls.__change_buttons = cls.__change_buttons.copy()
+        else:
+            cls.__change_buttons = collections.defaultdict(set)
+
+        def setup_field(field, field_name):
             for attribute in ('on_change', 'on_change_with', 'autocomplete',
                     'selection_change_with'):
                 if attribute == 'selection_change_with':
@@ -159,6 +161,17 @@ class ModelView(Model):
                     # Decorate on_change to always return self
                     setattr(cls, function_name, on_change(function))
 
+        def setup_callable(function, name):
+            if hasattr(function, 'change'):
+                cls.__change_buttons[name] |= function.change
+
+        for name in dir(cls):
+            attr = getattr(cls, name)
+            if isinstance(attr, fields.Field):
+                setup_field(attr, name)
+            elif isinstance(attr, collections.Callable):
+                setup_callable(attr, name)
+
     @classmethod
     def __post_setup__(cls):
         super(ModelView, cls).__post_setup__()
@@ -180,6 +193,14 @@ class ModelView(Model):
                         result = on_change_result
                     cls.__rpc__.setdefault(function_name,
                         RPC(instantiate=0, result=result))
+
+        for button in cls._buttons:
+            if not is_instance_method(cls, button):
+                cls.__rpc__.setdefault(button,
+                    RPC(readonly=False, instantiate=0))
+            else:
+                cls.__rpc__.setdefault(button,
+                    RPC(instantiate=0, result=on_change_result))
 
         # Update depend on methods
         for (field_name, attribute), others in (
@@ -284,8 +305,8 @@ class ModelView(Model):
                     raise_p = True
             for view in views:
                 if view.domain:
-                    if not safe_eval(view.domain,
-                            {'context': Transaction().context}):
+                    if not PYSONDecoder({'context': Transaction().context}
+                            ).decode(view.domain):
                         continue
                 if not view.arch or not view.arch.strip():
                     continue
@@ -372,10 +393,20 @@ class ModelView(Model):
         return value
 
     @classmethod
+    def view_attributes(cls):
+        'Return a list of xpath, attribute name and value'
+        return []
+
+    @classmethod
     def _view_look_dom_arch(cls, tree, type, field_children=None):
         pool = Pool()
         ModelAccess = pool.get('ir.model.access')
         FieldAccess = pool.get('ir.model.field.access')
+
+        encoder = PYSONEncoder()
+        for xpath, attribute, value in cls.view_attributes():
+            for element in tree.xpath(xpath):
+                element.set(attribute, encoder.encode(value))
 
         fields_width = {}
         tree_root = tree.getroottree().getroot()
@@ -516,15 +547,7 @@ class ModelView(Model):
             if element.get('name') in fields_width:
                 element.set('width', str(fields_width[element.get('name')]))
 
-        # convert attributes into pyson
         encoder = PYSONEncoder()
-        for attr in ('states', 'domain', 'spell', 'colors'):
-            if (element.get(attr)
-                    # Avoid double evaluation from inherit with different model
-                    and '__' not in element.get(attr)):
-                element.set(attr, encoder.encode(safe_eval(element.get(attr),
-                    CONTEXT)))
-
         if element.tag == 'button':
             button_name = element.attrib['name']
             if button_name in cls._buttons:
@@ -537,6 +560,14 @@ class ModelView(Model):
                 states = states.copy()
                 states['readonly'] = True
             element.set('states', encoder.encode(states))
+
+            change = cls.__change_buttons[button_name]
+            if change:
+                element.set('change', encoder.encode(list(change)))
+            if not is_instance_method(cls, button_name):
+                element.set('type', 'class')
+            else:
+                element.set('type', 'instance')
 
         # translate view
         if Transaction().language != 'en_US':
@@ -607,6 +638,15 @@ class ModelView(Model):
                     ModelData.get_id(module, fs_id))
                 return action_id
             return wrapper
+        return decorator
+
+    @staticmethod
+    def button_change(*fields):
+        def decorator(func):
+            func = ModelView.button(func)
+            func = on_change(func)
+            func.change = set(fields)
+            return func
         return decorator
 
     def on_change(self, fieldnames):
