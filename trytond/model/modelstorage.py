@@ -19,7 +19,8 @@ from collections import defaultdict
 
 from trytond.model import Model
 from trytond.model import fields
-from trytond.tools import reduce_domain, memoize
+from trytond.tools import reduce_domain, memoize, is_instance_method, \
+    grouped_slice
 from trytond.pyson import PYSONEncoder, PYSONDecoder, PYSON
 from trytond.const import OPERATORS
 from trytond.config import config
@@ -31,7 +32,7 @@ from trytond.rpc import RPC
 from .modelview import ModelView
 from .descriptors import dualmethod
 
-__all__ = ['ModelStorage']
+__all__ = ['ModelStorage', 'EvalEnvironment']
 
 
 def cache_size():
@@ -366,7 +367,10 @@ class ModelStorage(Model):
             fields_names = cls._fields.keys()
         if 'id' not in fields_names:
             fields_names.append('id')
-        return cls.read(map(int, records), fields_names)
+        rows = cls.read(map(int, records), fields_names)
+        index = {r.id: i for i, r in enumerate(records)}
+        rows.sort(key=lambda r: index[r['id']])
+        return rows
 
     @classmethod
     def _search_domain_active(cls, domain, active_test=True):
@@ -856,7 +860,7 @@ class ModelStorage(Model):
 
         def call(name):
             method = getattr(cls, name)
-            if not hasattr(method, 'im_self') or method.im_self:
+            if not is_instance_method(cls, name):
                 return method(records)
             else:
                 return all(method(r) for r in records)
@@ -898,7 +902,7 @@ class ModelStorage(Model):
         def validate_domain(field):
             if not field.domain:
                 return
-            if field._type == 'dict':
+            if field._type in ['dict', 'reference']:
                 return
             if field._type in ('many2one', 'one2many'):
                 Relation = pool.get(field.model_name)
@@ -926,23 +930,26 @@ class ModelStorage(Model):
 
         def validate_relation_domain(field, records, Relation, domain):
             if field._type in ('many2one', 'one2many', 'many2many', 'one2one'):
-                relations = []
+                relations = set()
                 for record in records:
                     if getattr(record, field.name):
                         if field._type in ('many2one', 'one2one'):
-                            relations.append(getattr(record, field.name))
+                            relations.add(getattr(record, field.name))
                         else:
-                            relations.extend(getattr(record, field.name))
+                            relations.update(getattr(record, field.name))
             else:
-                relations = records
+                # Cache alignment is not a problem
+                relations = set(records)
             if relations:
-                finds = Relation.search(['AND',
-                        [('id', 'in', [r.id for r in relations])],
-                        domain,
-                        ])
-                if set(relations) != set(finds):
-                    cls.raise_user_error('domain_validation_record',
-                        error_args=cls._get_error_args(field.name))
+                for sub_relations in grouped_slice(relations):
+                    sub_relations = set(sub_relations)
+                    finds = Relation.search(['AND',
+                            [('id', 'in', [r.id for r in sub_relations])],
+                            domain,
+                            ])
+                    if sub_relations != set(finds):
+                        cls.raise_user_error('domain_validation_record',
+                            error_args=cls._get_error_args(field.name))
 
         field_names = set(field_names or [])
         function_fields = {name for name, field in cls._fields.iteritems()
@@ -1062,8 +1069,7 @@ class ModelStorage(Model):
                                 value, _ = value.split(',')
                         if not isinstance(field.selection, (tuple, list)):
                             sel_func = getattr(cls, field.selection)
-                            if (not hasattr(sel_func, 'im_self')
-                                    or sel_func.im_self):
+                            if not is_instance_method(cls, field.selection):
                                 test = sel_func()
                             else:
                                 test = sel_func(record)
@@ -1245,7 +1251,10 @@ class ModelStorage(Model):
         # add depends of field with context
         for field in ffields.values():
             if field.context:
-                for context_field_name in field.depends:
+                eval_fields = fields.get_eval_fields(field.context)
+                for context_field_name in eval_fields:
+                    if context_field_name in field.depends:
+                        continue
                     context_field = self._fields.get(context_field_name)
                     if context_field not in ffields:
                         ffields[context_field_name] = context_field

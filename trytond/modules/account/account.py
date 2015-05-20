@@ -433,7 +433,11 @@ class AccountTemplate(ModelSQL, ModelView):
 
     @classmethod
     def search_rec_name(cls, name, clause):
-        return ['OR',
+        if clause[1].startswith('!') or clause[1].startswith('not '):
+            bool_op = 'AND'
+        else:
+            bool_op = 'OR'
+        return [bool_op,
             ('code',) + tuple(clause[1:]),
             (cls._rec_name,) + tuple(clause[1:]),
             ]
@@ -851,7 +855,11 @@ class Account(ModelSQL, ModelView):
 
     @classmethod
     def search_rec_name(cls, name, clause):
-        return ['OR',
+        if clause[1].startswith('!') or clause[1].startswith('not '):
+            bool_op = 'AND'
+        else:
+            bool_op = 'OR'
+        return [bool_op,
             ('code',) + tuple(clause[1:]),
             (cls._rec_name,) + tuple(clause[1:]),
             ]
@@ -1032,7 +1040,11 @@ class AccountDeferral(ModelSQL, ModelView):
 
     @classmethod
     def search_rec_name(cls, name, clause):
-        return ['OR',
+        if clause[1].startswith('!') or clause[1].startswith('not '):
+            bool_op = 'AND'
+        else:
+            bool_op = 'OR'
+        return [bool_op,
             ('account.rec_name',) + tuple(clause[1:]),
             ('fiscalyear.rec_name',) + tuple(clause[1:]),
             ]
@@ -1185,7 +1197,7 @@ class GeneralLedger(Report):
                     ('fiscalyear', '=', data['fiscalyear']),
                     ('end_date', '<=', start_period.start_date),
                     ])
-            start_period_ids = [p.id for p in start_periods]
+            start_period_ids += [p.id for p in start_periods]
         else:
             start_period = None
 
@@ -1666,7 +1678,7 @@ class CreateChart(Wizard):
     start = StateView('account.create_chart.start',
         'account.create_chart_start_view_form', [
             Button('Cancel', 'end', 'tryton-cancel'),
-            Button('Ok', 'account', 'tryton-ok', default=True),
+            Button('OK', 'account', 'tryton-ok', default=True),
             ])
     account = StateView('account.create_chart.account',
         'account.create_chart_account_view_form', [
@@ -1820,7 +1832,7 @@ class UpdateChart(Wizard):
     update = StateTransition()
     succeed = StateView('account.update_chart.succeed',
         'account.update_chart_succeed_view_form', [
-            Button('Ok', 'end', 'tryton-ok', default=True),
+            Button('OK', 'end', 'tryton-ok', default=True),
             ])
 
     @inactive_records

@@ -129,6 +129,15 @@ Static methods:
     Same as :meth:`ModelView.button` but return the action id of the XML `id`
     action.
 
+.. staticmethod:: ModelView.button_change([\*fields])
+
+    Same as :meth:`ModelView.button` but for button that change values of the
+    fields on client side (similar to :ref:`on_change
+    <ref-models-fields-on_change>`).
+
+    .. warning::
+        Only on instance methods.
+
 Class methods:
 
 .. classmethod:: ModelView.fields_view_get([view_id[, view_type[, toolbar]]])
@@ -158,6 +167,12 @@ Class methods:
 .. classmethod:: ModelView.view_header_get(value[, view_type])
 
     Returns the window title used by the client for the specific view type.
+
+.. classmethod:: ModelView.view_attributes()
+
+    Returns a list of XPath, attribute and value.
+    Each element from the XPath will get the attribute set with the JSON
+    encoded value.
 
 ============
 ModelStorage

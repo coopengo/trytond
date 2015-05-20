@@ -20,7 +20,7 @@ TYPES = [
     ('service', 'Service'),
     ]
 
-price_digits = (16, config.getint('product', 'price_decimal', 4))
+price_digits = (16, config.getint('product', 'price_decimal', default=4))
 
 
 class Template(ModelSQL, ModelView):
@@ -184,7 +184,11 @@ class Product(ModelSQL, ModelView):
 
     @classmethod
     def search_rec_name(cls, name, clause):
-        return ['OR',
+        if clause[1].startswith('!') or clause[1].startswith('not '):
+            bool_op = 'AND'
+        else:
+            bool_op = 'OR'
+        return [bool_op,
             ('code',) + tuple(clause[1:]),
             ('template.name',) + tuple(clause[1:]),
             ]

@@ -317,7 +317,11 @@ class FiscalYear(ModelSQL, ModelView):
 
     @classmethod
     def search_rec_name(cls, name, clause):
-        return ['OR',
+        if clause[1].startswith('!') or clause[1].startswith('not '):
+            bool_op = 'AND'
+        else:
+            bool_op = 'OR'
+        return [bool_op,
             ('code',) + tuple(clause[1:]),
             (cls._rec_name,) + tuple(clause[1:]),
             ]
@@ -369,23 +373,25 @@ class BalanceNonDeferral(Wizard):
     start = StateView('account.fiscalyear.balance_non_deferral.start',
         'account.fiscalyear_balance_non_deferral_start_view_form', [
             Button('Cancel', 'end', 'tryton-cancel'),
-            Button('Ok', 'balance', 'tryton-ok', default=True),
+            Button('OK', 'balance', 'tryton-ok', default=True),
             ])
     balance = StateAction('account.act_move_line_form')
 
     def get_move_line(self, account):
         pool = Pool()
         Line = pool.get('account.move.line')
-        if account.company.currency.is_zero(account.balance):
+        # Don't use account.balance because we need the non-commulated balance
+        balance = account.debit - account.credit
+        if account.company.currency.is_zero(balance):
             return
         line = Line()
         line.account = account
-        if account.balance >= 0:
-            line.credit = abs(account.balance)
+        if balance >= 0:
+            line.credit = abs(balance)
             line.debit = 0
         else:
             line.credit = 0
-            line.debit = abs(account.balance)
+            line.debit = abs(balance)
         return line
 
     def get_counterpart_line(self, amount):

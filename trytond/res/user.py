@@ -274,12 +274,14 @@ class User(ModelSQL, ModelView):
 
     @classmethod
     def search_rec_name(cls, name, clause):
-        users = cls.search([
-            ('login', '=', clause[2]),
-            ], order=[])
-        if len(users) == 1:
-            return [('id', '=', users[0].id)]
-        return [(cls._rec_name,) + tuple(clause[1:])]
+        if clause[1].startswith('!') or clause[1].startswith('not '):
+            bool_op = 'AND'
+        else:
+            bool_op = 'OR'
+        return [bool_op,
+            ('login',) + tuple(clause[1:]),
+            (cls._rec_name,) + tuple(clause[1:]),
+            ]
 
     @classmethod
     def copy(cls, users, default=None):
@@ -666,7 +668,7 @@ class UserConfig(Wizard):
     start = StateView('res.user.config.start',
         'res.user_config_start_view_form', [
             Button('Cancel', 'end', 'tryton-cancel'),
-            Button('Ok', 'user', 'tryton-ok', default=True),
+            Button('OK', 'user', 'tryton-ok', default=True),
             ])
     user = StateView('res.user',
         'res.user_view_form', [

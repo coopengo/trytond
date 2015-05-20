@@ -99,7 +99,7 @@ class Journal(ModelSQL, ModelView):
     active = fields.Boolean('Active', select=True)
     type = fields.Selection('get_types', 'Type', required=True)
     view = fields.Many2One('account.journal.view', 'View')
-    update_posted = fields.Boolean('Allow cancelling moves')
+    update_posted = fields.Boolean('Allow updating posted moves')
     sequence = fields.Property(fields.Many2One('ir.sequence', 'Sequence',
             domain=[('code', '=', 'account.journal')],
             context={'code': 'account.journal'},
@@ -170,7 +170,11 @@ class Journal(ModelSQL, ModelView):
 
     @classmethod
     def search_rec_name(cls, name, clause):
-        return ['OR',
+        if clause[1].startswith('!') or clause[1].startswith('not '):
+            bool_op = 'AND'
+        else:
+            bool_op = 'OR'
+        return [bool_op,
             ('code',) + tuple(clause[1:]),
             (cls._rec_name,) + tuple(clause[1:]),
             ]

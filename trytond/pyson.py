@@ -95,6 +95,14 @@ class PYSON(object):
     def contains(self, k):
         return In(k, self)
 
+    def __repr__(self):
+        klass = self.__class__.__name__
+        return '%s(%s)' % (klass, ', '.join(map(repr, self.__repr_params__)))
+
+    @property
+    def __repr_params__(self):
+        return NotImplementedError
+
 
 class PYSONEncoder(json.JSONEncoder):
 
@@ -113,24 +121,34 @@ class PYSONEncoder(json.JSONEncoder):
 
 class PYSONDecoder(json.JSONDecoder):
 
-    def __init__(self, context=None):
+    def __init__(self, context=None, noeval=False):
         self.__context = context or {}
+        self.noeval = noeval
         super(PYSONDecoder, self).__init__(object_hook=self._object_hook)
 
     def _object_hook(self, dct):
         if '__class__' in dct:
-            klass = globals().get(dct['__class__'])
-            if klass and hasattr(klass, 'eval'):
-                return klass.eval(dct, self.__context)
+            klass = CONTEXT.get(dct['__class__'])
+            if klass:
+                if not self.noeval:
+                    return klass.eval(dct, self.__context)
+                else:
+                    dct = dct.copy()
+                    del dct['__class__']
+                    return klass(**dct)
         return dct
 
 
 class Eval(PYSON):
 
-    def __init__(self, value, default=''):
+    def __init__(self, v, d=''):
         super(Eval, self).__init__()
-        self._value = value
-        self._default = default
+        self._value = v
+        self._default = d
+
+    @property
+    def __repr_params__(self):
+        return self._value, self._default
 
     def pyson(self):
         return {
@@ -153,13 +171,17 @@ class Eval(PYSON):
 
 class Not(PYSON):
 
-    def __init__(self, value):
+    def __init__(self, v):
         super(Not, self).__init__()
-        if isinstance(value, PYSON):
-            assert value.types() == set([bool]), 'value must be boolean'
+        if isinstance(v, PYSON):
+            assert v.types() == set([bool]), 'value must be boolean'
         else:
-            assert isinstance(value, bool), 'value must be boolean'
-        self._value = value
+            assert isinstance(v, bool), 'value must be boolean'
+        self._value = v
+
+    @property
+    def __repr_params__(self):
+        return (self._value,)
 
     def pyson(self):
         return {
@@ -177,9 +199,13 @@ class Not(PYSON):
 
 class Bool(PYSON):
 
-    def __init__(self, value):
+    def __init__(self, v):
         super(Bool, self).__init__()
-        self._value = value
+        self._value = v
+
+    @property
+    def __repr_params__(self):
+        return (self._value,)
 
     def pyson(self):
         return {
@@ -197,8 +223,9 @@ class Bool(PYSON):
 
 class And(PYSON):
 
-    def __init__(self, *statements):
+    def __init__(self, *statements, **kwargs):
         super(And, self).__init__()
+        statements = list(statements) + kwargs.get('s', [])
         for statement in statements:
             if isinstance(statement, PYSON):
                 assert statement.types() == set([bool]), \
@@ -207,7 +234,11 @@ class And(PYSON):
                 assert isinstance(statement, bool), \
                     'statement must be boolean'
         assert len(statements) >= 2, 'must have at least 2 statements'
-        self._statements = list(statements)
+        self._statements = statements
+
+    @property
+    def __repr_params__(self):
+        return tuple(self._statements)
 
     def pyson(self):
         return {
@@ -237,19 +268,24 @@ class Or(And):
 
 class Equal(PYSON):
 
-    def __init__(self, statement1, statement2):
+    def __init__(self, s1, s2):
+        statement1, statement2 = s1, s2
         super(Equal, self).__init__()
         if isinstance(statement1, PYSON):
             types1 = statement1.types()
         else:
-            types1 = reduced_type(set([type(statement1)]))
+            types1 = reduced_type(set([type(s1)]))
         if isinstance(statement2, PYSON):
             types2 = statement2.types()
         else:
-            types2 = reduced_type(set([type(statement2)]))
+            types2 = reduced_type(set([type(s2)]))
         assert types1 == types2, 'statements must have the same type'
         self._statement1 = statement1
         self._statement2 = statement2
+
+    @property
+    def __repr_params__(self):
+        return (self._statement1, self._statement2)
 
     def pyson(self):
         return {
@@ -268,7 +304,8 @@ class Equal(PYSON):
 
 class Greater(PYSON):
 
-    def __init__(self, statement1, statement2, equal=False):
+    def __init__(self, s1, s2, e=False):
+        statement1, statement2, equal = s1, s2, e
         super(Greater, self).__init__()
         for i in (statement1, statement2):
             if isinstance(i, PYSON):
@@ -284,6 +321,10 @@ class Greater(PYSON):
         self._statement1 = statement1
         self._statement2 = statement2
         self._equal = equal
+
+    @property
+    def __repr_params__(self):
+        return (self._statement1, self._statement2, self._equal)
 
     def pyson(self):
         return {
@@ -331,7 +372,8 @@ class Less(Greater):
 
 class If(PYSON):
 
-    def __init__(self, condition, then_statement, else_statement=None):
+    def __init__(self, c, t, e=None):
+        condition, then_statement, else_statement = c, t, e
         super(If, self).__init__()
         if isinstance(condition, PYSON):
             assert condition.types() == set([bool]), \
@@ -351,6 +393,10 @@ class If(PYSON):
         self._condition = condition
         self._then_statement = then_statement
         self._else_statement = else_statement
+
+    @property
+    def __repr_params__(self):
+        return (self._condition, self._then_statement, self._else_statement)
 
     def pyson(self):
         return {
@@ -377,7 +423,8 @@ class If(PYSON):
 
 class Get(PYSON):
 
-    def __init__(self, obj, key, default=''):
+    def __init__(self, v, k, d=''):
+        obj, key, default = v, k, d
         super(Get, self).__init__()
         if isinstance(obj, PYSON):
             assert obj.types() == set([dict]), 'obj must be a dict'
@@ -390,6 +437,10 @@ class Get(PYSON):
             assert isinstance(key, basestring), 'key must be a string'
         self._key = key
         self._default = default
+
+    @property
+    def __repr_params__(self):
+        return (self._obj, self._key, self._default)
 
     def pyson(self):
         return {
@@ -413,7 +464,8 @@ class Get(PYSON):
 
 class In(PYSON):
 
-    def __init__(self, key, obj):
+    def __init__(self, k, v):
+        key, obj = k, v
         super(In, self).__init__()
         if isinstance(key, PYSON):
             assert key.types().issubset(set([basestring, int])), \
@@ -433,6 +485,10 @@ class In(PYSON):
         self._key = key
         self._obj = obj
 
+    @property
+    def __repr_params__(self):
+        return (self._key, self._obj)
+
     def pyson(self):
         return {
             '__class__': 'In',
@@ -451,7 +507,13 @@ class In(PYSON):
 class Date(PYSON):
 
     def __init__(self, year=None, month=None, day=None,
-            delta_years=0, delta_months=0, delta_days=0):
+            delta_years=0, delta_months=0, delta_days=0, **kwargs):
+        year = kwargs.get('y', year)
+        month = kwargs.get('M', month)
+        day = kwargs.get('d', day)
+        delta_years = kwargs.get('dy', delta_years)
+        delta_months = kwargs.get('dM', delta_months)
+        delta_days = kwargs.get('dd', delta_days)
         super(Date, self).__init__()
         for i in (year, month, day, delta_years, delta_months, delta_days):
             if isinstance(i, PYSON):
@@ -466,6 +528,11 @@ class Date(PYSON):
         self._delta_years = delta_years
         self._delta_months = delta_months
         self._delta_days = delta_days
+
+    @property
+    def __repr_params__(self):
+        return (self._year, self._month, self._day,
+            self._delta_years, self._delta_months, self._delta_days)
 
     def pyson(self):
         return {
@@ -499,10 +566,18 @@ class DateTime(Date):
             hour=None, minute=None, second=None, microsecond=None,
             delta_years=0, delta_months=0, delta_days=0,
             delta_hours=0, delta_minutes=0, delta_seconds=0,
-            delta_microseconds=0):
+            delta_microseconds=0, **kwargs):
+        hour = kwargs.get('h', hour)
+        minute = kwargs.get('m', minute)
+        second = kwargs.get('s', second)
+        microsecond = kwargs.get('ms', microsecond)
+        delta_hours = kwargs.get('dh', delta_hours)
+        delta_minutes = kwargs.get('dm', delta_minutes)
+        delta_seconds = kwargs.get('ds', delta_seconds)
+        delta_microseconds = kwargs.get('dms', delta_microseconds)
         super(DateTime, self).__init__(year=year, month=month, day=day,
                 delta_years=delta_years, delta_months=delta_months,
-                delta_days=delta_days)
+                delta_days=delta_days, **kwargs)
         for i in (hour, minute, second, microsecond,
                 delta_hours, delta_minutes, delta_seconds, delta_microseconds):
             if isinstance(i, PYSON):
@@ -519,6 +594,15 @@ class DateTime(Date):
         self._delta_minutes = delta_minutes
         self._delta_seconds = delta_seconds
         self._delta_microseconds = delta_microseconds
+
+    @property
+    def __repr_params__(self):
+        date_params = super(DateTime, self).__repr_params__
+        return (date_params[:3]
+            + (self._hour, self._minute, self._second, self._microsecond)
+            + date_params[3:]
+            + (self._delta_hours, self._delta_minutes, self._delta_seconds,
+                self._delta_microseconds))
 
     def pyson(self):
         res = super(DateTime, self).pyson()
@@ -558,15 +642,19 @@ class DateTime(Date):
 
 class Len(PYSON):
 
-    def __init__(self, value):
+    def __init__(self, v):
         super(Len, self).__init__()
-        if isinstance(value, PYSON):
-            assert value.types().issubset(set([dict, list, basestring])), \
+        if isinstance(v, PYSON):
+            assert v.types().issubset(set([dict, list, basestring])), \
                 'value must be a dict or a list or a string'
         else:
-            assert isinstance(value, (dict, list, basestring)), \
+            assert isinstance(v, (dict, list, basestring)), \
                 'value must be a dict or list or a string'
-        self._value = value
+        self._value = v
+
+    @property
+    def __repr_params__(self):
+        return (self._value,)
 
     def pyson(self):
         return {
@@ -589,6 +677,10 @@ class Id(PYSON):
         super(Id, self).__init__()
         self._module = module
         self._fs_id = fs_id
+
+    @property
+    def __repr_params__(self):
+        return (self._module, self._fs_id)
 
     def pyson(self):
         from trytond.pool import Pool

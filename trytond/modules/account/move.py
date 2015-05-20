@@ -15,7 +15,7 @@ from trytond.wizard import Wizard, StateTransition, StateView, StateAction, \
     Button
 from trytond.report import Report
 from trytond import backend
-from trytond.pyson import Eval, Bool, PYSONEncoder
+from trytond.pyson import Eval, Bool, PYSONEncoder, If
 from trytond.transaction import Transaction
 from trytond.pool import Pool, PoolMeta
 from trytond.rpc import RPC
@@ -231,7 +231,11 @@ class Move(ModelSQL, ModelView):
 
     @classmethod
     def search_rec_name(cls, name, clause):
-        return ['OR',
+        if clause[1].startswith('!') or clause[1].startswith('not '):
+            bool_op = 'AND'
+        else:
+            bool_op = 'OR'
+        return [bool_op,
             ('post_number',) + tuple(clause[1:]),
             (cls._rec_name,) + tuple(clause[1:]),
             ]
@@ -1505,6 +1509,11 @@ class Line(ModelSQL, ModelView):
         return result
 
     @classmethod
+    def view_attributes(cls):
+        return [('/tree[@on_write="on_write"]', 'colors',
+                If(Eval('state') == 'draft', 'red', 'black'))]
+
+    @classmethod
     def reconcile(cls, lines, journal=None, date=None, account=None,
             description=None):
         pool = Pool()
@@ -1900,7 +1909,7 @@ class Reconcile(Wizard):
     def _default_lines(self):
         'Return the larger list of lines which can be reconciled'
         currency = self.show.account.company.currency
-        chunk = config.getint('account', 'reconciliation_chunk', 10)
+        chunk = config.getint('account', 'reconciliation_chunk', default=10)
         # Combination is exponential so it must be limited to small number
         default = []
         for lines in grouped_slice(self._all_lines(), chunk):
@@ -1986,7 +1995,7 @@ class CancelMoves(Wizard):
     default = StateView('account.move.cancel.default',
         'account.move_cancel_default_view_form', [
             Button('Cancel', 'end', 'tryton-cancel'),
-            Button('Ok', 'cancel', 'tryton-ok', default=True),
+            Button('OK', 'cancel', 'tryton-ok', default=True),
             ])
     cancel = StateTransition()
 

@@ -11,12 +11,12 @@ from trytond.pool import Pool
 from trytond import security
 from trytond import backend
 from trytond.config import config
-from trytond.version import VERSION
+from trytond import __version__
 from trytond.transaction import Transaction
 from trytond.cache import Cache
 from trytond.exceptions import UserError, UserWarning, NotLogged, \
     ConcurrencyException
-from trytond.rpc import RPC
+from trytond.tools import is_instance_method
 
 logger = logging.getLogger(__name__)
 
@@ -43,17 +43,17 @@ def dispatch(host, port, protocol, database_name, user, session, object_type,
                 Cache.clean(database_name)
                 Cache.resets(database_name)
             msg = res and 'successful login' or 'bad login or password'
-            logger.info('%s \'%s\' from %s:%d using %s on database \'%s\''
-                % (msg, user, host, port, protocol, database_name))
+            logger.info('%s \'%s\' from %s:%d using %s on database \'%s\'',
+                msg, user, host, port, protocol, database_name)
             return res or False
         elif method == 'logout':
             name = security.logout(database_name, user, session)
-            logger.info(('logout \'%s\' from %s:%d '
-                    'using %s on database \'%s\'')
-                % (name, host, port, protocol, database_name))
+            logger.info('logout \'%s\' from %s:%d '
+                'using %s on database \'%s\'',
+                name, host, port, protocol, database_name)
             return True
         elif method == 'version':
-            return VERSION
+            return __version__
         elif method == 'list_lang':
             return [
                 ('bg_BG', 'Български'),
@@ -105,9 +105,6 @@ def dispatch(host, port, protocol, database_name, user, session, object_type,
                 for object_name, obj in pool.iterobject(type=type):
                     for method in obj.__rpc__:
                         res.append(type + '.' + object_name + '.' + method)
-                    if hasattr(obj, '_buttons'):
-                        for button in obj._buttons:
-                            res.append(type + '.' + object_name + '.' + button)
             return res
         elif method == 'methodSignature':
             return 'signatures not supported'
@@ -139,8 +136,6 @@ def dispatch(host, port, protocol, database_name, user, session, object_type,
 
     if method in obj.__rpc__:
         rpc = obj.__rpc__[method]
-    elif method in getattr(obj, '_buttons', {}):
-        rpc = RPC(readonly=False, instantiate=0)
     else:
         raise UserError('Calling method %s on %s %s is not allowed!'
             % (method, object_type, object_name))
@@ -158,7 +153,8 @@ def dispatch(host, port, protocol, database_name, user, session, object_type,
                 c_args, c_kwargs, transaction.context, transaction.timestamp \
                     = rpc.convert(obj, *args, **kwargs)
                 meth = getattr(obj, method)
-                if not hasattr(meth, 'im_self') or meth.im_self:
+                if (rpc.instantiate is None
+                        or not is_instance_method(obj, method)):
                     result = rpc.result(meth(*c_args, **c_kwargs))
                 else:
                     assert rpc.instantiate == 0
@@ -247,10 +243,10 @@ def create(database_name, password, lang, admin_password):
             transaction.cursor.commit()
             res = True
     except Exception:
-        logger.error('CREATE DB: %s failed' % database_name, exc_info=True)
+        logger.error('CREATE DB: %s failed', database_name, exc_info=True)
         raise
     else:
-        logger.info('CREATE DB: %s' % (database_name,))
+        logger.info('CREATE DB: %s', database_name)
     return res
 
 
@@ -268,11 +264,12 @@ def drop(database_name, password):
             Database.drop(cursor, database_name)
             cursor.commit()
         except Exception:
-            logger.error('DROP DB: %s failed', (database_name,), exc_info=True)
+            logger.error('DROP DB: %s failed', database_name, exc_info=True)
             raise
         else:
-            logger.info('DROP DB: %s', (database_name,))
+            logger.info('DROP DB: %s', database_name)
             Pool.stop(database_name)
+            Cache.drop(database_name)
     return True
 
 
@@ -284,8 +281,11 @@ def dump(database_name, password):
     time.sleep(1)
 
     data = Database.dump(database_name)
-    logger.info('DUMP DB: %s' % (database_name))
-    return buffer(data)
+    logger.info('DUMP DB: %s', database_name)
+    if bytes == str:
+        return bytearray(data)
+    else:
+        return bytes(data)
 
 
 def restore(database_name, password, data, update=False):
@@ -299,7 +299,7 @@ def restore(database_name, password, data, update=False):
     except Exception:
         pass
     Database.restore(database_name, data)
-    logger.info('RESTORE DB: %s' % (database_name))
+    logger.info('RESTORE DB: %s', database_name)
     if update:
         with Transaction().start(database_name, 0) as transaction:
             cursor = transaction.cursor

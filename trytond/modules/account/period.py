@@ -250,9 +250,14 @@ class Period(ModelSQL, ModelView):
         actions = iter(args)
         args = []
         for periods, values in zip(actions, actions):
-            for key in values.keys():
+            for key, value in values.iteritems():
                 if key in ('start_date', 'end_date', 'fiscalyear'):
-                    cls._check(periods)
+                    def modified(period):
+                        if key in ['start_date', 'end_date']:
+                            return getattr(period, key) != value
+                        else:
+                            return period.fiscalyear .id != value
+                    cls._check(filter(modified, periods))
                     break
             if values.get('state') == 'open':
                 for period in periods:
@@ -319,7 +324,11 @@ class Period(ModelSQL, ModelView):
 
     @classmethod
     def search_rec_name(cls, name, clause):
-        return ['OR',
+        if clause[1].startswith('!') or clause[1].startswith('not '):
+            bool_op = 'AND'
+        else:
+            bool_op = 'OR'
+        return [bool_op,
             ('code',) + tuple(clause[1:]),
             (cls._rec_name,) + tuple(clause[1:]),
             ]
