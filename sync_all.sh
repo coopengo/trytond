@@ -1,16 +1,17 @@
 SEP=------------------------------------------------
 
-EXPECTED_ARGS=1
+EXPECTED_ARGS=2
 if [ $# -ne $EXPECTED_ARGS ]
 then
     echo $SEP
     echo Usage:
-    echo First argument : tag or branch to sync
+    echo First argument : modules tags or branch to sync
+    echo Second argument: trytond full branch
     echo $SEP
     exit 0
 fi
 
-hg update default
+hg update "$2"
 hg pull http://hg.tryton.org/trytond
 cd trytond/modules
 cp __init__.py ../tmp__init__
