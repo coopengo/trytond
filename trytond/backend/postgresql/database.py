@@ -4,6 +4,7 @@ import time
 import logging
 import re
 import os
+import urllib
 if os.name == 'posix':
     import pwd
 from decimal import Decimal
@@ -69,7 +70,8 @@ class Database(DatabaseInterface):
         port = uri.port and "port=%s" % uri.port or ''
         name = "dbname=%s" % self.database_name
         user = uri.username and "user=%s" % uri.username or ''
-        password = uri.password and "password=%s" % uri.password or ''
+        password = ("password=%s" % urllib.unquote_plus(uri.password)
+            if uri.password else '')
         minconn = config.getint('database', 'minconn', default=1)
         maxconn = config.getint('database', 'maxconn', default=64)
         dsn = '%s %s %s %s %s' % (host, port, name, user, password)
@@ -151,6 +153,7 @@ class Database(DatabaseInterface):
         database.create(cursor, database_name)
         cursor.commit()
         cursor.close()
+        database.close()
 
         cmd = ['pg_restore', '--no-owner']
         env = {}
@@ -253,14 +256,14 @@ class Database(DatabaseInterface):
             if module in ('ir', 'res'):
                 state = 'to install'
             info = get_module_info(module)
-            cursor.execute('SELECT NEXTVAL(\'ir_module_module_id_seq\')')
+            cursor.execute('SELECT NEXTVAL(\'ir_module_id_seq\')')
             module_id = cursor.fetchone()[0]
-            cursor.execute('INSERT INTO ir_module_module '
+            cursor.execute('INSERT INTO ir_module '
                 '(id, create_uid, create_date, name, state) '
                 'VALUES (%s, %s, now(), %s, %s)',
                 (module_id, 0, module, state))
             for dependency in info.get('depends', []):
-                cursor.execute('INSERT INTO ir_module_module_dependency '
+                cursor.execute('INSERT INTO ir_module_dependency '
                     '(create_uid, create_date, module, name) '
                     'VALUES (%s, now(), %s, %s)',
                     (0, module_id, dependency))
@@ -345,8 +348,8 @@ class Cursor(CursorInterface):
                 "'ir_ui_menu', "
                 "'res_user', "
                 "'res_group', "
-                "'ir_module_module', "
-                "'ir_module_module_dependency', "
+                "'ir_module', "
+                "'ir_module_dependency', "
                 "'ir_translation', "
                 "'ir_lang'"
                 ")")
