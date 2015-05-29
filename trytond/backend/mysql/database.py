@@ -10,6 +10,8 @@ from MySQLdb import OperationalError as DatabaseOperationalError
 import os
 import time
 import tempfile
+import urllib
+
 from sql import Flavor, Expression
 from sql.functions import Extract, Overlay, CharLength
 
@@ -100,7 +102,7 @@ class Database(DatabaseInterface):
         if uri.username:
             args['user'] = uri.username
         if uri.password:
-            args['passwd'] = uri.password
+            args['passwd'] = urllib.unquote_plus(uri.password)
         conn = MySQLdb.connect(**args)
         cursor = Cursor(conn, self.database_name)
         cursor.execute('SET time_zone = `UTC`')
@@ -232,14 +234,14 @@ class Database(DatabaseInterface):
             if module in ('ir', 'res'):
                 state = 'to install'
             info = get_module_info(module)
-            cursor.execute('INSERT INTO ir_module_module '
+            cursor.execute('INSERT INTO ir_module '
                 '(create_uid, create_date, name, state) '
                 'VALUES (%s, now(), %s, %s)',
                 (0, module, state))
             cursor.execute('SELECT LAST_INSERT_ID()')
             module_id, = cursor.fetchone()
             for dependency in info.get('depends', []):
-                cursor.execute('INSERT INTO ir_module_module_dependency '
+                cursor.execute('INSERT INTO ir_module_dependency '
                     '(create_uid, create_date, module, name) '
                     'VALUES (%s, now(), %s, %s)',
                     (0, module_id, dependency))
@@ -310,8 +312,8 @@ class Cursor(CursorInterface):
                     'ir_ui_menu',
                     'res_user',
                     'res_group',
-                    'ir_module_module',
-                    'ir_module_module_dependency',
+                    'ir_module',
+                    'ir_module_dependency',
                     'ir_translation',
                     'ir_lang',
                     ):
