@@ -400,11 +400,11 @@ Class attributes are:
 
     A list of SQL constraints that are added on the table:
 
-        [ ('constraint name', 'SQL constraint', 'error message key'), ... ]
+        [ ('constraint name', constraint, 'error message key'), ... ]
 
     - `constraint name` is the name of the SQL constraint in the database
 
-    - `SQL constraint` is the actual SQL constraint
+    - constraint is an instance of :class:`Constraint`
 
     - `error message key` is the key of
       :attr:`_sql_error_messages`
@@ -452,17 +452,66 @@ Class methods:
     Return a list of records that match the :ref:`domain <topics-domain>` or
     the sql query if query is True.
 
-.. classmethod:: ModelSQL.search_domain(domain[, active_test])
+.. classmethod:: ModelSQL.search_domain(domain[, active_test[, tables]])
 
-    Convert a :ref:`domain <topics-domain>` into a tuple containing:
+    Convert a :ref:`domain <topics-domain>` into a SQL expression by returning
+    the updated tables dictionary and a SQL expression.
 
-    - a SQL clause string
+.. _ref-tables:
 
-    - a list of arguments for the SQL clause
+    Where ``tables`` is a nested dictionary containing the existing joins::
 
-    - a list of tables used in the SQL clause
+        {
+            None: (<Table invoice>, None),
+            'party': {
+                None: (<Table party>, <join_on sql expression>),
+                'addresses': {
+                    None: (<Table address>, <join_on sql expression>),
+                    },
+                },
+            }
 
-    - a list of arguments for the tables
+Constraint
+==========
+
+.. class:: Constraint(table)
+
+It represents a SQL constraint on a table of the database and it follows the
+API of the python-sql expression.
+
+Instance attributes:
+
+.. attribute:: Constraint.table
+
+    The SQL Table on which the constraint is defined.
+
+Check
+-----
+
+.. class:: Check(table, expression)
+
+It represents a check :class:`Constraint` which enforce the validity of the
+expression.
+
+Instance attributes:
+
+.. attribute:: Check.expression
+
+    The SQL expression to check.
+
+Unique
+------
+
+.. class:: Unique(table, \*columns)
+
+It represents a unique :class:`Constraint` which enforce the uniqeness of the
+group of columns with respect to all the rows in the table.
+
+Instance attributes:
+
+.. attribute:: Unique.columns
+
+    The tuple of SQL Column instances.
 
 ========
 Workflow

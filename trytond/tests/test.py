@@ -3,7 +3,7 @@
 
 import datetime
 from decimal import Decimal
-from trytond.model import ModelSQL, DictSchemaMixin, fields
+from trytond.model import ModelSQL, DictSchemaMixin, fields, Unique
 from trytond.pyson import Eval
 
 __all__ = [
@@ -36,6 +36,7 @@ __all__ = [
     'DictSchema', 'Dict', 'DictDefault', 'DictRequired',
     'Binary', 'BinaryDefault', 'BinaryRequired',
     'Many2OneDomainValidation', 'Many2OneTarget', 'Many2OneOrderBy',
+    'Many2OneSearch',
     ]
 
 
@@ -364,10 +365,11 @@ class One2OneRelation(ModelSQL):
     @classmethod
     def __setup__(cls):
         super(One2OneRelation, cls).__setup__()
+        table = cls.__table__()
         cls._sql_constraints += [
-            ('origin_unique', 'UNIQUE(origin)',
+            ('origin_unique', Unique(table, table.origin),
                 'Origin must be unique'),
-            ('target_unique', 'UNIQUE(target)',
+            ('target_unique', Unique(table, table.target),
                 'Target must be unique'),
             ]
 
@@ -389,10 +391,11 @@ class One2OneRequiredRelation(ModelSQL):
     @classmethod
     def __setup__(cls):
         super(One2OneRequiredRelation, cls).__setup__()
+        table = cls.__table__()
         cls._sql_constraints += [
-            ('origin_unique', 'UNIQUE(origin)',
+            ('origin_unique', Unique(table, table.origin),
                 'Origin must be unique'),
-            ('target_unique', 'UNIQUE(target)',
+            ('target_unique', Unique(table, table.target),
                 'Target must be unique'),
             ]
 
@@ -415,10 +418,11 @@ class One2OneDomainRelation(ModelSQL):
     @classmethod
     def __setup__(cls):
         super(One2OneDomainRelation, cls).__setup__()
+        table = cls.__table__()
         cls._sql_constraints += [
-            ('origin_unique', 'UNIQUE(origin)',
+            ('origin_unique', Unique(table, table.origin),
                 'Origin must be unique'),
-            ('target_unique', 'UNIQUE(target)',
+            ('target_unique', Unique(table, table.target),
                 'Target must be unique'),
             ]
 
@@ -733,4 +737,10 @@ class Many2OneDomainValidation(ModelSQL):
 class Many2OneOrderBy(ModelSQL):
     "Many2One OrderBy"
     __name__ = 'test.many2one_orderby'
+    many2one = fields.Many2One('test.many2one_target', 'many2one')
+
+
+class Many2OneSearch(ModelSQL):
+    "Many2One Search"
+    __name__ = 'test.many2one_search'
     many2one = fields.Many2One('test.many2one_target', 'many2one')

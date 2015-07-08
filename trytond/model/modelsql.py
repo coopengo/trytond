@@ -1,13 +1,11 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
-import re
 import datetime
-from functools import reduce
 from itertools import islice, izip, chain, ifilter
 from collections import OrderedDict
 
-from sql import Table, Column, Literal, Desc, Asc, Expression, Flavor, Null
-from sql.functions import Now, Extract
+from sql import Table, Column, Literal, Desc, Asc, Expression, Null
+from sql.functions import CurrentTimestamp, Extract
 from sql.conditionals import Coalesce
 from sql.operators import Or, And, Operator
 from sql.aggregate import Count, Max
@@ -25,8 +23,67 @@ from trytond.rpc import RPC
 
 from .modelstorage import cache_size
 
-_RE_UNIQUE = re.compile('UNIQUE\s*\((.*)\)', re.I)
-_RE_CHECK = re.compile('CHECK\s*\((.*)\)', re.I)
+
+class Constraint(object):
+    __slots__ = ('_table',)
+
+    def __init__(self, table):
+        assert isinstance(table, Table)
+        self._table = table
+
+    @property
+    def table(self):
+        return self._table
+
+    def __str__(self):
+        raise NotImplementedError
+
+    @property
+    def params(self):
+        raise NotImplementedError
+
+
+class Check(Constraint):
+    __slots__ = ('_expression',)
+
+    def __init__(self, table, expression):
+        super(Check, self).__init__(table)
+        assert isinstance(expression, Expression)
+        self._expression = expression
+
+    @property
+    def expression(self):
+        return self._expression
+
+    def __str__(self):
+        return 'CHECK(%s)' % self.expression
+
+    @property
+    def params(self):
+        return self.expression.params
+
+
+class Unique(Constraint):
+    __slots__ = ('_columns',)
+
+    def __init__(self, table, *columns):
+        super(Unique, self).__init__(table)
+        assert all(isinstance(col, Column) for col in columns)
+        self._columns = tuple(columns)
+
+    @property
+    def columns(self):
+        return self._columns
+
+    def __str__(self):
+        return 'UNIQUE(%s)' % (', '.join(map(str, self.columns)))
+
+    @property
+    def params(self):
+        p = []
+        for column in self.columns:
+            p.extend(column.params)
+        return tuple(p)
 
 
 class ModelSQL(ModelStorage):
@@ -226,10 +283,10 @@ class ModelSQL(ModelStorage):
                     cls.raise_user_error('foreign_model_missing',
                         error_args=error_args)
         for name, _, error in cls._sql_constraints:
-            if name in exception[0]:
+            if name in str(exception[0]):
                 cls.raise_user_error(error)
         for name, error in cls._sql_error_messages.iteritems():
-            if name in exception[0]:
+            if name in str(exception[0]):
                 cls.raise_user_error(error)
 
     @classmethod
@@ -295,7 +352,7 @@ class ModelSQL(ModelStorage):
                         table.select(*columns, where=where)))
             else:
                 cursor.execute(*history.insert(hcolumns,
-                        [[id_, Now(), user] for id_ in sub_ids]))
+                        [[id_, CurrentTimestamp(), user] for id_ in sub_ids]))
 
     @classmethod
     def _restore_history(cls, ids, datetime, _before=False):
@@ -314,7 +371,7 @@ class ModelSQL(ModelStorage):
             if fname == 'write_uid':
                 hcolumns.append(Literal(transaction.user))
             elif fname == 'write_date':
-                hcolumns.append(Now())
+                hcolumns.append(CurrentTimestamp())
             else:
                 hcolumns.append(Column(history, fname))
 
@@ -401,6 +458,7 @@ class ModelSQL(ModelStorage):
         cursor = transaction.cursor
         pool = Pool()
         Translation = pool.get('ir.translation')
+        Rule = pool.get('ir.rule')
 
         super(ModelSQL, cls).create(vlist)
 
@@ -432,7 +490,7 @@ class ModelSQL(ModelStorage):
                 values.update(cls._clean_defaults(defaults))
 
             insert_columns = [table.create_uid, table.create_date]
-            insert_values = [transaction.user, Now()]
+            insert_values = [transaction.user, CurrentTimestamp()]
 
             # Insert record
             for fname, value in values.iteritems():
@@ -464,15 +522,18 @@ class ModelSQL(ModelStorage):
                     cls.__raise_integrity_error(exception, values)
                 raise
 
-        domain = pool.get('ir.rule').domain_get(cls.__name__,
-                mode='create')
+        domain = Rule.domain_get(cls.__name__, mode='create')
         if domain:
+            tables = {None: (table, None)}
+            tables, expression = cls.search_domain(
+                domain, active_test=False, tables=tables)
+            from_ = convert_from(None, tables)
             for sub_ids in grouped_slice(new_ids):
                 sub_ids = list(sub_ids)
                 red_sql = reduce_ids(table.id, sub_ids)
 
-                cursor.execute(*table.select(table.id,
-                        where=red_sql & table.id.in_(domain)))
+                cursor.execute(*from_.select(table.id,
+                        where=red_sql & expression))
                 if len(cursor.fetchall()) != len(sub_ids):
                     cls.raise_user_error('access_error', cls.__name__)
 
@@ -581,6 +642,11 @@ class ModelSQL(ModelStorage):
             if 'id' not in fields_names:
                 columns.append(table.id.as_('id'))
 
+            tables = {None: (table, None)}
+            if domain:
+                tables, dom_exp = cls.search_domain(
+                    domain, active_test=False, tables=tables)
+            from_ = convert_from(None, tables)
             for sub_ids in grouped_slice(ids, in_max):
                 sub_ids = list(sub_ids)
                 red_sql = reduce_ids(table.id, sub_ids)
@@ -588,8 +654,8 @@ class ModelSQL(ModelStorage):
                 if history_clause:
                     where &= history_clause
                 if domain:
-                    where &= table.id.in_(domain)
-                cursor.execute(*table.select(*columns, where=where,
+                    where &= dom_exp
+                cursor.execute(*from_.select(*columns, where=where,
                         order_by=history_order, limit=history_limit))
                 dictfetchall = cursor.dictfetchall()
                 if not len(dictfetchall) == len({}.fromkeys(sub_ids)):
@@ -597,8 +663,8 @@ class ModelSQL(ModelStorage):
                         where = red_sql
                         if history_clause:
                             where &= history_clause
-                        where &= table.id.in_(domain)
-                        cursor.execute(*table.select(table.id, where=where,
+                        where &= dom_exp
+                        cursor.execute(*from_.select(table.id, where=where,
                                 order_by=history_order, limit=history_limit))
                         rowcount = cursor.rowcount
                         if rowcount == -1 or rowcount is None:
@@ -752,6 +818,7 @@ class ModelSQL(ModelStorage):
         pool = Pool()
         Translation = pool.get('ir.translation')
         Config = pool.get('ir.configuration')
+        Rule = pool.get('ir.rule')
 
         assert not len(args) % 2
         # Remove possible duplicates from all records
@@ -784,7 +851,7 @@ class ModelSQL(ModelStorage):
                     del values[key]
 
             columns = [table.write_uid, table.write_date]
-            update_values = [transaction.user, Now()]
+            update_values = [transaction.user, CurrentTimestamp()]
             store_translation = Transaction().language == Config.get_language()
             for fname, value in values.iteritems():
                 field = cls._fields[fname]
@@ -794,14 +861,19 @@ class ModelSQL(ModelStorage):
                         columns.append(Column(table, fname))
                         update_values.append(field.sql_format(value))
 
-            domain = pool.get('ir.rule').domain_get(cls.__name__, mode='write')
+            domain = Rule.domain_get(cls.__name__, mode='write')
+            tables = {None: (table, None)}
+            if domain:
+                tables, dom_exp = cls.search_domain(
+                    domain, active_test=False, tables=tables)
+            from_ = convert_from(None, tables)
             for sub_ids in grouped_slice(ids):
                 sub_ids = list(sub_ids)
                 red_sql = reduce_ids(table.id, sub_ids)
                 where = red_sql
                 if domain:
-                    where &= table.id.in_(domain)
-                cursor.execute(*table.select(table.id, where=where))
+                    where &= dom_exp
+                cursor.execute(*from_.select(table.id, where=where))
                 rowcount = cursor.rowcount
                 if rowcount == -1 or rowcount is None:
                     rowcount = len(cursor.fetchall())
@@ -854,6 +926,7 @@ class ModelSQL(ModelStorage):
         cursor = transaction.cursor
         pool = Pool()
         Translation = pool.get('ir.translation')
+        Rule = pool.get('ir.rule')
         ids = map(int, records)
 
         if not ids:
@@ -905,14 +978,18 @@ class ModelSQL(ModelStorage):
 
         transaction.delete.setdefault(cls.__name__, set()).update(ids)
 
-        domain = pool.get('ir.rule').domain_get(cls.__name__, mode='delete')
+        domain = Rule.domain_get(cls.__name__, mode='delete')
 
         if domain:
+            tables = {None: (table, None)}
+            tables, dom_exp = cls.search_domain(
+                domain, active_test=False, tables=tables)
+            from_ = convert_from(None, tables)
             for sub_ids in grouped_slice(ids):
                 sub_ids = list(sub_ids)
                 red_sql = reduce_ids(table.id, sub_ids)
-                cursor.execute(*table.select(table.id,
-                        where=red_sql & table.id.in_(domain)))
+                cursor.execute(*from_.select(table.id,
+                        where=red_sql & dom_exp))
                 rowcount = cursor.rowcount
                 if rowcount == -1 or rowcount is None:
                     rowcount = len(cursor.fetchall())
@@ -1007,26 +1084,15 @@ class ModelSQL(ModelStorage):
             forder = field.convert_order(oexpr, tables, cls)
             order_by.extend((Order(o) for o in forder))
 
-        main_table, _ = tables[None]
-
-        def convert_from(table, tables):
-            right, condition = tables[None]
-            if table:
-                table = table.join(right, 'LEFT', condition)
-            else:
-                table = right
-            for k, sub_tables in tables.iteritems():
-                if k is None:
-                    continue
-                table = convert_from(table, sub_tables)
-            return table
-        # Don't nested joins as SQLite doesn't support
-        table = convert_from(None, tables)
-
         # construct a clause for the rules :
         domain = Rule.domain_get(cls.__name__, mode='read')
         if domain:
-            expression &= main_table.id.in_(domain)
+            tables, dom_exp = cls.search_domain(
+                domain, active_test=False, tables=tables)
+            expression &= dom_exp
+
+        main_table, _ = tables[None]
+        table = convert_from(None, tables)
 
         if count:
             cursor.execute(*table.select(Count(Literal(1)),
@@ -1039,7 +1105,7 @@ class ModelSQL(ModelStorage):
             columns.append(Coalesce(
                     main_table.write_date,
                     main_table.create_date).as_('_datetime'))
-            columns.append(Column(main_table, '__id'))
+            columns.append(Column(main_table, '__id').as_('__id'))
         if not query:
             columns += [f.sql_column(main_table).as_(n)
                 for n, f in cls._fields.iteritems()
@@ -1084,7 +1150,9 @@ class ModelSQL(ModelStorage):
             history = cls.__table_history__()
             for sub_ids in grouped_slice([r['id'] for r in rows]):
                 where = reduce_ids(history.id, sub_ids)
-                cursor.execute(*history.select(history.id, history.write_date,
+                cursor.execute(*history.select(
+                        history.id.as_('id'),
+                        history.write_date.as_('write_date'),
                         where=where
                         & (history.write_date != Null)
                         & (history.create_date == Null)
@@ -1140,7 +1208,7 @@ class ModelSQL(ModelStorage):
         return cls.browse([x['id'] for x in rows])
 
     @classmethod
-    def search_domain(cls, domain, active_test=True):
+    def search_domain(cls, domain, active_test=True, tables=None):
         '''
         Return SQL tables and expression
         Set active_test to add it.
@@ -1148,9 +1216,10 @@ class ModelSQL(ModelStorage):
         transaction = Transaction()
         domain = cls._search_domain_active(domain, active_test=active_test)
 
-        tables = {
-            None: (cls.__table__(), None)
-            }
+        if tables is None:
+            tables = {}
+        if None not in tables:
+            tables[None] = (cls.__table__(), None)
         if cls._history and transaction.context.get('_datetime'):
             tables[None] = (cls.__table_history__(), None)
 
@@ -1300,44 +1369,47 @@ class ModelSQL(ModelStorage):
             return
         # Works only for a single transaction
         ids = map(int, records)
-        table = cls.__table__()
-        param = Flavor.get().param
         for _, sql, error in cls._sql_constraints:
-            match = _RE_UNIQUE.match(sql)
-            if match:
-                sql = match.group(1)
-                columns = sql.split(',')
-                sql_clause = ' AND '.join('%s = %s'
-                    % (i, param) for i in columns)
-                sql_clause = '(id != ' + param + ' AND ' + sql_clause + ')'
-
+            table = sql.table
+            if isinstance(sql, Unique):
+                columns = [Column(table, c.name) for c in sql.columns]
+                columns.insert(0, table.id)
                 in_max = cursor.IN_MAX / (len(columns) + 1)
                 for sub_ids in grouped_slice(ids, in_max):
                     red_sql = reduce_ids(table.id, sub_ids)
 
-                    cursor.execute('SELECT id,' + sql + ' '
-                        'FROM "' + cls._table + '" '
-                        'WHERE ' + str(red_sql), red_sql.params)
+                    cursor.execute(*table.select(*columns, where=red_sql))
 
-                    fetchall = cursor.fetchall()
-                    cursor.execute('SELECT id '
-                        'FROM "' + cls._table + '" '
-                        'WHERE ' +
-                            ' OR '.join((sql_clause,) * len(fetchall)),
-                        reduce(lambda x, y: x + list(y), fetchall, []))
-
+                    where = Literal(False)
+                    for row in cursor.fetchall():
+                        clause = table.id != row[0]
+                        for column, value in zip(sql.columns, row[1:]):
+                            if value is None:
+                                # NULL is always unique
+                                clause &= Literal(False)
+                            clause &= Column(table, column.name) == value
+                        where |= clause
+                    cursor.execute(*table.select(table.id, where=where))
                     if cursor.fetchone():
                         cls.raise_user_error(error)
-                continue
-            match = _RE_CHECK.match(sql)
-            if match:
-                sql = match.group(1)
+            elif isinstance(sql, Check):
                 for sub_ids in grouped_slice(ids):
                     red_sql = reduce_ids(table.id, sub_ids)
-                    cursor.execute('SELECT id '
-                        'FROM "' + cls._table + '" '
-                        'WHERE NOT (' + sql + ') '
-                            'AND ' + str(red_sql), red_sql.params)
+                    cursor.execute(*table.select(table.id,
+                            where=~sql.expression & red_sql))
                     if cursor.fetchone():
                         cls.raise_user_error(error)
-                    continue
+
+
+def convert_from(table, tables):
+    # Don't nested joins as SQLite doesn't support
+    right, condition = tables[None]
+    if table:
+        table = table.join(right, 'LEFT', condition)
+    else:
+        table = right
+    for k, sub_tables in tables.iteritems():
+        if k is None:
+            continue
+        table = convert_from(table, sub_tables)
+    return table
