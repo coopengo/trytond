@@ -5,7 +5,7 @@ import time
 from sql import Literal, Null
 from sql.aggregate import Count, Max
 
-from ..model import ModelView, ModelSQL, fields, EvalEnvironment
+from ..model import ModelView, ModelSQL, fields, EvalEnvironment, Check
 from ..pyson import Eval, PYSONDecoder
 from ..tools import grouped_slice
 from .. import backend
@@ -56,9 +56,13 @@ class Trigger(ModelSQL, ModelView):
     @classmethod
     def __setup__(cls):
         super(Trigger, cls).__setup__()
+        t = cls.__table__()
         cls._sql_constraints += [
             ('on_exclusive',
-                'CHECK(NOT(on_time AND (on_create OR on_write OR on_delete)))',
+                Check(t, ~((t.on_time == True)
+                        & ((t.on_create == True)
+                            | (t.on_write == True)
+                            | (t.on_delete == True)))),
                 '"On Time" and others are mutually exclusive!'),
             ]
         cls._error_messages.update({
@@ -77,7 +81,7 @@ class Trigger(ModelSQL, ModelView):
         super(Trigger, cls).__register__(module_name)
 
         # Migration from 3.4:
-        # change minimum_delay into timedelta minimu_time_delay
+        # change minimum_delay into timedelta minimum_time_delay
         if table.column_exist('minimum_delay'):
             cursor.execute(*sql_table.select(
                     sql_table.id, sql_table.minimum_delay,
@@ -85,7 +89,7 @@ class Trigger(ModelSQL, ModelView):
             for id_, delay in cursor.fetchall():
                 delay = datetime.timedelta(hours=delay)
                 cursor.execute(*sql_table.update(
-                        [sql_table.minimu_time_delay],
+                        [sql_table.minimum_time_delay],
                         [delay],
                         where=sql_table.id == id_))
             table.drop_column('minimum_delay')

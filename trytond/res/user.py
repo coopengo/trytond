@@ -21,7 +21,7 @@ try:
 except ImportError:
     bcrypt = None
 
-from ..model import ModelView, ModelSQL, fields
+from ..model import ModelView, ModelSQL, fields, Unique
 from ..wizard import Wizard, StateView, Button, StateTransition
 from ..tools import grouped_slice
 from .. import backend
@@ -81,8 +81,9 @@ class User(ModelSQL, ModelView):
                 'set_preferences': RPC(readonly=False, check_access=False),
                 'get_preferences_fields_view': RPC(check_access=False),
                 })
+        table = cls.__table__()
         cls._sql_constraints += [
-            ('login_key', 'UNIQUE (login)',
+            ('login_key', Unique(table, table.login),
                 'You can not have two users with the same login!')
         ]
         cls._preferences_fields = [
@@ -457,7 +458,7 @@ class User(ModelSQL, ModelView):
         cursor = Transaction().cursor
         table = cls.__table__()
         cursor.execute(*table.select(table.id, table.password_hash,
-                where=(table.login == login) & table.active))
+                where=(table.login == login) & (table.active == True)))
         result = cursor.fetchone() or (None, None)
         cls._get_login_cache.set(login, result)
         return result

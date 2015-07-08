@@ -1,9 +1,10 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
+from __future__ import division
 from decimal import Decimal
 from sql import Table
 
-from trytond.model import ModelView, ModelSQL, fields
+from trytond.model import ModelView, ModelSQL, fields, Check
 from trytond.pyson import Eval
 from trytond.transaction import Transaction
 
@@ -67,8 +68,9 @@ class Uom(ModelSQL, ModelView):
     @classmethod
     def __setup__(cls):
         super(Uom, cls).__setup__()
+        t = cls.__table__()
         cls._sql_constraints += [
-            ('non_zero_rate_factor', 'CHECK((rate != 0.0) or (factor != 0.0))',
+            ('non_zero_rate_factor', Check(t, (t.rate != 0) | (t.factor != 0)),
                 'Rate and factor can not be both equal to zero.')
             ]
         cls._order.insert(0, ('name', 'ASC'))
@@ -134,7 +136,11 @@ class Uom(ModelSQL, ModelView):
 
     @staticmethod
     def round(number, precision=1.0):
-        return round(number / precision) * precision
+        i, d = divmod(precision, 1)
+        base = round(number / precision)
+        # Instead of multiply by the decimal part, we must divide by the
+        # integer to avoid precision lost due to float
+        return (base * i) + ((base / (1 / d)) if d != 0 else 0)
 
     @classmethod
     def validate(cls, uoms):

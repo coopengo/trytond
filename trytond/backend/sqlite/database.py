@@ -21,8 +21,8 @@ except ImportError:
     from sqlite3 import IntegrityError as DatabaseIntegrityError
     from sqlite3 import OperationalError as DatabaseOperationalError
 from sql import Flavor, Table
-from sql.functions import (Function, Extract, Position, Now, Substring,
-    Overlay, CharLength)
+from sql.functions import (Function, Extract, Position, Substring,
+    Overlay, CharLength, CurrentTimestamp)
 
 __all__ = ['Database', 'DatabaseIntegrityError', 'DatabaseOperationalError',
     'Cursor']
@@ -138,6 +138,11 @@ class SQLiteCharLength(Function):
     _function = 'LENGTH'
 
 
+class SQLiteCurrentTimestamp(Function):
+    __slots__ = ()
+    _function = 'NOW'  # More precise
+
+
 def sign(value):
     if value > 0:
         return 1
@@ -153,6 +158,7 @@ MAPPING = {
     Substring: SQLiteSubstring,
     Overlay: SQLiteOverlay,
     CharLength: SQLiteCharLength,
+    CurrentTimestamp: SQLiteCurrentTimestamp,
     }
 
 
@@ -307,7 +313,7 @@ class Database(DatabaseInterface):
             insert = ir_module.insert(
                 [ir_module.create_uid, ir_module.create_date, ir_module.name,
                     ir_module.state],
-                [[0, Now(), module, state]])
+                [[0, CurrentTimestamp(), module, state]])
             cursor.execute(*insert)
             cursor.execute('SELECT last_insert_rowid()')
             module_id, = cursor.fetchone()
@@ -317,30 +323,8 @@ class Database(DatabaseInterface):
                         ir_module_dependency.create_date,
                         ir_module_dependency.module, ir_module_dependency.name
                         ],
-                    [[0, Now(), module_id, dependency]])
+                    [[0, CurrentTimestamp(), module_id, dependency]])
                 cursor.execute(*insert)
-
-
-class _Cursor(sqlite.Cursor):
-
-    def __build_dict(self, row):
-        return dict((desc[0], row[i])
-                for i, desc in enumerate(self.description))
-
-    def dictfetchone(self):
-        row = self.fetchone()
-        if row:
-            return self.__build_dict(row)
-        else:
-            return row
-
-    def dictfetchmany(self, size):
-        rows = self.fetchmany(size)
-        return [self.__build_dict(row) for row in rows]
-
-    def dictfetchall(self):
-        rows = self.fetchall()
-        return [self.__build_dict(row) for row in rows]
 
 
 class Cursor(CursorInterface):
@@ -351,7 +335,7 @@ class Cursor(CursorInterface):
         self._conn = conn
         self.database_name = database_name
         self.dbname = self.database_name  # XXX to remove
-        self.cursor = conn.cursor(_Cursor)
+        self.cursor = conn.cursor()
 
     def __getattr__(self, name):
         if _FIX_ROWCOUNT and name == 'rowcount':

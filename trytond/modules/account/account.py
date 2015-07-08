@@ -10,7 +10,7 @@ from sql import Column, Literal, Null
 from sql.aggregate import Sum
 from sql.conditionals import Coalesce
 
-from trytond.model import ModelView, ModelSQL, fields
+from trytond.model import ModelView, ModelSQL, fields, Unique
 from trytond.wizard import Wizard, StateView, StateAction, StateTransition, \
     Button
 from trytond.report import Report
@@ -717,7 +717,7 @@ class Account(ModelSQL, ModelView):
                     ).select(
                     table_a.id,
                     Sum(Coalesce(line.debit, 0) - Coalesce(line.credit, 0)),
-                    where=red_sql & line_query & table_c.active,
+                    where=red_sql & line_query & (table_c.active == True),
                     group_by=table_a.id))
             result = cursor.fetchall()
             balances.update(dict(result))
@@ -1021,8 +1021,9 @@ class AccountDeferral(ModelSQL, ModelView):
     @classmethod
     def __setup__(cls):
         super(AccountDeferral, cls).__setup__()
+        t = cls.__table__()
         cls._sql_constraints += [
-            ('deferral_uniq', 'UNIQUE(account, fiscalyear)',
+            ('deferral_uniq', Unique(t, t.account, t.fiscalyear),
                 'Deferral must be unique by account and fiscal year'),
         ]
         cls._error_messages.update({
@@ -2026,7 +2027,7 @@ class ThirdPartyBalance(Report):
                 ).join(account, condition=line.account == account.id
                 ).select(line.party, Sum(line.debit), Sum(line.credit),
                 where=(line.party != Null)
-                & account.active
+                & (account.active == True)
                 & account.kind.in_(('payable', 'receivable'))
                 & (account.company == data['company'])
                 & ((line.maturity_date <= Date.today())
@@ -2183,7 +2184,7 @@ class AgedBalance(Report):
                     ).join(account, condition=line.account == account.id
                     ).select(line.party, Sum(line.debit) - Sum(line.credit),
                     where=(line.party != Null)
-                    & account.active
+                    & (account.active == True)
                     & account.kind.in_(kind)
                     & (line.reconciliation == Null)
                     & (account.company == data['company'])
