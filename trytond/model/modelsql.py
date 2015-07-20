@@ -20,6 +20,7 @@ from trytond.pool import Pool
 from trytond.cache import LRUDict
 from trytond.exceptions import ConcurrencyException
 from trytond.rpc import RPC
+from trytond.config import config
 
 from .modelstorage import cache_size
 
@@ -106,6 +107,7 @@ class ModelSQL(ModelStorage):
                     'history_revisions': RPC(),
                     })
 
+        cls._table = config.get('table', cls.__name__, default=cls._table)
         if not cls._table:
             cls._table = cls.__name__.replace('.', '_')
 
@@ -831,7 +833,7 @@ class ModelSQL(ModelStorage):
         all_field_names = set()
 
         # Call before cursor cache cleaning
-        trigger_eligibles = cls.trigger_write_get_eligibles(records)
+        trigger_eligibles = cls.trigger_write_get_eligibles(all_records)
 
         super(ModelSQL, cls).write(records, values, *args)
 
