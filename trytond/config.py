@@ -73,6 +73,7 @@ class TrytonConfigParser(configparser.ConfigParser):
         self.set('cache', 'model', '200')
         self.set('cache', 'record', '2000')
         self.set('cache', 'field', '100')
+        self.set('cache', 'coog_cache_size', '1024')
         self.add_section('queue')
         self.set('queue', 'worker', 'False')
         self.add_section('ssl')
