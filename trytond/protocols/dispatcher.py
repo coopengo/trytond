@@ -29,6 +29,8 @@ res_user = Table('res_user')
 def dispatch(host, port, protocol, database_name, user, session, object_type,
         object_name, method, *args, **kwargs):
     Database = backend.get('Database')
+    # What if there is no session (XMLRPC)
+    # (proteus)
     DatabaseOperationalError = backend.get('DatabaseOperationalError')
     if object_type == 'common':
         if method == 'login':
@@ -150,7 +152,8 @@ def dispatch(host, port, protocol, database_name, user, session, object_type,
     logger.info(log_message, *log_args)
     for count in range(config.getint('database', 'retry'), -1, -1):
         with Transaction().start(database_name, user,
-                readonly=rpc.readonly) as transaction:
+                readonly=rpc.readonly,
+                context={'session': session}) as transaction:
             Cache.clean(database_name)
             try:
                 c_args, c_kwargs, transaction.context, transaction.timestamp \
