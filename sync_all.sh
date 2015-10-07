@@ -38,6 +38,7 @@ declare -a modules=(
     "product"
     "commission"
     "commission_waiting"
+    "ldap_authentification"
     )
 for module in "${modules[@]}"
     do echo "$module"
