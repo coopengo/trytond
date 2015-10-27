@@ -1,3 +1,4 @@
+* Add note on resources
 * Allow to override ModelSQL._table
 * Allow to import backend from entry points
 * Add reversed operators to PYSON expressions
