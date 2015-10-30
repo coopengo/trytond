@@ -6,9 +6,12 @@ from collections import OrderedDict
 from sql import Table
 from sql.functions import CurrentTimestamp
 
+from trytond.config import config
 from trytond.transaction import Transaction
 
-__all__ = ['Cache', 'LRUDict']
+from trytond.cache_redis import Redis
+
+__all__ = ['_Cache', 'Cache', 'LRUDict']
 
 
 def freeze(o):
@@ -20,7 +23,7 @@ def freeze(o):
         return o
 
 
-class Cache(object):
+class _Cache(object):
     """
     A key value LRU cache with size limit.
     """
@@ -32,6 +35,8 @@ class Cache(object):
         self.size_limit = size_limit
         self.context = context
         self._cache = {}
+        assert name not in set([i._name for i in self._cache_instance]), \
+            '%s is already used' % name
         self._cache_instance.append(self)
         self._name = name
         self._timestamp = None
@@ -66,14 +71,19 @@ class Cache(object):
                 pass
         return value
 
+    def _empty(self, dbname):
+        self._cache[dbname] = LRUDict(self.size_limit)
+
     def clear(self):
         cursor = Transaction().cursor
-        Cache.reset(cursor.dbname, self._name)
+        with self._resets_lock:
+            self._resets.setdefault(cursor.dbname, set())
+            self._resets[cursor.dbname].add(self._name)
         with self._lock:
-            self._cache[cursor.dbname] = LRUDict(self.size_limit)
+            self._empty(cursor.dbname)
 
-    @staticmethod
-    def clean(dbname):
+    @classmethod
+    def clean(cls, dbname):
         with Transaction().new_cursor():
             cursor = Transaction().cursor
             table = Table('ir_cache')
@@ -81,28 +91,22 @@ class Cache(object):
             timestamps = {}
             for timestamp, name in cursor.fetchall():
                 timestamps[name] = timestamp
-        for inst in Cache._cache_instance:
+        for inst in cls._cache_instance:
             if inst._name in timestamps:
                 with inst._lock:
                     if (not inst._timestamp
                             or timestamps[inst._name] > inst._timestamp):
                         inst._timestamp = timestamps[inst._name]
-                        inst._cache[dbname] = LRUDict(inst.size_limit)
+                        inst._empty(dbname)
 
-    @staticmethod
-    def reset(dbname, name):
-        with Cache._resets_lock:
-            Cache._resets.setdefault(dbname, set())
-            Cache._resets[dbname].add(name)
-
-    @staticmethod
-    def resets(dbname):
+    @classmethod
+    def resets(cls, dbname):
         with Transaction().new_cursor():
             cursor = Transaction().cursor
             table = Table('ir_cache')
-            with Cache._resets_lock:
-                Cache._resets.setdefault(dbname, set())
-                for name in Cache._resets[dbname]:
+            with cls._resets_lock:
+                cls._resets.setdefault(dbname, set())
+                for name in cls._resets[dbname]:
                     cursor.execute(*table.select(table.name,
                             where=table.name == name))
                     if cursor.fetchone():
@@ -114,13 +118,37 @@ class Cache(object):
                         cursor.execute(*table.insert(
                                 [table.timestamp, table.name],
                                 [[CurrentTimestamp(), name]]))
-                Cache._resets[dbname].clear()
+                cls._resets[dbname].clear()
             cursor.commit()
 
     @classmethod
     def drop(cls, dbname):
         for inst in cls._cache_instance:
             inst._cache.pop(dbname, None)
+
+
+class Cache(object):
+    def __new__(cls, *args, **kwargs):
+        use_redis = config.get('cache', 'redis', default=None)
+        if use_redis is None:
+            return _Cache(*args, **kwargs)
+        else:
+            return Redis(*args, **kwargs)
+
+    @staticmethod
+    def clean(dbname):
+        _Cache.clean(dbname)
+        Redis.clean(dbname)
+
+    @staticmethod
+    def resets(dbname):
+        _Cache.resets(dbname)
+        Redis.resets(dbname)
+
+    @staticmethod
+    def drop(dbname):
+        _Cache.drop(dbname)
+        Redis.drop(dbname)
 
 
 class LRUDict(OrderedDict):

@@ -16,7 +16,7 @@ from trytond.tools import file_open
 from trytond.transaction import Transaction
 from trytond.wizard import Wizard, StateView, Button
 from trytond.pool import Pool
-from trytond.cache import Cache
+from trytond.cache import _Cache as Cache
 from trytond.rpc import RPC
 
 __all__ = [
