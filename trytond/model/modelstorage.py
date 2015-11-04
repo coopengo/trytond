@@ -1430,12 +1430,12 @@ class ModelStorage(Model):
             assert cursor == record._cursor
             assert user == record._user
             assert context == record._context
-            save_values[record] = record._save_values
-            values[record] = record._values
+            save_values[id(record)] = record._save_values
+            values[id(record)] = record._values
             record._values = None
             if record.id is None or record.id < 0:
                 to_create.append(record)
-            elif save_values[record]:
+            elif save_values[id(record)]:
                 to_write.append(record)
         transaction = Transaction()
         try:
@@ -1443,17 +1443,17 @@ class ModelStorage(Model):
                     transaction.set_user(user), \
                     transaction.set_context(context):
                 if to_create:
-                    news = cls.create([save_values[r] for r in to_create])
+                    news = cls.create([save_values[id(r)] for r in to_create])
                     for record, new in izip(to_create, news):
                         record._ids.remove(record.id)
                         record.id = new.id
                         record._ids.append(record.id)
                 if to_write:
                     cls.write(*sum(
-                            (([r], save_values[r]) for r in to_write), ()))
+                            (([r], save_values[id(r)]) for r in to_write), ()))
         except:
             for record in records:
-                record._values = values[record]
+                record._values = values[id(record)]
             raise
         for record in records:
             record._init_values = None
