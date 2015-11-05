@@ -12,6 +12,7 @@ import signal
 import time
 from getpass import getpass
 import threading
+from functools import wraps
 
 from sql import Table
 
@@ -19,11 +20,42 @@ from trytond.config import config, parse_listen
 from trytond import backend
 from trytond.pool import Pool
 from trytond.monitor import monitor
+from trytond.exceptions import UserError, UserWarning, ConcurrencyException, \
+    NotLogged
+
 from .transaction import Transaction
 
 
-class TrytonServer(object):
+def protocols_not_imported():
+    return sys.modules.get('trytond.protocols', None) is None
 
+
+def patch_dispatcher(old, client):
+    """
+    Patch the `old_dispatcher` with an exception handler to send exceptions
+    which occur to sentry through `client`
+
+    :param old_dispatch: the function/method to be patched
+    :param client: An instance of :class:`raven.Client`.
+    """
+    @wraps(old)
+    def wrapper(*args, **kwargs):
+        try:
+            return old(*args, **kwargs)
+        except (UserError, UserWarning, ConcurrencyException, NotLogged):
+            raise
+        except Exception:
+            event_id = client.captureException(True)
+            raise UserError(
+                'An error occured\n\n'
+                'Maintenance has been notified of this failure.\n'
+                'In case you wish to discuss this issue with the team, please '
+                'provide the following reference :\n\n%s' % event_id
+                )
+    return wrapper
+
+
+class TrytonServer(object):
     def __init__(self, options):
 
         config.update_etc(options.configfile)
@@ -51,6 +83,17 @@ class TrytonServer(object):
                 options.configfile)
         else:
             self.logger.info('using default configuration')
+
+        sentry_dsn = config.get('sentry', 'dsn', default=None)
+        if sentry_dsn is not None:
+            self.logger.info('using sentry')
+            assert protocols_not_imported(), \
+                'protocols is already imported, patch not applicable'
+            from raven import Client
+            from trytond.protocols import dispatcher
+            client = Client(sentry_dsn)
+            dispatcher.dispatch = patch_dispatcher(dispatcher.dispatch, client)
+
         self.logger.info('initialising distributed objects services')
         self.xmlrpcd = []
         self.jsonrpcd = []

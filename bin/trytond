@@ -4,7 +4,6 @@
 import sys
 import os
 import argparse
-from functools import wraps
 
 DIR = os.path.abspath(os.path.normpath(os.path.join(__file__,
     '..', '..', 'trytond')))
@@ -13,36 +12,6 @@ if os.path.isdir(DIR):
 
 from trytond import __version__
 from trytond import server
-import trytond
-from trytond.version import VERSION
-from trytond.exceptions import UserError, UserWarning, ConcurrencyException, \
-        NotLogged
-from raven import Client
-
-
-def patch(old_dispatch, client):
-    """
-    Patch the `old_dispatcher` with an exception handler to send exceptions
-    which occur to sentry through `client`
-
-    :param old_dispatch: the function/method to be patched
-    :param client: An instance of :class:`raven.Client`.
-    """
-    @wraps(old_dispatch)
-    def wrapper(*args, **kwargs):
-        try:
-            return old_dispatch(*args, **kwargs)
-        except (UserError, UserWarning, ConcurrencyException, NotLogged), exc:
-            raise
-        except Exception, exc:
-            event_id = client.captureException(True)
-            raise UserError(
-                'An error occured\n\n'
-                'Maintenance has been notified of this failure.\n'
-                'In case you wish to discuss this issue with the team, please '
-                'provide the following reference :\n\n%s' % event_id
-                )
-    return wrapper
 
 
 def parse_commandline():
@@ -72,8 +41,6 @@ def parse_commandline():
         help="logging configuration file (ConfigParser format)")
     parser.add_argument("--cron", dest="cron", action="store_true",
         help="enable cron")
-    parser.add_argument("-s", "--sentry-dsn",
-        help="Sentry DSN", dest="sentry_dsn")
 
     parser.epilog = ('The first time a database is initialized admin '
         'password is read from file defined by TRYTONPASSFILE '
@@ -84,11 +51,6 @@ def parse_commandline():
         'environment variable.')
 
     options = parser.parse_args()
-
-    if options.sentry_dsn:
-        client = Client(options.sentry_dsn)
-        from trytond.protocols import dispatcher
-        dispatcher.dispatch = patch(dispatcher.dispatch, client)
 
     if not options.database_names and options.update:
         parser.error('Missing database option')
