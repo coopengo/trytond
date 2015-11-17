@@ -68,12 +68,36 @@ class Invoice:
                     ])
             Commission.write(commissions, {
                     'date': today,
-                    })
+            })
+
+    @classmethod
+    def _get_commissions_to_delete(cls, ids):
+        # Declared to be overloaded for performances improvements
+        # We should improve or overload the field `reference`
+        Commission = Pool().get('commission')
+        return Commission.search([
+                ('invoice_line', '=', None),
+                ('origin.invoice', 'in', ids, 'account.invoice.line'),
+                ])
+
+    @classmethod
+    def _get_commissions_to_cancel(cls, ids):
+        # Declared to be overloaded for performances improvements
+        # We should improve or overload the field `reference`
+        Commission = Pool().get('commission')
+        return Commission.search([
+                ('invoice_line', '!=', None),
+                ('origin.invoice', 'in', ids, 'account.invoice.line'),
+                ])
 
     @classmethod
     @ModelView.button
     @Workflow.transition('cancel')
     def cancel(cls, invoices):
+        # Because domain resolution of the field `reference` creates
+        # a non-optimized query: we temporary created two function to be
+        # overloaded
+        # Issue: 2913
         pool = Pool()
         Commission = pool.get('commission')
 
@@ -83,14 +107,8 @@ class Invoice:
         to_save = []
         for sub_invoices in grouped_slice(invoices):
             ids = [i.id for i in sub_invoices]
-            to_delete += Commission.search([
-                    ('invoice_line', '=', None),
-                    ('origin.invoice', 'in', ids, 'account.invoice.line'),
-                    ])
-            to_cancel = Commission.search([
-                    ('invoice_line', '!=', None),
-                    ('origin.invoice', 'in', ids, 'account.invoice.line'),
-                    ])
+            to_delete += cls._get_commissions_to_delete(ids)
+            to_cancel = cls._get_commissions_to_cancel(ids)
             for commission in Commission.copy(to_cancel):
                 commission.amount *= -1
                 to_save.append(commission)
