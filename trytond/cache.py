@@ -1,5 +1,6 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
+import logging
 from threading import Lock
 from collections import OrderedDict
 
@@ -8,8 +9,12 @@ from sql.functions import CurrentTimestamp
 
 from trytond.config import config
 from trytond.transaction import Transaction
+try:
+    from trytond.cache_redis import Redis
+except ImportError:
+    logging.warning('Could not import Redis packages for cache')
+    Redis = None
 
-from trytond.cache_redis import Redis
 
 __all__ = ['_Cache', 'Cache', 'LRUDict']
 
@@ -133,22 +138,26 @@ class Cache(object):
         if use_redis is None:
             return _Cache(*args, **kwargs)
         else:
+            assert Redis is not None, 'Packages needed by Redis are missing'
             return Redis(*args, **kwargs)
 
     @staticmethod
     def clean(dbname):
         _Cache.clean(dbname)
-        Redis.clean(dbname)
+        if Redis is not None:
+            Redis.clean(dbname)
 
     @staticmethod
     def resets(dbname):
         _Cache.resets(dbname)
-        Redis.resets(dbname)
+        if Redis is not None:
+            Redis.resets(dbname)
 
     @staticmethod
     def drop(dbname):
         _Cache.drop(dbname)
-        Redis.drop(dbname)
+        if Redis is not None:
+            Redis.drop(dbname)
 
 
 class LRUDict(OrderedDict):
