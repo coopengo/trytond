@@ -37,7 +37,7 @@ def _inherit_apply(src, inherit):
             pos = element2.get('position', 'inside')
             if pos == 'replace':
                 parent = element.getparent()
-                if not parent:
+                if parent is None:
                     tree_src, = element2
                     continue
                 enext = element.getnext()
@@ -236,35 +236,27 @@ class ModelView(Model):
         pool = Pool()
         View = pool.get('ir.ui.view')
 
-        test = True
-        model = True
         view = None
-        inherit_view_id = False
-        while test:
-            if view_id:
-                domain = [('id', '=', view_id)]
-                if model:
-                    domain.append(('model', '=', cls.__name__))
-                views = View.search(domain, order=[])
-            else:
-                domain = [
-                    ('model', '=', cls.__name__),
-                    ('type', '=', view_type),
-                    ]
-                order = [
-                    ('inherit', 'DESC'),
-                    ('priority', 'ASC'),
-                    ('id', 'ASC'),
-                    ]
-                views = View.search(domain, order=order)
-            if not views:
-                break
-            view = views[0]
-            test = view.inherit
-            if test:
+        inherit_view_id = None
+        if view_id:
+            view = View(view_id)
+        else:
+            domain = [
+                ('model', '=', cls.__name__),
+                ('type', '=', view_type),
+                ['OR',
+                    ('inherit', '=', None),
+                    ('inherit.model', '!=', cls.__name__),
+                    ],
+                ]
+            views = View.search(domain)
+            if views:
+                view = views[0]
+        if view:
+            if view.inherit:
                 inherit_view_id = view.id
-            view_id = test.id if test else view.id
-            model = False
+                view = view.inherit
+            view_id = view.id
 
         # if a view was found
         if view:
@@ -289,10 +281,6 @@ class ModelView(Model):
                         ('id', '=', view_id),
                         ('inherit', '!=', None),
                         ],
-                    ],
-                order=[
-                    ('priority', 'ASC'),
-                    ('id', 'ASC'),
                     ])
             raise_p = False
             while True:
@@ -522,6 +510,8 @@ class ModelView(Model):
             for attr in ('name', 'icon'):
                 if element.get(attr):
                     fields_attrs.setdefault(element.get(attr), {})
+                    if type != 'form':
+                        continue
                     try:
                         field = cls._fields[element.get(attr)]
                         if hasattr(field, 'model_name'):
@@ -567,9 +557,9 @@ class ModelView(Model):
                         element.attrib['view_ids'] = ','.join(
                             map(str, view_ids))
                         if not element.get('relation'):
-                            fields_attrs[element.get(attr)].setdefault('views', {}
-                                ).update(views)
-            if element.get('name') in fields_width:
+                            fields_attrs[element.get(attr)].setdefault('views',
+                                {}).update(views)
+            if type == 'tree' and element.get('name') in fields_width:
                 element.set('width', str(fields_width[element.get('name')]))
 
         encoder = PYSONEncoder()

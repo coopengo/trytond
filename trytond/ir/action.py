@@ -90,8 +90,7 @@ class Action(ModelSQL, ModelView):
         columns.add('icon.rec_name')
         to_remove = ()
         if type_ == 'ir.action.report':
-            to_remove = ('report_content_custom', 'report_content',
-                'style_content')
+            to_remove = ('report_content_custom', 'report_content')
         elif type_ == 'ir.action.act_window':
             to_remove = ('domain', 'context', 'search_value')
         columns.difference_update(to_remove)
@@ -251,10 +250,10 @@ class ActionMixin(ModelSQL):
                 default_func = 'default_' + name
                 if getattr(Action, default_func, None):
                     setattr(cls, default_func,
-                        partial(ActionMixin.default_action, name))
+                        partial(ActionMixin._default_action, name))
 
     @staticmethod
-    def default_action(name):
+    def _default_action(name):
         pool = Pool()
         Action = pool.get('ir.action')
         return getattr(Action, 'default_' + name, None)()
@@ -392,10 +391,6 @@ class ActionReport(ActionMixin, ModelSQL, ModelView):
         'on_change_with_report_content_name')
     action = fields.Many2One('ir.action', 'Action', required=True,
             ondelete='CASCADE')
-    style = fields.Property(fields.Char('Style',
-            help='Define the style to apply on the report.'))
-    style_content = fields.Function(fields.Binary('Style'),
-            'get_style_content')
     direct_print = fields.Boolean('Direct Print')
     template_extension = fields.Selection([
             ('odt', 'OpenDocument Text'),
@@ -621,26 +616,6 @@ class ActionReport(ActionMixin, ModelSQL, ModelView):
         if not self.name:
             return
         return ''.join([self.name, os.extsep, self.template_extension])
-
-    @classmethod
-    def get_style_content(cls, reports, name):
-        contents = {}
-        converter = fields.Binary.cast
-        default = None
-        format_ = Transaction().context.pop('%s.%s'
-            % (cls.__name__, name), '')
-        if format_ == 'size':
-            converter = len
-            default = 0
-        for report in reports:
-            try:
-                with file_open(report.style.replace('/', os.sep),
-                        mode='rb') as fp:
-                    data = fp.read()
-            except Exception:
-                data = None
-            contents[report.id] = converter(data) if data else default
-        return contents
 
     @classmethod
     def get_pyson(cls, reports, name):
@@ -1033,7 +1008,3 @@ class ActionURL(ActionMixin, ModelSQL, ModelView):
     @staticmethod
     def default_type():
         return 'ir.action.url'
-
-    @staticmethod
-    def default_target():
-        return 'new'

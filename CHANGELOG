@@ -1,7 +1,18 @@
-* Add note on resources
+Version 3.8.0 - 2015-11-02
+* Bug fixes (see mercurial logs for details)
+* Add test for all field methods
+* Load po files also in 'override' subdirectory
+* Add support for float and integer on Property fields
+* Remove foreign-key on create_uid and write_uid
+* Prevent deletion of any user
+* Manage PostgreSQL schema
+* Remove colors attribute on tree view
+* Remove style on Report
+* Add StateReport to Wizard
 * Allow to override ModelSQL._table
 * Allow to import backend from entry points
 * Add reversed operators to PYSON expressions
+* Explicity raise error when creating/writing/deleting models with table_query
 * Use CURRENT_TIMESTAMP instead of now
 * Use Constraint instance in ModelSQL._sql_constraints
 * Only return default record if no domain supplied on ModelSingleton search

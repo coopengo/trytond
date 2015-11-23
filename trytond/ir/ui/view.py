@@ -159,7 +159,7 @@ class View(ModelSQL, ModelView):
             }
 
             def encode(element):
-                for attr in ('states', 'domain', 'spell', 'colors'):
+                for attr in ('states', 'domain', 'spell'):
                     if element.get(attr):
                         try:
                             value = PYSONDecoder().decode(element.get(attr))

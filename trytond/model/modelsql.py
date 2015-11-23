@@ -188,7 +188,11 @@ class ModelSQL(ModelStorage):
                     ref = field.model_name.replace('.', '_')
                 else:
                     ref = pool.get(field.model_name)._table
-                table.add_fk(field_name, ref, field.ondelete)
+                if field_name in ['create_uid', 'write_uid']:
+                    # migration from 3.6
+                    table.drop_fk(field_name)
+                else:
+                    table.add_fk(field_name, ref, field.ondelete)
 
             table.index_action(
                 field_name, action=field.select and 'add' or 'remove')
@@ -353,8 +357,14 @@ class ModelSQL(ModelStorage):
                 cursor.execute(*history.insert(hcolumns,
                         table.select(*columns, where=where)))
             else:
-                cursor.execute(*history.insert(hcolumns,
-                        [[id_, CurrentTimestamp(), user] for id_ in sub_ids]))
+                if cursor.has_multirow_insert():
+                    cursor.execute(*history.insert(hcolumns,
+                            [[id_, CurrentTimestamp(), user]
+                                for id_ in sub_ids]))
+                else:
+                    for id_ in sub_ids:
+                        cursor.execute(*history.insert(hcolumns,
+                                [[id_, CurrentTimestamp(), user]]))
 
     @classmethod
     def _restore_history(cls, ids, datetime, _before=False):
@@ -465,7 +475,7 @@ class ModelSQL(ModelStorage):
         super(ModelSQL, cls).create(vlist)
 
         if cls.table_query():
-            return False
+            raise NotImplementedError('Can not create model with table_query')
 
         table = cls.__table__()
         modified_fields = set()
@@ -838,7 +848,8 @@ class ModelSQL(ModelStorage):
         super(ModelSQL, cls).write(records, values, *args)
 
         if cls.table_query():
-            return
+            raise NotImplementedError(
+                'Can not write on model with table_query')
         table = cls.__table__()
 
         cls.__check_timestamp(all_ids)
@@ -938,7 +949,7 @@ class ModelSQL(ModelStorage):
             return
 
         if cls.table_query():
-            return
+            raise NotImplementedError('Can not delete model with table_query')
         table = cls.__table__()
 
         if transaction.delete and transaction.delete.get(cls.__name__):
@@ -1054,7 +1065,7 @@ class ModelSQL(ModelStorage):
                 cursor.execute(*table.delete(where=red_sql))
             except DatabaseIntegrityError, exception:
                 with Transaction().new_cursor():
-                    cls.__raise_integrity_error(exception, [])
+                    cls.__raise_integrity_error(exception, {})
                 raise
 
         Translation.delete_ids(cls.__name__, 'model', ids)
@@ -1281,10 +1292,24 @@ class ModelSQL(ModelStorage):
                     raise Exception('ValidateError',
                         'You can not update fields: "%s", "%s"' %
                         (field.left, field.right))
+
+                # Nested creation require a rebuild
+                # because initial values are 0
+                # and thus _update_tree can not find the children
+                table = cls.__table__()
+                parent = cls.__table__()
+                cursor.execute(*table.join(parent,
+                        condition=Column(table, field_name) == parent.id
+                        ).select(table.id,
+                        where=(Column(parent, field.left) == 0)
+                        & (Column(parent, field.right) == 0)))
+                nested_create = cursor.fetchone()
+
                 if count is None:
-                    cursor.execute(*cls.__table__().select(Count(Literal(1))))
+                    cursor.execute(*table.select(Count(Literal(1))))
                     count, = cursor.fetchone()
-                if len(ids) < count / 4:
+
+                if not nested_create and len(ids) < count / 4:
                     for id_ in ids:
                         cls._update_tree(id_, field_name,
                             field.left, field.right)

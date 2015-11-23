@@ -1,5 +1,7 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
+from __future__ import division
+
 from functools import wraps
 
 from sql.operators import NotIn
@@ -11,7 +13,7 @@ from trytond.wizard import Wizard, StateView, Button, StateTransition, \
 from trytond import backend
 from trytond.pool import Pool
 from trytond.transaction import Transaction
-from trytond.pyson import Eval, If
+from trytond.pyson import Eval
 from trytond.rpc import RPC
 
 __all__ = [
@@ -134,15 +136,6 @@ class Module(ModelSQL, ModelView):
                 if dep.name in name2id:
                     child_ids[name2id[dep.name]].append(child.id)
         return child_ids
-
-    @classmethod
-    def view_attributes(cls):
-        return [('/tree', 'colors',
-                If(Eval('state').in_(['to upgrade', 'to install']),
-                    'blue',
-                    If(Eval('state') == 'uninstalled',
-                        'grey',
-                        'black')))]
 
     @classmethod
     def delete(cls, records):
@@ -442,7 +435,7 @@ class ModuleConfigWizardOther(ModelView):
             ('state', '=', 'done'),
             ], count=True)
         all = Item.search([], count=True)
-        return 100.0 * done / all
+        return done / all
 
 
 class ModuleConfigWizardDone(ModelView):

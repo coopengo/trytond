@@ -1,7 +1,7 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
 from types import NoneType
-from sql import Query, Expression
+from sql import Query, Expression, Literal
 from sql.operators import Or
 
 from .field import Field, SQLType
@@ -109,10 +109,11 @@ class Many2One(Field):
         where = Or()
         for l, r in cursor.fetchall():
             where.append((left >= l) & (right <= r))
-        expression = table.id.in_(table.select(table.id, where=where))
+        if not where:
+            where = Literal(False)
         if operator == 'not child_of':
-            return ~expression
-        return expression
+            return ~where
+        return where
 
     def convert_domain_child(self, domain, tables):
         Target = self.get_target()

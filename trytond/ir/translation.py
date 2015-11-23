@@ -849,6 +849,8 @@ class Translation(ModelSQL, ModelView):
                 id2translation = dict((t.id, t)
                     for t in cls.browse(translation_ids))
             for entry in pofile:
+                if entry.obsolete:
+                    continue
                 translation, res_id = cls.from_poentry(entry)
                 translation.lang = lang
                 translation.module = module
@@ -1051,15 +1053,6 @@ class TranslationSet(Wizard):
 
                 style_xml = content_z.read('styles.xml')
                 document = xml.dom.minidom.parseString(style_xml)
-                strings += self._translate_report(document.documentElement)
-
-            if report.style_content:
-                style_io = StringIO.StringIO(report.style_content)
-                style_z = zipfile.ZipFile(style_io, mode='r')
-                style_xml = style_z.read('styles.xml')
-
-                document = xml.dom.minidom.parseString(style_xml)
-
                 strings += self._translate_report(document.documentElement)
 
             for string in {}.fromkeys(strings).keys():

@@ -58,11 +58,6 @@
   </define>
   <define name="attlist.tree" combine="interleave">
     <optional>
-      <attribute name="colors"/>
-    </optional>
-  </define>
-  <define name="attlist.tree" combine="interleave">
-    <optional>
       <attribute name="keyword_open" a:defaultValue="0">
         <choice>
           <value>0</value>
@@ -273,6 +268,26 @@
   </define>
   <define name="attlist.button" combine="interleave">
     <attribute name="name"/>
+  </define>
+  <define name="attlist.button" combine="interleave">
+    <optional>
+      <attribute name="states"/>
+    </optional>
+  </define>
+  <define name="attlist.button" combine="interleave">
+    <optional>
+      <attribute name="change"/>
+    </optional>
+  </define>
+  <define name="attlist.button" combine="interleave">
+    <optional>
+      <attribute name="type">
+        <choice>
+          <value>class</value>
+          <value>instance</value>
+        </choice>
+      </attribute>
+    </optional>
   </define>
   <define name="attlist.button" combine="interleave">
     <optional>
