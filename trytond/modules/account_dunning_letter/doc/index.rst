@@ -1,5 +1,0 @@
-Account Dunning Letter Module
-#############################
-
-The account_dunning_letter module generates a dunning letter after the process
-of dunnings for those who are at a level with *Print on Letter* checked.
