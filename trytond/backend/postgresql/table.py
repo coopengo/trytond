@@ -9,6 +9,19 @@ __all__ = ['TableHandler']
 logger = logging.getLogger(__name__)
 
 
+def hash32(val):
+    return hex(hash(val) & 0xffffffff)[2:]
+
+
+def truncate_constraint_name(name):
+    if len(name) < 64:
+        return name
+    else:
+        res = name[:55] + hash32(name)
+        logger.info('constraint %s -> %s', name, res)
+        return res
+
+
 class TableHandler(TableHandlerInterface):
 
     def __init__(self, cursor, model, module_name=None, history=False):
@@ -303,6 +316,7 @@ class TableHandler(TableHandlerInterface):
             on_delete = 'SET NULL'
 
         name = self.table_name + '_' + column_name + '_fkey'
+        name = truncate_constraint_name(name)
         self.cursor.execute('SELECT 1 '
             'FROM information_schema.key_column_usage '
             'WHERE table_name = %s AND table_schema = %s '
@@ -393,6 +407,7 @@ class TableHandler(TableHandlerInterface):
 
     def add_constraint(self, ident, constraint, exception=False):
         ident = self.table_name + "_" + ident
+        ident = truncate_constraint_name(ident)
         if ident in self._constraints:
             # This constrain already exist
             return
@@ -414,6 +429,7 @@ class TableHandler(TableHandlerInterface):
 
     def drop_constraint(self, ident, exception=False, table=None):
         ident = (table or self.table_name) + "_" + ident
+        ident = truncate_constraint_name(ident)
         if ident not in self._constraints:
             return
         try:

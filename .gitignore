@@ -1,4 +1,4 @@
-*.pyc
 .hg*
+*.pyc
 trytond/modules/*
 !trytond/modules/__init__.py
