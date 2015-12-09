@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 def hash32(val):
-    return hex(hash(val) & 0xffffffff)[2:]
+    return hex(hash(val) & 0xffffffff).lstrip('0x').rstrip('L').zfill(8)
 
 
 def truncate_constraint_name(name):
