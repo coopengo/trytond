@@ -58,6 +58,11 @@
   </define>
   <define name="attlist.tree" combine="interleave">
     <optional>
+      <attribute name="colors"/>
+    </optional>
+  </define>
+  <define name="attlist.tree" combine="interleave">
+    <optional>
       <attribute name="keyword_open" a:defaultValue="0">
         <choice>
           <value>0</value>
