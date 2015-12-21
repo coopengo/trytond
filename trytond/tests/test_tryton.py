@@ -30,6 +30,8 @@ from trytond.config import config, parse_uri
 from trytond.model import (
     ModelSingleton, ModelSQL, ModelStorage, ModelView, Workflow, fields)
 from trytond.model.fields import Function
+from trytond.model.fields.dict import TranslatedDict
+from trytond.model.fields.selection import TranslatedSelection
 from trytond.pool import Pool, isregisteredby
 from trytond.pyson import PYSONDecoder, PYSONEncoder
 from trytond.tools import file_open, find_dir, is_instance_method
@@ -463,6 +465,10 @@ class ModuleTestCase(unittest.TestCase):
                     continue
                 fnames = [attr[len(prefix):] for prefix in prefixes
                     if attr.startswith(prefix)]
+                if isinstance(
+                        getattr(model, attr),
+                        (TranslatedSelection, TranslatedDict)):
+                    continue
                 if not fnames:
                     continue
                 self.assertTrue(any(f in model._fields for f in fnames),
