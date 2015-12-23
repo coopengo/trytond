@@ -16,7 +16,7 @@ def get_version():
     init = read(os.path.join('trytond', '__init__.py'))
     return re.search('__version__ = "([0-9.]*)"', init).group(1)
 
-version = '1.4.0'
+version = '1.6.0'
 major_version, minor_version, _ = version.split('.', 2)
 major_version = int(major_version)
 minor_version = int(minor_version)
