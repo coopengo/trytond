@@ -17,6 +17,7 @@ from functools import wraps
 from sql import Table
 
 from trytond.config import config, parse_listen
+from trytond.config_coog import get_sentry_dsn
 from trytond import backend
 from trytond.pool import Pool
 from trytond.monitor import monitor
@@ -84,7 +85,7 @@ class TrytonServer(object):
         else:
             self.logger.info('using default configuration')
 
-        sentry_dsn = config.get('sentry', 'dsn', default=None)
+        sentry_dsn = get_sentry_dsn()
         if sentry_dsn is not None:
             self.logger.info('using sentry')
             assert protocols_not_imported(), \

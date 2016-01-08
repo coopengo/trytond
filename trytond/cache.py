@@ -7,7 +7,7 @@ from collections import OrderedDict
 from sql import Table
 from sql.functions import CurrentTimestamp
 
-from trytond.config import config
+from trytond.config_coog import get_cache_redis
 from trytond.transaction import Transaction
 try:
     from trytond.cache_redis import Redis
@@ -134,7 +134,7 @@ class _Cache(object):
 
 class Cache(object):
     def __new__(cls, *args, **kwargs):
-        use_redis = config.get('cache', 'redis', default=None)
+        use_redis = get_cache_redis()
         if use_redis is None:
             return _Cache(*args, **kwargs)
         else:

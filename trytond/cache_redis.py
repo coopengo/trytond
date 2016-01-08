@@ -5,7 +5,7 @@ import datetime
 from urlparse import urlparse
 import redis
 
-from trytond.config import config
+from trytond.config_coog import get_cache_redis
 from trytond.transaction import Transaction
 
 __all__ = ['Redis']
@@ -80,7 +80,7 @@ class Redis(object):
     def ensure_client(cls):
         with cls._client_check_lock:
             if cls._client is None:
-                redis_url = config.get('cache', 'redis')
+                redis_url = get_cache_redis()
                 url = urlparse(redis_url)
                 assert url.scheme == 'redis', 'invalid redis url'
                 host = url.hostname
