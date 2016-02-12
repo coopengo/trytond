@@ -46,7 +46,7 @@ def patch_dispatcher(old, client):
         except (UserError, UserWarning, ConcurrencyException, NotLogged):
             raise
         except Exception:
-            event_id = client.captureException(True)
+            event_id = client.captureException()
             raise UserError(
                 'An error occured\n\n'
                 'Maintenance has been notified of this failure.\n'
