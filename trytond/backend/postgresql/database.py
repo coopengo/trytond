@@ -28,6 +28,7 @@ from sql import Flavor
 
 from trytond.backend.database import DatabaseInterface, CursorInterface
 from trytond.config import config, parse_uri
+from trytond.perf_analyzer import analyze
 
 __all__ = ['Database', 'DatabaseIntegrityError', 'DatabaseOperationalError',
     'Cursor']
@@ -289,6 +290,7 @@ class Cursor(CursorInterface):
     def __getattr__(self, name):
         return getattr(self.cursor, name)
 
+    @analyze
     def execute(self, sql, params=None):
         if params:
             return self.cursor.execute(sql, params)
