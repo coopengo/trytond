@@ -17,6 +17,7 @@ from trytond.cache import Cache
 from trytond.exceptions import UserError, UserWarning, NotLogged, \
     ConcurrencyException
 from trytond.tools import is_instance_method
+from trytond.perf_analyzer import PerfLog, profile, logger as perf_logger
 
 logger = logging.getLogger(__name__)
 
@@ -156,7 +157,17 @@ def dispatch(host, port, protocol, database_name, user, session, object_type,
             try:
                 c_args, c_kwargs, transaction.context, transaction.timestamp \
                     = rpc.convert(obj, *args, **kwargs)
+                try:
+                    PerfLog().on_enter(Pool().get('res.user')(user), session)
+                except:
+                    perf_logger.exception('on_enter failed')
                 meth = getattr(obj, method)
+                try:
+                    wrapped_meth = profile(meth)
+                except:
+                    perf_logger.exception('profile failed')
+                else:
+                    meth = wrapped_meth
                 if (rpc.instantiate is None
                         or not is_instance_method(obj, method)):
                     result = rpc.result(meth(*c_args, **c_kwargs))

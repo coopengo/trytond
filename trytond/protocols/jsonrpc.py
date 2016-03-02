@@ -31,6 +31,7 @@ try:
     from cStringIO import StringIO
 except ImportError:
     from StringIO import StringIO
+from trytond.perf_analyzer import PerfLog, logger as perf_logger
 
 
 class JSONDecoder(object):
@@ -138,6 +139,14 @@ class SimpleJSONRPCDispatcher(SimpleXMLRPCServer.SimpleXMLRPCDispatcher):
     """
 
     def _marshaled_dispatch(self, data, dispatch_method=None, path=None):
+        ret = self._do_the_job(data, dispatch_method)
+        try:
+            PerfLog().on_leave(data, ret)
+        except:
+            perf_logger.exception('on_leave failed')
+        return ret
+
+    def _do_the_job(self, data, dispatch_method):
         """Dispatches an JSON-RPC method from marshalled (JSON) data.
 
         JSON-RPC methods are dispatched from the marshalled (JSON) data
@@ -156,6 +165,10 @@ class SimpleJSONRPCDispatcher(SimpleXMLRPCServer.SimpleXMLRPCDispatcher):
 
         response = {'id': req_id}
 
+        try:
+            PerfLog().method = method
+        except:
+            perf_logger.exception('set_method failed')
         try:
             # generate response
             if dispatch_method is not None:
