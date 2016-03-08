@@ -41,7 +41,8 @@ class TrytonConfigParser(ConfigParser.RawConfigParser):
         ConfigParser.RawConfigParser.__init__(self)
         self.add_section('jsonrpc')
         self.set('jsonrpc', 'listen', 'localhost:8000')
-        self.set('jsonrpc', 'data', '/var/www/localhost/tryton')
+        self.set('jsonrpc', 'data',
+            os.environ.get('TRYTOND_JSONRPC_DATA', '/var/www/localhost/tryton'))
         self.add_section('xmlrpc')
         self.add_section('webdav')
         self.add_section('database')
