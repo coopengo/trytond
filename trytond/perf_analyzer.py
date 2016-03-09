@@ -96,6 +96,7 @@ import cStringIO as StringIO
 import cProfile as Profile
 
 from trytond.config import config
+from trytond.transaction import Transaction
 
 logger = logging.getLogger(__name__)
 
@@ -252,10 +253,10 @@ class PerfLog(object):
             self.broker.rpush(self._x_key('db'), msgpack.packb(
                     {'action': action, 'table': table, 'tm': tm}))
 
-    def log_query(self, action, table, tm, sql, bt):
+    def log_query(self, action, table, tm, count, sql, bt):
         self.broker.rpush(self._q_key(), msgpack.packb(
                 {'method': self.method, 'call': self.id,
-                    'action': action, 'table': table, 'tm': tm,
+                    'action': action, 'table': table, 'tm': tm, 'count': count,
                     'sql': sql, 'bt': bt}))
 
 
@@ -291,18 +292,24 @@ def parse_query(sql):
 
 def analyze_before(sql):
     if PerfLog().is_active():
-        return time.time(), sql
+        return time.time(),
 
 
-def analyze_after(start, sql):
+def analyze_after(start):
     p = PerfLog()
     tm = time.time() - start
+    cursor = Transaction().cursor
+    sql = cursor.query
     action, table = parse_query(sql)
     p.log_db(action, table, tm)
     if check_query(tm):
         # TODO: better format
+        if action == 'select':
+            count = cursor.rowcount
+        else:
+            count = 0
         bt = ''.join(traceback.format_stack()[-10:-2])
-        p.log_query(action, table, tm, sql, bt)
+        p.log_query(action, table, tm, count, sql, bt)
 
 
 def analyze(func):
