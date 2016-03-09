@@ -246,12 +246,13 @@ class Report(URLMixin, PoolBase):
         oext = FORMAT2EXT.get(output_format, output_format)
         with os.fdopen(fd, 'wb+') as fp:
             fp.write(data)
-        cmd = ['unoconv', '--connection=%s' % config.get('report', 'unoconv'),
-            '-f', oext, '--stdout', path]
+        cmd = ['unoconv', '--no-launch', '--connection=%s' % config.get(
+                'report', 'unoconv'), '-f', oext, '--stdout', path]
         try:
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE)
-            stdoutdata, stderrdata = proc.communicate()
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE, close_fds=True)
             if proc.wait() != 0:
+                stdoutdata, stderrdata = proc.communicate()
                 raise Exception(stderrdata)
             return oext, stdoutdata
         finally:
