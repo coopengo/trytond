@@ -52,6 +52,8 @@ class Pool(object):
     _pool = {}
     test = False
     _instances = {}
+    _init_hooks = {}
+    _post_init_calls = {}
 
     def __new__(cls, database_name=None):
         if database_name is None:
@@ -86,6 +88,10 @@ class Pool(object):
             assert issubclass(cls.__class__, PoolMeta), cls
             mpool.append(cls)
 
+    @staticmethod
+    def register_post_init_hooks(*hooks, **kwargs):
+        Pool._init_hooks[kwargs['module']] = hooks
+
     @classmethod
     def start(cls):
         '''
@@ -94,6 +100,7 @@ class Pool(object):
         with cls._lock:
             for classes in Pool.classes.itervalues():
                 classes.clear()
+            cls._init_hooks = {}
             register_classes()
             cls._started = True
 
@@ -151,10 +158,18 @@ class Pool(object):
             # Clean the _pool before loading modules
             for type in self.classes.keys():
                 self._pool[self.database_name][type] = {}
+            self._post_init_calls[self.database_name] = []
             restart = not load_modules(self.database_name, self, update=update,
                     lang=lang)
             if restart:
                 self.init()
+            self.post_init()
+
+    def post_init(self):
+        for hook in self._post_init_calls[self.database_name]:
+            logging.getLogger('modules').info('Running post init hook %s' %
+                hook.__name__)
+            hook(self)
 
     def get(self, name, type='model'):
         '''
@@ -217,6 +232,8 @@ class Pool(object):
                 classes[type_].append(cls)
             for cls in classes[type_]:
                 cls.__post_setup__()
+        self._post_init_calls[self.database_name] += self._init_hooks.get(
+            module, [])
         return classes
 
 
