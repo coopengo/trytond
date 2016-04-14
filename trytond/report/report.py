@@ -251,8 +251,8 @@ class Report(URLMixin, PoolBase):
         try:
             proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE, close_fds=True)
-            ret = proc.wait()
             stdoutdata, stderrdata = proc.communicate()
+            ret = proc.wait()
             if ret != 0:
                 raise Exception(stderrdata)
             return oext, stdoutdata
