@@ -161,6 +161,7 @@
           <value>callto</value>
           <value>sip</value>
           <value>image</value>
+          <value>icon</value>
           <value>progressbar</value>
           <value>one2one</value>
           <value>richtext</value>

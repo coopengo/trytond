@@ -62,6 +62,7 @@ attlist.field &=
     | "callto"
     | "sip"
     | "image"
+    | "icon"
     | "progressbar"
     | "one2one"
     | "richtext"
