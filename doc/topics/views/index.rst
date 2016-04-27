@@ -353,6 +353,34 @@ Display a button.
 
     * ``help``: see in common-attributes-help_.
 
+The button can be used to display actions, relates...
+There are different ways to add an toolbar Action. This is the dynamic way.
+Instead the "keyword form" which is unchangeable.
+We use the buttons of a view.
+
+     * ``keywords`` :  This attribute determines where the button will be display.
+
+       There are five places:
+
+           * ``open`` : Open tree
+
+           * ``action`` : Action
+
+	   * ``print`` : Print form
+
+	   * ``email`` : Email
+
+	   * ``form_relate`` : Form relate
+
+If there is no attribute keyword, the default place is Action.
+
+Example:
+
+.. highlight:: xml
+::
+    <button name="button_name" string="button_string" keywords="action"/>
+    <button name="button_name" string="button_string" keywords="action,relate"/>
+
 notebook
 ^^^^^^^^
 
