@@ -5,7 +5,7 @@ import datetime
 from urlparse import urlparse
 import redis
 
-from trytond.config_coog import get_cache_redis
+from trytond.coog_config import get_cache_redis
 from trytond.transaction import Transaction
 
 __all__ = ['Redis']
@@ -98,7 +98,7 @@ class Redis(object):
 
     def _namespace(self, dbname=None):
         if dbname is None:
-            dbname = Transaction().cursor.dbname
+            dbname = Transaction().database.name
         return '%s:%s' % (self._name, dbname)
 
     def _key(self, key):

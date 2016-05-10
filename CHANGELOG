@@ -1,22 +1,32 @@
-Version 3.8.5 - 2016-04-06
+Version 4.0.0 - 2016-05-02
 * Bug fixes (see mercurial logs for details)
-
-Version 3.8.4 - 2016-03-14
-* Bug fixes (see mercurial logs for details)
+* Add sendmail module to send transactional email
+* Support Two-Phase Commit in Transaction
+* Allow Report to generate text plain, XML, HTML and XHTML
+* Add workflow graph on ir.model
+* Add context model on ir.action.act_window
+* Switch to WSGI API
 * Limit the login size in LoginAttempt
-
-Version 3.8.3 - 2016-02-06
-* Bug fixes (see mercurial logs for details)
+* Remove LocalDict from tools
+* Add LRUDictTransaction
+* Follow PEP-0249 for Database, Transaction and Cursor
+* Add Python3 support
+* Make TestCase create and drop its database
+* Add with_transaction decorator for tests
+* Add note on resources
+* Add 'where' operator for xxx2many fields
 * Strip and unquote double-quote from Postgresql schema in search_path
+* Move webdav into a separate module
 * Don't read historized user when evaluating record rules as it could lead to
   past privilege escalation.
-
-Version 3.8.2 - 2016-01-11
-* Bug fixes (see mercurial logs for details)
-
-Version 3.8.1 - 2015-12-16
-* Bug fixes (see mercurial logs for details)
+* Only rebuild mptt tree if left or right values have their default values
+* Allow nested inherited view
+* Add button on cron to run once
 * Check all fields when writing a sequence of records, values (CVE-2015-0861)
+* Add view_ids on tree view
+* Add parent_of operator
+* Enforce type of inheriting view
+* Use instance context in translated descriptor of Selection
 
 Version 3.8.0 - 2015-11-02
 * Bug fixes (see mercurial logs for details)

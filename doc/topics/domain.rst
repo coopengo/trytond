@@ -227,4 +227,30 @@ pattern, unless otherwise noted::
     Is a parent child comparison operator. It is the negation of the
     `child_of`_ operator.
 
+``parent_of``
+-------------
 
+    Is a parent child comparison operator. It is the same as `child_of`_
+    operator but if ``<field name>`` is a parent of ``<operand>``.
+
+``not parent_of``
+-----------------
+
+    Is a parent child comparison operator. it is the negation of this
+    `parent_of`_ operator.
+
+``where``
+---------
+
+    Is a :class:`trytond.model.fields.One2Many` /
+    :class:`trytond.model.fields.Many2Many` domain operator. It returns true
+    for every row of the target model that match the domain specified as
+    ``<operand>``.
+
+``not where``
+-------------
+
+    Is a :class:`trytond.model.fields.One2Many` /
+    :class:`trytond.model.fields.Many2Many` domain operator. It returns true
+    for every row of the target model that does not match the domain specified
+    as ``<operand>``.

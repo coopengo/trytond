@@ -43,7 +43,7 @@ class MenuitemTagHandler:
         self.xml_id = None
 
     def startElement(self, name, attributes):
-        cursor = Transaction().cursor
+        cursor = Transaction().connection.cursor()
 
         values = {}
 
@@ -354,7 +354,7 @@ class Fs2bdAccessor:
         models = Model.browse(ids)
         for model in models:
             if model.id in self.browserecord[module][model_name]:
-                for cache in Transaction().cursor.cache.values():
+                for cache in Transaction().cache.values():
                     for cache in (cache, cache.get('_language_cache',
                                 {}).values()):
                         if (model_name in cache
@@ -460,8 +460,6 @@ class TrytondXmlHandler(sax.handler.ContentHandler):
 
             if name in self.taghandlerlist:
                 self.taghandler = self.taghandlerlist[name]
-                self.taghandler.startElement(name, attributes)
-
             elif name == "data":
                 self.noupdate = bool(int(attributes.get("noupdate", '0')))
                 self.grouped = bool(int(attributes.get('grouped', 0)))
@@ -482,7 +480,7 @@ class TrytondXmlHandler(sax.handler.ContentHandler):
             else:
                 logger.info("Tag %s not supported", (name,))
                 return
-        elif not self.skip_data:
+        if self.taghandler and not self.skip_data:
             self.taghandler.startElement(name, attributes)
 
     def characters(self, data):
@@ -604,7 +602,7 @@ class TrytondXmlHandler(sax.handler.ContentHandler):
                 old_values = self.ModelData.load_values(old_values)
 
             for key in old_values:
-                if isinstance(old_values[key], str):
+                if isinstance(old_values[key], bytes):
                     # Fix for migration to unicode
                     old_values[key] = old_values[key].decode('utf-8')
 
@@ -644,7 +642,7 @@ class TrytondXmlHandler(sax.handler.ContentHandler):
 
                 # if the fs value is the same has in the db, whe ignore it
                 val = values[key]
-                if isinstance(values[key], str):
+                if isinstance(values[key], bytes):
                     # Fix for migration to unicode
                     val = values[key].decode('utf-8')
                 if db_field == val:
@@ -783,7 +781,7 @@ def post_import(pool, module, to_delete):
     """
     Remove the records that are given in to_delete.
     """
-    cursor = Transaction().cursor
+    transaction = Transaction()
     mdata_delete = []
     ModelData = pool.get("ir.model.data")
 
@@ -810,9 +808,9 @@ def post_import(pool, module, to_delete):
                 logger.warning(
                     'Could not delete id %d of model %s because model no '
                     'longer exists.', db_id, model)
-            cursor.commit()
+            transaction.commit()
         except Exception:
-            cursor.rollback()
+            transaction.rollback()
             logger.error(
                 'Could not delete id: %d of model %s\n'
                 'There should be some relation '
@@ -826,7 +824,7 @@ def post_import(pool, module, to_delete):
                             'active': False,
                             })
                 except Exception:
-                    cursor.rollback()
+                    transaction.rollback()
                     logger.error(
                         'Could not inactivate id: %d of model %s\n',
                         db_id, model, exc_info=True)
@@ -834,6 +832,6 @@ def post_import(pool, module, to_delete):
     # Clean model_data:
     if mdata_delete:
         ModelData.delete(mdata_delete)
-        cursor.commit()
+        transaction.commit()
 
     return True

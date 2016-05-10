@@ -113,9 +113,9 @@ class User(ModelSQL, ModelView):
     @classmethod
     def __register__(cls, module_name):
         TableHandler = backend.get('TableHandler')
-        cursor = Transaction().cursor
+        cursor = Transaction().connection.cursor()
         super(User, cls).__register__(module_name)
-        table = TableHandler(cursor, cls, module_name)
+        table = TableHandler(cls, module_name)
 
         # Migration from 1.6
 
@@ -244,7 +244,7 @@ class User(ModelSQL, ModelView):
             args.extend((users, cls._convert_vals(values)))
         super(User, cls).write(*args)
         # Clean cursor cache as it could be filled by domain_get
-        for cache in Transaction().cursor.cache.itervalues():
+        for cache in Transaction().cache.itervalues():
             if cls.__name__ in cache:
                 for user in all_users:
                     if user.id in cache[cls.__name__]:
@@ -451,7 +451,7 @@ class User(ModelSQL, ModelView):
         result = cls._get_login_cache.get(login)
         if result:
             return result
-        cursor = Transaction().cursor
+        cursor = Transaction().connection.cursor()
         table = cls.__table__()
         cursor.execute(*table.select(table.id, table.password_hash,
                 where=(table.login == login) & (table.active == True)))
@@ -495,20 +495,21 @@ class User(ModelSQL, ModelView):
 
     @classmethod
     def hash_sha1(cls, password):
-        if isinstance(password, unicode):
-            password = password.encode('utf-8')
         salt = ''.join(random.sample(string.ascii_letters + string.digits, 8))
-        hash_ = hashlib.sha1(password + salt).hexdigest()
+        salted_password = password + salt
+        if isinstance(salted_password, unicode):
+            salted_password = salted_password.encode('utf-8')
+        hash_ = hashlib.sha1(salted_password).hexdigest()
         return '$'.join(['sha1', hash_, salt])
 
     @classmethod
     def check_sha1(cls, password, hash_):
         if isinstance(password, unicode):
             password = password.encode('utf-8')
-        if isinstance(hash_, unicode):
-            hash_ = hash_.encode('utf-8')
         hash_method, hash_, salt = hash_.split('$', 2)
         salt = salt or ''
+        if isinstance(salt, unicode):
+            salt = salt.encode('utf-8')
         assert hash_method == 'sha1'
         return hash_ == hashlib.sha1(password + salt).hexdigest()
 
@@ -516,16 +517,16 @@ class User(ModelSQL, ModelView):
     def hash_bcrypt(cls, password):
         if isinstance(password, unicode):
             password = password.encode('utf-8')
-        hash_ = bcrypt.hashpw(password, bcrypt.gensalt())
+        hash_ = bcrypt.hashpw(password, bcrypt.gensalt()).decode('utf-8')
         return '$'.join(['bcrypt', hash_])
 
     @classmethod
     def check_bcrypt(cls, password, hash_):
         if isinstance(password, unicode):
             password = password.encode('utf-8')
+        hash_method, hash_ = hash_.split('$', 1)
         if isinstance(hash_, unicode):
             hash_ = hash_.encode('utf-8')
-        hash_method, hash_ = hash_.split('$', 1)
         assert hash_method == 'bcrypt'
         return hash_ == bcrypt.hashpw(password, hash_)
 
@@ -543,7 +544,7 @@ class LoginAttempt(ModelSQL):
     def __register__(cls, module_name):
         TableHandler = backend.get('TableHandler')
         super(LoginAttempt, cls).__register__(module_name)
-        table = TableHandler(Transaction().cursor, cls, module_name)
+        table = TableHandler(cls, module_name)
 
         # Migration from 2.8: remove user
         table.drop_column('user')
@@ -562,22 +563,23 @@ class LoginAttempt(ModelSQL):
     @classmethod
     @_login_size
     def add(cls, login):
-        cls.delete(cls.search([
-                    ('create_date', '<', cls.delay()),
-                    ]))
+        cursor = Transaction().connection.cursor()
+        table = cls.__table__()
+        cursor.execute(*table.delete(where=table.create_date < cls.delay()))
+
         cls.create([{'login': login}])
 
     @classmethod
     @_login_size
     def remove(cls, login):
-        cursor = Transaction().cursor
+        cursor = Transaction().connection.cursor()
         table = cls.__table__()
         cursor.execute(*table.delete(where=table.login == login))
 
     @classmethod
     @_login_size
     def count(cls, login):
-        cursor = Transaction().cursor
+        cursor = Transaction().connection.cursor()
         table = cls.__table__()
         cursor.execute(*table.select(Count(Literal(1)),
                 where=(table.login == login)
@@ -629,13 +631,12 @@ class UserGroup(ModelSQL):
     @classmethod
     def __register__(cls, module_name):
         TableHandler = backend.get('TableHandler')
-        cursor = Transaction().cursor
         # Migration from 1.0 table name change
-        TableHandler.table_rename(cursor, 'res_group_user_rel', cls._table)
-        TableHandler.sequence_rename(cursor, 'res_group_user_rel_id_seq',
+        TableHandler.table_rename('res_group_user_rel', cls._table)
+        TableHandler.sequence_rename('res_group_user_rel_id_seq',
             cls._table + '_id_seq')
         # Migration from 2.0 uid and gid rename into user and group
-        table = TableHandler(cursor, cls, module_name)
+        table = TableHandler(cls, module_name)
         table.column_rename('uid', 'user')
         table.column_rename('gid', 'group')
         super(UserGroup, cls).__register__(module_name)

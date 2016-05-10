@@ -1,8 +1,11 @@
+# This file is part of Tryton.  The COPYRIGHT file at the top level of
+# this repository contains the full copyright notices and license terms.
 from sql.conditionals import Coalesce
 
 from ..model import ModelSQL, ModelView, fields
 from ..pool import Pool
 from ..transaction import Transaction
+from ..pyson import Eval
 
 __all__ = ['ResourceMixin']
 
@@ -11,9 +14,15 @@ class ResourceMixin(ModelSQL, ModelView):
 
     resource = fields.Reference('Resource', selection='get_models',
         required=True, select=True)
-    last_user = fields.Function(fields.Char('Last User'),
+    last_user = fields.Function(fields.Char('Last User',
+            states={
+                'invisible': ~Eval('last_user'),
+                }),
         'get_last_user')
-    last_modification = fields.Function(fields.DateTime('Last Modification'),
+    last_modification = fields.Function(fields.DateTime('Last Modification',
+            states={
+                'invisible': ~Eval('last_modification'),
+                }),
         'get_last_modification')
 
     @classmethod

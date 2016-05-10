@@ -1,6 +1,7 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
 import unittest
+from mock import Mock
 from trytond.tests.test_tryton import DB_NAME, USER, CONTEXT, install_module
 from trytond.transaction import Transaction
 
@@ -16,24 +17,14 @@ def empty_transaction(*args, **kwargs):
         return True
 
 
-def manipulate_cursor(*args, **kwargs):
-    '''
-    Just start a transaction in the context manager and close the cursor
-    during the transaction so that the cursor.close in the stop fails
-    '''
-    with Transaction().start(*args, **kwargs) as transaction:
-        transaction.cursor.close()
-        transaction.cursor = None
-        return True
-
-
 class TransactionTestCase(unittest.TestCase):
     'Test the Transaction Context manager'
 
-    def setUp(self):
+    @classmethod
+    def setUpClass(cls):
         install_module('tests')
 
-    def test0010nonexistdb(self):
+    def test_nonexistdb(self):
         '''Attempt opening a transaction with a non existant DB
         and ensure that it stops cleanly and allows starting of next
         transaction'''
@@ -42,15 +33,7 @@ class TransactionTestCase(unittest.TestCase):
             context=CONTEXT)
         self.assertTrue(empty_transaction(DB_NAME, USER, context=CONTEXT))
 
-    def test0020cursorclose(self):
-        '''Manipulate the cursor during the transaction so that
-        the close in transaction stop fails.
-        Ensure that this does not affect opening of another transaction'''
-        self.assertRaises(
-            Exception, manipulate_cursor, DB_NAME, USER, context=CONTEXT)
-        self.assertTrue(empty_transaction(DB_NAME, USER, context=CONTEXT))
-
-    def test0030set_user(self):
+    def test_set_user(self):
         'Test set_user'
         with Transaction().start(DB_NAME, USER, context=CONTEXT) \
                 as transaction:
@@ -82,6 +65,61 @@ class TransactionTestCase(unittest.TestCase):
             # not set context for non root
             with Transaction().set_user(2):
                 self.assertEqual(transaction.user, 2)
+
+    def test_stacked_transactions(self):
+        'Test that transactions are stacked / unstacked correctly'
+        with Transaction().start(DB_NAME, USER, context=CONTEXT) \
+                as transaction:
+            with transaction.new_transaction() as new_transaction:
+                self.assertIsNot(new_transaction, transaction)
+                self.assertIsNot(Transaction(), transaction)
+                self.assertIs(Transaction(), new_transaction)
+            self.assertIs(Transaction(), transaction)
+
+    def test_two_phase_commit(self):
+        # A successful transaction
+        dm = Mock()
+        with Transaction().start(DB_NAME, USER, context=CONTEXT) \
+                as transaction:
+            transaction.join(dm)
+
+        dm.tpc_begin.assert_called_once_with(transaction)
+        dm.commit.assert_called_once_with(transaction)
+        dm.tpc_vote.assert_called_once_with(transaction)
+        dm.tpc_abort.not_called()
+        dm.tpc_finish.assert_called_once_with(transaction)
+
+        # Failing in the datamanager
+        dm.reset_mock()
+        dm.tpc_vote.side_effect = ValueError('Failing the datamanager')
+        try:
+            with Transaction().start(DB_NAME, USER, context=CONTEXT) \
+                    as transaction:
+                transaction.join(dm)
+        except ValueError:
+            pass
+
+        dm.tpc_begin.assert_called_once_with(transaction)
+        dm.commit.assert_called_once_with(transaction)
+        dm.tpc_vote.assert_called_once_with(transaction)
+        dm.tpc_abort.assert_called_once_with(transaction)
+        dm.tpc_finish.assert_not_called()
+
+        # Failing in tryton
+        dm.reset_mock()
+        try:
+            with Transaction().start(DB_NAME, USER, context=CONTEXT) \
+                    as transaction:
+                transaction.join(dm)
+                raise ValueError('Failing in tryton')
+        except ValueError:
+            pass
+
+        dm.tpc_begin.assert_not_called()
+        dm.commit.assert_not_called()
+        dm.tpc_vote.assert_not_called()
+        dm.tpc_abort.assert_called_once_with(transaction)
+        dm.tpc_finish.assert_not_called()
 
 
 def suite():

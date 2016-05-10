@@ -13,7 +13,7 @@ from sql.aggregate import Count, Max
 from trytond.model import ModelStorage, ModelView
 from trytond.model import fields
 from trytond import backend
-from trytond.tools import reduce_ids, grouped_slice
+from trytond.tools import reduce_ids, grouped_slice, cursor_dict
 from trytond.const import OPERATORS
 from trytond.transaction import Transaction
 from trytond.pool import Pool
@@ -126,6 +126,8 @@ class ModelSQL(ModelStorage):
 
     @classmethod
     def __register__(cls, module_name):
+        sql_table = cls.__table__()
+        cursor = Transaction().connection.cursor()
         TableHandler = backend.get('TableHandler')
         super(ModelSQL, cls).__register__(module_name)
 
@@ -135,10 +137,9 @@ class ModelSQL(ModelStorage):
         pool = Pool()
 
         # create/update table in the database
-        table = TableHandler(Transaction().cursor, cls, module_name)
+        table = TableHandler(cls, module_name)
         if cls._history:
-            history_table = TableHandler(Transaction().cursor, cls,
-                    module_name, history=True)
+            history_table = TableHandler(cls, module_name, history=True)
             history_table.index_action('id', action='add')
 
         for field_name, field in cls._fields.iteritems():
@@ -205,17 +206,24 @@ class ModelSQL(ModelStorage):
             if isinstance(field, fields.Many2One) \
                     and field.model_name == cls.__name__ \
                     and field.left and field.right:
-                cls._rebuild_tree(field_name, None, 0)
+                left_default = cls._defaults.get(field.left, lambda: None)()
+                right_default = cls._defaults.get(field.right, lambda: None)()
+                cursor.execute(*sql_table.select(sql_table.id,
+                        where=(Column(sql_table, field.left) == left_default)
+                        | (Column(sql_table, field.left) == Null)
+                        | (Column(sql_table, field.right) == right_default)
+                        | (Column(sql_table, field.right) == Null),
+                        limit=1))
+                if cursor.fetchone():
+                    cls._rebuild_tree(field_name, None, 0)
 
         for ident, constraint, _ in cls._sql_constraints:
             table.add_constraint(ident, constraint)
 
         if cls._history:
             cls._update_history_table()
-            cursor = Transaction().cursor
-            table = cls.__table__()
             history_table = cls.__table_history__()
-            cursor.execute(*table.select(table.id))
+            cursor.execute(*sql_table.select(sql_table.id))
             if cursor.fetchone():
                 cursor.execute(*history_table.select(history_table.id))
                 if not cursor.fetchone():
@@ -223,7 +231,7 @@ class ModelSQL(ModelStorage):
                         if not hasattr(f, 'set')]
                     cursor.execute(*history_table.insert(
                             [Column(history_table, c) for c in columns],
-                            table.select(*(Column(table, c)
+                            sql_table.select(*(Column(sql_table, c)
                                     for c in columns))))
                     cursor.execute(*history_table.update(
                             [history_table.write_date], [None]))
@@ -232,9 +240,8 @@ class ModelSQL(ModelStorage):
     def _update_history_table(cls):
         TableHandler = backend.get('TableHandler')
         if cls._history:
-            table = TableHandler(Transaction().cursor, cls)
-            history_table = TableHandler(Transaction().cursor, cls,
-                    history=True)
+            table = TableHandler(cls)
+            history_table = TableHandler(cls, history=True)
             for column_name in table._columns:
                 string = ''
                 if column_name in cls._fields:
@@ -289,10 +296,10 @@ class ModelSQL(ModelStorage):
                     cls.raise_user_error('foreign_model_missing',
                         error_args=error_args)
         for name, _, error in cls._sql_constraints:
-            if name in str(exception[0]):
+            if name in str(exception):
                 cls.raise_user_error(error)
         for name, error in cls._sql_error_messages.iteritems():
-            if name in str(exception[0]):
+            if name in str(exception):
                 cls.raise_user_error(error)
 
     @classmethod
@@ -300,7 +307,7 @@ class ModelSQL(ModelStorage):
         pool = Pool()
         ModelAccess = pool.get('ir.model.access')
         User = pool.get('res.user')
-        cursor = Transaction().cursor
+        cursor = Transaction().connection.cursor()
 
         ModelAccess.check(cls.__name__, 'read')
 
@@ -330,7 +337,7 @@ class ModelSQL(ModelStorage):
     @classmethod
     def __insert_history(cls, ids, deleted=False):
         transaction = Transaction()
-        cursor = transaction.cursor
+        cursor = transaction.connection.cursor()
         if not cls._history:
             return
         user = transaction.user
@@ -357,7 +364,7 @@ class ModelSQL(ModelStorage):
                 cursor.execute(*history.insert(hcolumns,
                         table.select(*columns, where=where)))
             else:
-                if cursor.has_multirow_insert():
+                if transaction.database.has_multirow_insert():
                     cursor.execute(*history.insert(hcolumns,
                             [[id_, CurrentTimestamp(), user]
                                 for id_ in sub_ids]))
@@ -371,7 +378,7 @@ class ModelSQL(ModelStorage):
         if not cls._history:
             return
         transaction = Transaction()
-        cursor = transaction.cursor
+        cursor = transaction.connection.cursor()
         table = cls.__table__()
         history = cls.__table_history__()
         columns = []
@@ -440,7 +447,7 @@ class ModelSQL(ModelStorage):
     @classmethod
     def __check_timestamp(cls, ids):
         transaction = Transaction()
-        cursor = transaction.cursor
+        cursor = transaction.connection.cursor()
         table = cls.__table__()
         if not transaction.timestamp:
             return
@@ -467,7 +474,7 @@ class ModelSQL(ModelStorage):
     def create(cls, vlist):
         DatabaseIntegrityError = backend.get('DatabaseIntegrityError')
         transaction = Transaction()
-        cursor = transaction.cursor
+        cursor = transaction.connection.cursor()
         pool = Pool()
         Translation = pool.get('ir.translation')
         Rule = pool.get('ir.rule')
@@ -479,6 +486,7 @@ class ModelSQL(ModelStorage):
 
         table = cls.__table__()
         modified_fields = set()
+        defaults_cache = {}  # Store already computed default values
         new_ids = []
         vlist = [v.copy() for v in vlist]
         for values in vlist:
@@ -495,11 +503,16 @@ class ModelSQL(ModelStorage):
                 if (f not in values
                         and f not in ('create_uid', 'create_date',
                             'write_uid', 'write_date', 'id')):
-                    default.append(f)
+                    if f in defaults_cache:
+                        values[f] = defaults_cache[f]
+                    else:
+                        default.append(f)
 
             if default:
                 defaults = cls.default_get(default, with_rec_name=False)
-                values.update(cls._clean_defaults(defaults))
+                defaults = cls._clean_defaults(defaults)
+                values.update(defaults)
+                defaults_cache.update(defaults)
 
             insert_columns = [table.create_uid, table.create_date]
             insert_values = [transaction.user, CurrentTimestamp()]
@@ -512,12 +525,13 @@ class ModelSQL(ModelStorage):
                     insert_values.append(field.sql_format(value))
 
             try:
-                if cursor.has_returning():
+                if transaction.database.has_returning():
                     cursor.execute(*table.insert(insert_columns,
                             [insert_values], [table.id]))
                     id_new, = cursor.fetchone()
                 else:
-                    id_new = cursor.nextid(cls._table)
+                    id_new = transaction.database.nextid(
+                        transaction.connection, cls._table)
                     if id_new:
                         insert_columns.append(table.id)
                         insert_values.append(id_new)
@@ -526,10 +540,10 @@ class ModelSQL(ModelStorage):
                     else:
                         cursor.execute(*table.insert(insert_columns,
                                 [insert_values]))
-                        id_new = cursor.lastid()
+                        id_new = transaction.database.lastid(cursor)
                 new_ids.append(id_new)
             except DatabaseIntegrityError, exception:
-                with Transaction().new_cursor(), \
+                with Transaction().new_transaction(), \
                         Transaction().set_context(_check_access=False):
                     cls.__raise_integrity_error(exception, values)
                 raise
@@ -562,8 +576,14 @@ class ModelSQL(ModelStorage):
                     translation_values.setdefault(
                         '%s,%s' % (cls.__name__, fname), {})[new_id] = value
                 if hasattr(field, 'set'):
-                    fields_to_set.setdefault(fname, []).extend(
-                        ([new_id], value))
+                    args = fields_to_set.setdefault(fname, [])
+                    actions = iter(args)
+                    for ids, val in zip(actions, actions):
+                        if val == value:
+                            ids.append(new_id)
+                            break
+                    else:
+                        args.extend(([new_id], value))
 
         if translation_values:
             for name, translations in translation_values.iteritems():
@@ -599,7 +619,8 @@ class ModelSQL(ModelStorage):
                         mode='read'):
                     fields_names.append(field_name)
         super(ModelSQL, cls).read(ids, fields_names=fields_names)
-        cursor = Transaction().cursor
+        transaction = Transaction()
+        cursor = Transaction().connection.cursor()
 
         if not ids:
             return []
@@ -625,12 +646,12 @@ class ModelSQL(ModelStorage):
         table = cls.__table__()
         table_query = cls.table_query()
 
-        in_max = cursor.IN_MAX
+        in_max = transaction.database.IN_MAX
         history_order = None
         history_clause = None
         history_limit = None
         if (cls._history
-                and Transaction().context.get('_datetime')
+                and transaction.context.get('_datetime')
                 and not table_query):
             in_max = 1
             table = cls.__table_history__()
@@ -672,8 +693,8 @@ class ModelSQL(ModelStorage):
                     where &= dom_exp
                 cursor.execute(*from_.select(*columns, where=where,
                         order_by=history_order, limit=history_limit))
-                dictfetchall = cursor.dictfetchall()
-                if not len(dictfetchall) == len({}.fromkeys(sub_ids)):
+                fetchall = list(cursor_dict(cursor))
+                if not len(fetchall) == len({}.fromkeys(sub_ids)):
                     if domain:
                         where = red_sql
                         if history_clause:
@@ -687,7 +708,7 @@ class ModelSQL(ModelStorage):
                         if rowcount == len({}.fromkeys(sub_ids)):
                             cls.raise_user_error('access_error', cls.__name__)
                     cls.raise_user_error('read_error', cls.__name__)
-                result.extend(dictfetchall)
+                result.extend(fetchall)
         else:
             result = [{'id': x} for x in ids]
 
@@ -829,7 +850,7 @@ class ModelSQL(ModelStorage):
     def write(cls, records, values, *args):
         DatabaseIntegrityError = backend.get('DatabaseIntegrityError')
         transaction = Transaction()
-        cursor = transaction.cursor
+        cursor = transaction.connection.cursor()
         pool = Pool()
         Translation = pool.get('ir.translation')
         Config = pool.get('ir.configuration')
@@ -906,8 +927,8 @@ class ModelSQL(ModelStorage):
                     cursor.execute(*table.update(columns, update_values,
                             where=red_sql))
                 except DatabaseIntegrityError, exception:
-                    with Transaction().new_cursor(), \
-                            Transaction().set_context(_check_access=False):
+                    with Transaction().new_transaction() as transaction, \
+                            transaction.set_context(_check_access=False):
                         cls.__raise_integrity_error(exception, values,
                             values.keys())
                     raise
@@ -939,7 +960,7 @@ class ModelSQL(ModelStorage):
     def delete(cls, records):
         DatabaseIntegrityError = backend.get('DatabaseIntegrityError')
         transaction = Transaction()
-        cursor = transaction.cursor
+        cursor = transaction.connection.cursor()
         pool = Pool()
         Translation = pool.get('ir.translation')
         Rule = pool.get('ir.rule')
@@ -1010,7 +1031,7 @@ class ModelSQL(ModelStorage):
                 if rowcount == -1 or rowcount is None:
                     rowcount = len(cursor.fetchall())
                 if not rowcount == len({}.fromkeys(sub_ids)):
-                    cls.raise_user_error('access_error', cls._get_name())
+                    cls.raise_user_error('access_error', cls.__name__)
 
         cls.trigger_delete(records)
 
@@ -1064,7 +1085,7 @@ class ModelSQL(ModelStorage):
             try:
                 cursor.execute(*table.delete(where=red_sql))
             except DatabaseIntegrityError, exception:
-                with Transaction().new_cursor():
+                with Transaction().new_transaction():
                     cls.__raise_integrity_error(exception, {})
                 raise
 
@@ -1080,7 +1101,7 @@ class ModelSQL(ModelStorage):
         pool = Pool()
         Rule = pool.get('ir.rule')
         transaction = Transaction()
-        cursor = transaction.cursor
+        cursor = transaction.connection.cursor()
 
         # Get domain clauses
         tables, expression = cls.search_domain(domain)
@@ -1140,8 +1161,8 @@ class ModelSQL(ModelStorage):
             return select
         cursor.execute(*select)
 
-        rows = cursor.dictfetchmany(cursor.IN_MAX)
-        cache = cursor.get_cache()
+        rows = list(cursor_dict(cursor, transaction.database.IN_MAX))
+        cache = transaction.get_cache()
         if cls.__name__ not in cache:
             cache[cls.__name__] = LRUDict(cache_size())
         delete_records = transaction.delete_records.setdefault(cls.__name__,
@@ -1194,7 +1215,7 @@ class ModelSQL(ModelStorage):
         # Can not cache the history value if we are not sure to have fetch all
         # the rows for each records
         if (not (cls._history and transaction.context.get('_datetime'))
-                or len(rows) < cursor.IN_MAX):
+                or len(rows) < transaction.database.IN_MAX):
             rows = list(filter_history(rows))
             keys = None
             for data in islice(rows, 0, cache.size_limit):
@@ -1214,9 +1235,9 @@ class ModelSQL(ModelStorage):
                     del data[k]
                 cache[cls.__name__].setdefault(data['id'], {}).update(data)
 
-        if len(rows) >= cursor.IN_MAX:
+        if len(rows) >= transaction.database.IN_MAX:
             if (cls._history
-                    and Transaction().context.get('_datetime')
+                    and transaction.context.get('_datetime')
                     and not query):
                 columns = columns[:3]
             else:
@@ -1224,7 +1245,7 @@ class ModelSQL(ModelStorage):
             cursor.execute(*table.select(*columns,
                     where=expression, order_by=order_by,
                     limit=limit, offset=offset))
-            rows = filter_history(cursor.dictfetchall())
+            rows = filter_history(list(cursor_dict(cursor)))
 
         return cls.browse([x['id'] for x in rows])
 
@@ -1280,8 +1301,7 @@ class ModelSQL(ModelStorage):
 
     @classmethod
     def _update_mptt(cls, field_names, list_ids, values=None):
-        cursor = Transaction().cursor
-        count = None
+        cursor = Transaction().connection.cursor()
         for field_name, ids in zip(field_names, list_ids):
             field = cls._fields[field_name]
             if (isinstance(field, fields.Many2One)
@@ -1305,11 +1325,7 @@ class ModelSQL(ModelStorage):
                         & (Column(parent, field.right) == 0)))
                 nested_create = cursor.fetchone()
 
-                if count is None:
-                    cursor.execute(*table.select(Count(Literal(1))))
-                    count, = cursor.fetchone()
-
-                if not nested_create and len(ids) < count / 4:
+                if not nested_create and len(ids) < 2:
                     for id_ in ids:
                         cls._update_tree(id_, field_name,
                             field.left, field.right)
@@ -1321,7 +1337,7 @@ class ModelSQL(ModelStorage):
         '''
         Rebuild left, right value for the tree.
         '''
-        cursor = Transaction().cursor
+        cursor = Transaction().connection.cursor()
         table = cls.__table__()
         right = left + 1
 
@@ -1349,7 +1365,7 @@ class ModelSQL(ModelStorage):
             - the value (right - left - 1) / 2 will not give
                 the number of children node
         '''
-        cursor = Transaction().cursor
+        cursor = Transaction().connection.cursor()
         table = cls.__table__()
         left = Column(table, left)
         right = Column(table, right)
@@ -1403,8 +1419,9 @@ class ModelSQL(ModelStorage):
     @classmethod
     def validate(cls, records):
         super(ModelSQL, cls).validate(records)
-        cursor = Transaction().cursor
-        if cursor.has_constraint():
+        transaction = Transaction()
+        cursor = transaction.connection.cursor()
+        if transaction.database.has_constraint():
             return
         # Works only for a single transaction
         ids = map(int, records)
@@ -1413,7 +1430,7 @@ class ModelSQL(ModelStorage):
             if isinstance(sql, Unique):
                 columns = [Column(table, c.name) for c in sql.columns]
                 columns.insert(0, table.id)
-                in_max = cursor.IN_MAX / (len(columns) + 1)
+                in_max = transaction.database.IN_MAX // (len(columns) + 1)
                 for sub_ids in grouped_slice(ids, in_max):
                     red_sql = reduce_ids(table.id, sub_ids)
 

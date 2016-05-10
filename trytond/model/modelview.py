@@ -25,20 +25,18 @@ def _find(tree, element):
     return None
 
 
-def _inherit_apply(src, inherit):
-    tree_src = etree.fromstring(src)
-    tree_inherit = etree.fromstring(inherit)
-    root_inherit = tree_inherit.getroottree().getroot()
+def _inherit_apply(tree, inherit):
+    root_inherit = inherit.getroottree().getroot()
     for element2 in root_inherit:
         if element2.tag != 'xpath':
             continue
-        element = _find(tree_src, element2)
+        element = _find(tree, element2)
         if element is not None:
             pos = element2.get('position', 'inside')
             if pos == 'replace':
                 parent = element.getparent()
                 if parent is None:
-                    tree_src, = element2
+                    tree, = element2
                     continue
                 enext = element.getnext()
                 if enext is not None:
@@ -75,7 +73,7 @@ def _inherit_apply(src, inherit):
             raise AttributeError(
                 'Couldn\'t find tag (%s: %s) in parent view!'
                 % (element2.tag, element2.get('expr')))
-    return etree.tostring(tree_src, encoding='utf-8')
+    return tree
 
 
 def on_change(func):
@@ -243,13 +241,13 @@ class ModelView(Model):
         else:
             domain = [
                 ('model', '=', cls.__name__),
-                ('type', '=', view_type),
                 ['OR',
                     ('inherit', '=', None),
                     ('inherit.model', '!=', cls.__name__),
                     ],
                 ]
             views = View.search(domain)
+            views = filter(lambda v: v.rng_type == view_type, views)
             if views:
                 view = views[0]
         if view:
@@ -260,7 +258,7 @@ class ModelView(Model):
 
         # if a view was found
         if view:
-            result['type'] = view.type
+            result['type'] = view.rng_type
             result['view_id'] = view_id
             result['arch'] = view.arch
             result['field_childs'] = view.field_childs
@@ -294,6 +292,8 @@ class ModelView(Model):
                     # There is perhaps a new module in the directory
                     ModelView._reset_modules_list()
                     raise_p = True
+            parser = etree.XMLParser(remove_comments=True)
+            tree = etree.fromstring(result['arch'], parser=parser)
             for view in views:
                 if view.domain:
                     if not PYSONDecoder({'context': Transaction().context}
@@ -301,7 +301,10 @@ class ModelView(Model):
                         continue
                 if not view.arch or not view.arch.strip():
                     continue
-                result['arch'] = _inherit_apply(result['arch'], view.arch)
+                tree_inherit = etree.fromstring(view.arch, parser=parser)
+                tree = _inherit_apply(tree, tree_inherit)
+            result['arch'] = etree.tostring(
+                tree, encoding='utf-8').decode('utf-8')
 
         # otherwise, build some kind of default view
         else:
@@ -485,7 +488,8 @@ class ModelView(Model):
         if 'active' in cls._fields:
             fields_def.setdefault('active', {'name': 'active'})
 
-        arch = etree.tostring(tree, encoding='utf-8', pretty_print=False)
+        arch = etree.tostring(
+            tree, encoding='utf-8', pretty_print=False).decode('utf-8')
         fields2 = cls.fields_get(fields_def.keys())
         for field in fields_def:
             if field in fields2:
@@ -507,62 +511,67 @@ class ModelView(Model):
             fields_attrs = {}
         else:
             fields_attrs = copy.deepcopy(fields_attrs)
-        childs = True
 
-        if element.tag in ('field', 'label', 'separator', 'group', 'suffix',
-                'prefix'):
-            for attr in ('name', 'icon'):
-                if element.get(attr):
-                    fields_attrs.setdefault(element.get(attr), {})
-                    if type != 'form':
-                        continue
+        def set_view_ids(element):
+            view_ids = []
+            if element.get('view_ids'):
+                for view_id in element.get('view_ids').split(','):
                     try:
-                        field = cls._fields[element.get(attr)]
-                        if hasattr(field, 'model_name'):
-                            relation = field.model_name
-                        else:
-                            relation = field.get_target().__name__
-                    except Exception:
-                        relation = False
-                    if element.get('relation'):
-                        relation = element.get('relation')
-                    if relation and element.tag == 'field':
-                        childs = False
-                        views = {}
-                        mode = (element.attrib.pop('mode', None)
-                            or 'tree,form').split(',')
-                        view_ids = []
-                        if element.get('view_ids'):
-                            for view_id in element.get('view_ids').split(','):
-                                try:
-                                    view_ids.append(int(view_id))
-                                except ValueError:
-                                    view_ids.append(ModelData.get_id(
-                                            *view_id.split('.')))
-                        Relation = pool.get(relation)
-                        if (not len(element)
-                                and type == 'form'
-                                and field._type in ('one2many', 'many2many')):
-                            # Prefetch only the first view to prevent infinite
-                            # loop
-                            if view_ids:
-                                for view_id in view_ids:
-                                    view = Relation.fields_view_get(
-                                        view_id=view_id)
-                                    views[str(view_id)] = view
-                                    break
-                            else:
-                                for view_type in mode:
-                                    views[view_type] = \
-                                        Relation.fields_view_get(
-                                            view_type=view_type)
-                                    break
-                        element.attrib['mode'] = ','.join(mode)
-                        element.attrib['view_ids'] = ','.join(
-                            map(str, view_ids))
-                        if not element.get('relation'):
-                            fields_attrs[element.get(attr)].setdefault('views',
-                                {}).update(views)
+                        view_ids.append(int(view_id))
+                    except ValueError:
+                        view_ids.append(ModelData.get_id(*view_id.split('.')))
+                element.attrib['view_ids'] = ','.join(map(str, view_ids))
+            return view_ids
+
+        def get_relation(field):
+            if hasattr(field, 'model_name'):
+                return field.model_name
+            elif hasattr(field, 'get_target'):
+                return field.get_target().__name__
+
+        def get_views(relation, view_ids, mode):
+            Relation = pool.get(relation)
+            views = {}
+            if field._type in ['one2many', 'many2many']:
+                # Prefetch only the first view to prevent infinite loop
+                if view_ids:
+                    for view_id in view_ids:
+                        view = Relation.fields_view_get(view_id=view_id)
+                        views[str(view_id)] = view
+                        break
+                else:
+                    for view_type in mode:
+                        views[view_type] = (
+                            Relation.fields_view_get(view_type=view_type))
+                        break
+            return views
+
+        for attr in ('name', 'icon'):
+            if not element.get(attr):
+                continue
+            fields_attrs.setdefault(element.get(attr), {})
+
+        if element.tag == 'field' and type in ['tree', 'form']:
+            for attr in ('name', 'icon'):
+                fname = element.get(attr)
+                if not fname:
+                    continue
+                view_ids = set_view_ids(element)
+                if type != 'form':
+                    continue
+                field = cls._fields[fname]
+                relation = get_relation(field)
+                if element.get('relation'):
+                    relation = element.get('relation')
+                if not relation:
+                    continue
+                mode = (
+                    element.attrib.pop('mode', None) or 'tree,form').split(',')
+                views = get_views(relation, view_ids, mode)
+                element.attrib['mode'] = ','.join(mode)
+                if not element.get('relation'):
+                    fields_attrs[fname].setdefault('views', {}).update(views)
+
             if type == 'tree' and element.get('name') in fields_width:
                 element.set('width', str(fields_width[element.get('name')]))
 
@@ -610,10 +619,9 @@ class ModelView(Model):
                 if element.get(attr):
                     fields_attrs.setdefault(element.get(attr), {})
 
-        if childs:
-            for field in element:
-                fields_attrs = cls.__view_look_dom(field, type,
-                    fields_width=fields_width, fields_attrs=fields_attrs)
+        for field in element:
+            fields_attrs = cls.__view_look_dom(field, type,
+                fields_width=fields_width, fields_attrs=fields_attrs)
         return fields_attrs
 
     @staticmethod

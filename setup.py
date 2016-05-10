@@ -5,11 +5,14 @@
 from setuptools import setup, find_packages
 import os
 import re
+import io
 import platform
 
 
 def read(fname):
-    return open(os.path.join(os.path.dirname(__file__), fname)).read()
+    return io.open(
+        os.path.join(os.path.dirname(__file__), fname),
+        'r', encoding='utf-8').read()
 
 
 def get_version():
@@ -32,7 +35,7 @@ if minor_version % 2:
 if platform.python_implementation() == 'PyPy':
     pg_require = ['psycopg2cffi >= 2.5']
 else:
-    pg_require = ['psycopg2 >= 2.0']
+    pg_require = ['psycopg2 >= 2.5']
 
 setup(name=name,
     version=version,
@@ -54,10 +57,9 @@ setup(name=name,
         'trytond.ir.module': ['*.xml'],
         'trytond.ir.ui': ['*.xml', '*.rng', '*.rnc'],
         'trytond.res': ['tryton.cfg', '*.xml', 'view/*.xml', 'locale/*.po'],
-        'trytond.webdav': ['tryton.cfg', '*.xml', 'view/*.xml', 'locale/*.po'],
         'trytond.tests': ['tryton.cfg', '*.xml'],
         },
-    scripts=['bin/trytond'],
+    scripts=['bin/trytond', 'bin/trytond-admin', 'bin/trytond-cron'],
     classifiers=[
         'Development Status :: 5 - Production/Stable',
         'Environment :: No Input/Output (Daemon)',
@@ -66,6 +68,7 @@ setup(name=name,
         'License :: OSI Approved :: GNU General Public License (GPL)',
         'Natural Language :: Bulgarian',
         'Natural Language :: Catalan',
+        'Natural Language :: Chinese (Simplified)',
         'Natural Language :: Czech',
         'Natural Language :: Dutch',
         'Natural Language :: English',
@@ -79,6 +82,9 @@ setup(name=name,
         'Natural Language :: Spanish',
         'Operating System :: OS Independent',
         'Programming Language :: Python :: 2.7',
+        'Programming Language :: Python :: 3.3',
+        'Programming Language :: Python :: 3.4',
+        'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: Implementation :: CPython',
         'Programming Language :: Python :: Implementation :: PyPy',
         'Topic :: Software Development :: Libraries :: Application Frameworks',
@@ -92,11 +98,12 @@ setup(name=name,
         'python-dateutil',
         'polib',
         'python-sql >= 0.4',
+        'werkzeug',
+        'wrapt',
         ],
     extras_require={
         'PostgreSQL': pg_require,
         'MySQL': ['MySQL-python'],
-        'WebDAV': ['PyWebDAV >= 0.9.8'],
         'unoconv': ['unoconv'],
         'graphviz': ['pydot'],
         'simplejson': ['simplejson'],
@@ -108,4 +115,5 @@ setup(name=name,
     test_suite='trytond.tests',
     test_loader='trytond.test_loader:Loader',
     tests_require=['mock'],
+    use_2to3=True,
     )

@@ -96,7 +96,6 @@ import cStringIO as StringIO
 import cProfile as Profile
 
 from trytond.config import config
-from trytond.transaction import Transaction
 
 logger = logging.getLogger(__name__)
 
@@ -200,7 +199,7 @@ class PerfLog(object):
     def _q_key(self):
         return 'q:%s' % self.session
 
-    def on_enter(self, user, session):
+    def on_enter(self, user, session, method):
         if self.broker is not None:
             if check_user(user.login):
                 self.dt = time.time()
@@ -214,6 +213,7 @@ class PerfLog(object):
                 self.broker.hsetnx(sess_key, 'first', dts)
                 self.broker.hset(sess_key, 'last', dts)
                 # method
+                self.method = method
                 self.broker.zincrby(self._meth_n_key(), self.method)
                 # call
                 self.id = id
@@ -290,15 +290,14 @@ def parse_query(sql):
     raise Exception('failed on: %s' % sql)
 
 
-def analyze_before(sql):
+def analyze_before(cursor):
     if PerfLog().is_active():
-        return time.time(),
+        return cursor, time.time()
 
 
-def analyze_after(start):
+def analyze_after(cursor, start):
     p = PerfLog()
     tm = time.time() - start
-    cursor = Transaction().cursor
     sql = cursor.query
     action, table = parse_query(sql)
     p.log_db(action, table, tm)
@@ -310,23 +309,6 @@ def analyze_after(start):
             count = 0
         bt = ''.join(traceback.format_stack()[-10:-2])
         p.log_query(action, table, tm, count, sql, bt)
-
-
-def analyze(func):
-    def wrap(self, sql, *args, **kwargs):
-        try:
-            context = analyze_before(sql)
-        except:
-            logger.exception('analyse_before failed')
-            context = None
-        ret = func(self, sql, *args, **kwargs)
-        if context is not None:
-            try:
-                analyze_after(*context)
-            except:
-                logger.exception('analyse_after failed')
-        return ret
-    return wrap
 
 
 def profile_before():

@@ -373,6 +373,11 @@ Binary
 
 A binary field. It will be represented in Python by a ``bytes`` instance.
 
+.. warning::
+    If the context contains a key composed of the model name and field name
+    separated by a dot and its value is the string `size` then the read value
+    is the size instead of the content.
+
 :class:`Binary` has one extra optional argument:
 
 .. attribute:: Binary.filename
@@ -404,8 +409,8 @@ A string field with limited values to choice.
     The first element in each tuple is the actual value stored. The second
     element is the human-readable name.
 
-    It can also be the name of a class method on the model, that will return an
-    appropriate list. The signature of the method is::
+    It can also be the name of a class or instance method on the model, that
+    will return an appropriate list. The signature of the method is::
 
         selection()
 
@@ -439,7 +444,8 @@ Instance methods:
 .. method:: Selection.translated([name])
 
     Returns a descriptor for the translated value of the field. The descriptor
-    must be used on the same class as the field.
+    must be used on the same class as the field. It will use the language
+    defined in the context of the instance accessed.
 
 Reference
 ---------
@@ -483,6 +489,9 @@ A many-to-one relation field.
     The name of the field that stores the left value for the `Modified Preorder
     Tree Traversal`_.
     It only works if the :attr:`model_name` is the same then the model.
+
+.. warning:: The MPTT Tree will be rebuild on database update if one record
+    is found having left or right field value equals to the default or NULL.
 
 .. _`Modified Preorder Tree Traversal`: http://en.wikipedia.org/wiki/Tree_traversal
 

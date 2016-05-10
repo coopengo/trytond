@@ -640,13 +640,15 @@ msgctxt "view:res.group:"
 msgid "Access Permissions"
 msgstr ""
 
+#, fuzzy
 msgctxt "view:res.group:"
 msgid "Group"
-msgstr ""
+msgstr "Grupo"
 
+#, fuzzy
 msgctxt "view:res.group:"
 msgid "Groups"
-msgstr ""
+msgstr "Grupos"
 
 msgctxt "view:res.group:"
 msgid "Members"
@@ -664,21 +666,24 @@ msgctxt "view:res.user.config.start:"
 msgid "You can now add some users into the system."
 msgstr ""
 
+#, fuzzy
 msgctxt "view:res.user.warning:"
 msgid "Warning"
-msgstr ""
+msgstr "Avisos"
 
+#, fuzzy
 msgctxt "view:res.user.warning:"
 msgid "Warnings"
-msgstr ""
+msgstr "Avisos"
 
 msgctxt "view:res.user:"
 msgid "Access Permissions"
 msgstr ""
 
+#, fuzzy
 msgctxt "view:res.user:"
 msgid "Actions"
-msgstr ""
+msgstr "Acciones"
 
 msgctxt "view:res.user:"
 msgid "Group Membership"
@@ -688,13 +693,15 @@ msgctxt "view:res.user:"
 msgid "Preferences"
 msgstr ""
 
+#, fuzzy
 msgctxt "view:res.user:"
 msgid "User"
-msgstr ""
+msgstr "Usuario"
 
+#, fuzzy
 msgctxt "view:res.user:"
 msgid "Users"
-msgstr ""
+msgstr "Usuarios"
 
 msgctxt "wizard_button:res.user.config,start,end:"
 msgid "Cancel"

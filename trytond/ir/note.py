@@ -1,13 +1,15 @@
+# This file is part of Tryton.  The COPYRIGHT file at the top level of
+# this repository contains the full copyright notices and license terms.
 from textwrap import TextWrapper
 
 from sql import Null
 from sql.conditionals import Case
 
-from ..model import ModelView, ModelSQL, fields
+from ..model import ModelView, ModelSQL, ModelStorage, fields
 from ..pool import Pool
 from ..transaction import Transaction
 from ..tools import grouped_slice, reduce_ids
-from ..pyson import If, Eval
+from ..pyson import Eval
 from .resource import ResourceMixin
 
 __all__ = ['Note', 'NoteRead']
@@ -23,12 +25,6 @@ class Note(ResourceMixin, ModelSQL, ModelView):
         'on_change_with_message_wrapped')
     unread = fields.Function(fields.Boolean('Unread'), 'get_unread',
         searcher='search_unread', setter='set_unread')
-    create_user = fields.Function(
-        fields.Char('User', readonly=True),
-        'get_create_user')
-    creation_date = fields.Function(
-        fields.DateTime('Creation Date', readonly=True),
-        'get_creation_date')
 
     @staticmethod
     def default_unread():
@@ -37,12 +33,6 @@ class Note(ResourceMixin, ModelSQL, ModelView):
     @classmethod
     def get_wrapper(cls):
         return TextWrapper(width=79)
-
-    def get_create_user(self, name):
-        return self.create_uid.rec_name
-
-    def get_creation_date(self, name):
-        return self.create_date.replace(microsecond=0)
 
     @fields.depends('message')
     def on_change_with_message_wrapped(self, name=None):
@@ -53,7 +43,7 @@ class Note(ResourceMixin, ModelSQL, ModelView):
     def get_unread(cls, ids, name):
         pool = Pool()
         Read = pool.get('ir.note.read')
-        cursor = Transaction().cursor
+        cursor = Transaction().connection.cursor()
         user_id = Transaction().user
         table = cls.__table__()
         read = Read.__table__()
@@ -107,8 +97,14 @@ class Note(ResourceMixin, ModelSQL, ModelView):
             Read.delete(reads)
 
     @classmethod
-    def view_attributes(cls):
-        return [('/tree', 'colors', If(Eval('unread', True), 'black', 'grey'))]
+    def write(cls, notes, values, *args):
+        # Avoid changing write meta data if only unread is set
+        if args or values.keys() != ['unread']:
+            super(Note, cls).write(notes, values, *args)
+        else:
+            # Check access write and clean cache
+            ModelStorage.write(notes, values)
+            cls.set_unread(notes, 'unread', values['unread'])
 
 
 class NoteRead(ModelSQL):

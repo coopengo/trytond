@@ -102,7 +102,6 @@ class ActionKeyword(ModelSQL, ModelView):
     __name__ = 'ir.action.keyword'
     keyword = fields.Selection([
             ('tree_open', 'Open tree'),
-            ('tree_action', 'Action tree'),
             ('form_print', 'Print form'),
             ('form_action', 'Action form'),
             ('form_relate', 'Form relate'),
@@ -129,7 +128,7 @@ class ActionKeyword(ModelSQL, ModelView):
         TableHandler = backend.get('TableHandler')
         super(ActionKeyword, cls).__register__(module_name)
 
-        table = TableHandler(Transaction().cursor, cls, module_name)
+        table = TableHandler(cls, module_name)
         table.index_action(['keyword', 'model'], 'add')
 
     def get_groups(self, name):
@@ -311,9 +310,12 @@ class ActionMixin(ModelSQL):
             for field in later:
                 del values[field]
             action_values['type'] = cls.default_type()
-            cursor = Transaction().cursor
-            if cursor.nextid(cls._table):
-                cursor.setnextid(cls._table, cursor.currid(Action._table))
+            transaction = Transaction()
+            database = transaction.database
+            cursor = transaction.connection.cursor()
+            if database.nextid(transaction.connection, cls._table):
+                database.setnextid(transaction.connection, cls._table,
+                    database.currid(transaction.connection, Action._table))
             if 'action' not in values:
                 action, = Action.create([action_values])
                 values['action'] = action.id
@@ -323,7 +325,8 @@ class ActionMixin(ModelSQL):
             cursor.execute(*ir_action.update(
                     [ir_action.id], [action.id],
                     where=ir_action.id == record.id))
-            cursor.update_auto_increment(cls._table, action.id)
+            transaction.database.update_auto_increment(
+                transaction.connection, cls._table, action.id)
             record = cls(action.id)
             new_records.append(record)
             cls.write([record], later)
@@ -397,6 +400,10 @@ class ActionReport(ActionMixin, ModelSQL, ModelView):
             ('odp', 'OpenDocument Presentation'),
             ('ods', 'OpenDocument Spreadsheet'),
             ('odg', 'OpenDocument Graphics'),
+            ('plain', 'Plain Text'),
+            ('xml', 'XML'),
+            ('html', 'HTML'),
+            ('xhtml', 'XHTML'),
             ], string='Template Extension', required=True,
         translate=False)
     extension = fields.Selection([
@@ -481,8 +488,9 @@ class ActionReport(ActionMixin, ModelSQL, ModelView):
         TableHandler = backend.get('TableHandler')
         super(ActionReport, cls).__register__(module_name)
 
-        cursor = Transaction().cursor
-        table = TableHandler(cursor, cls, module_name)
+        transaction = Transaction()
+        cursor = transaction.connection.cursor()
+        table = TableHandler(cls, module_name)
         action_report = cls.__table__()
 
         # Migration from 1.0 report_name_uniq has been removed
@@ -503,7 +511,7 @@ class ActionReport(ActionMixin, ModelSQL, ModelView):
             cls.write(cls.browse(ids), {'extension': 'odt'})
 
             table.drop_column("output_format")
-            TableHandler.dropTable(cursor, 'ir.action.report.outputformat',
+            TableHandler.dropTable('ir.action.report.outputformat',
                 'ir_action_report_outputformat')
 
         # Migrate from 2.0 remove required on extension
@@ -517,7 +525,7 @@ class ActionReport(ActionMixin, ModelSQL, ModelView):
         # report_content_custom to remove base64 encoding
         if (table.column_exist('report_content_data')
                 and table.column_exist('report_content_custom')):
-            limit = cursor.IN_MAX
+            limit = transaction.database.IN_MAX
             cursor.execute(*action_report.select(
                     Count(action_report.id)))
             report_count, = cursor.fetchone()
@@ -590,8 +598,8 @@ class ActionReport(ActionMixin, ModelSQL, ModelView):
         contents = {}
         converter = fields.Binary.cast
         default = None
-        format_ = Transaction().context.pop('%s.%s'
-            % (cls.__name__, name), '')
+        format_ = Transaction().context.get(
+            '%s.%s' % (cls.__name__, name), '')
         if format_ == 'size':
             converter = len
             default = 0
@@ -667,6 +675,7 @@ class ActionActWindow(ActionMixin, ModelSQL, ModelView):
     context = fields.Char('Context Value')
     order = fields.Char('Order Value')
     res_model = fields.Char('Model')
+    context_model = fields.Char('Context Model')
     act_window_views = fields.One2Many('ir.action.act_window.view',
             'act_window', 'Views')
     views = fields.Function(fields.Binary('Views'), 'get_views')
@@ -705,12 +714,12 @@ class ActionActWindow(ActionMixin, ModelSQL, ModelView):
 
     @classmethod
     def __register__(cls, module_name):
-        cursor = Transaction().cursor
+        cursor = Transaction().connection.cursor()
         TableHandler = backend.get('TableHandler')
         act_window = cls.__table__()
         super(ActionActWindow, cls).__register__(module_name)
 
-        table = TableHandler(cursor, cls, module_name)
+        table = TableHandler(cls, module_name)
 
         # Migration from 2.0: new search_value format
         cursor.execute(*act_window.update(
@@ -903,7 +912,7 @@ class ActionActWindowView(ModelSQL, ModelView):
     def __register__(cls, module_name):
         TableHandler = backend.get('TableHandler')
         super(ActionActWindowView, cls).__register__(module_name)
-        table = TableHandler(Transaction().cursor, cls, module_name)
+        table = TableHandler(cls, module_name)
 
         # Migration from 1.0 remove multi
         table.drop_column('multi')

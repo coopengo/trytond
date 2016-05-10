@@ -12,7 +12,7 @@ try:
 except ImportError:
     import json
 
-from ..model import ModelView, ModelSQL, fields, Unique
+from ..model import ModelView, ModelSQL, Workflow, fields, Unique
 from ..report import Report
 from ..wizard import Wizard, StateView, StateAction, Button
 from ..transaction import Transaction
@@ -22,7 +22,7 @@ from ..pyson import Bool, Eval
 from ..rpc import RPC
 from .. import backend
 from ..protocols.jsonrpc import JSONDecoder, JSONEncoder
-from ..tools import is_instance_method
+from ..tools import is_instance_method, cursor_dict
 try:
     from ..tools.StringMatcher import StringMatcher
 except ImportError:
@@ -31,6 +31,7 @@ except ImportError:
 __all__ = [
     'Model', 'ModelField', 'ModelAccess', 'ModelFieldAccess', 'ModelButton',
     'ModelData', 'PrintModelGraphStart', 'PrintModelGraph', 'ModelGraph',
+    'ModelWorkflowGraph',
     ]
 
 IDENTIFIER = re.compile(r'^[a-zA-z_][a-zA-Z0-9_]*$')
@@ -84,7 +85,7 @@ class Model(ModelSQL, ModelView):
     def register(cls, model, module_name):
         pool = Pool()
         Property = pool.get('ir.property')
-        cursor = Transaction().cursor
+        cursor = Transaction().connection.cursor()
 
         ir_model = cls.__table__()
         cursor.execute(*ir_model.select(ir_model.id,
@@ -265,7 +266,7 @@ class ModelField(ModelSQL, ModelView):
     def register(cls, model, module_name, model_id):
         pool = Pool()
         Model = pool.get('ir.model')
-        cursor = Transaction().cursor
+        cursor = Transaction().connection.cursor()
 
         ir_model_field = cls.__table__()
         ir_model = Model.__table__()
@@ -280,7 +281,7 @@ class ModelField(ModelSQL, ModelView):
                 ir_model_field.module.as_('module'),
                 ir_model_field.help.as_('help'),
                 where=ir_model.model == model.__name__))
-        model_fields = dict((f['name'], f) for f in cursor.dictfetchall())
+        model_fields = {f['name']: f for f in cursor_dict(cursor)}
 
         for field_name, field in model._fields.iteritems():
             if hasattr(field, 'model_name'):
@@ -374,7 +375,7 @@ class ModelField(ModelSQL, ModelView):
                 else:
                     model_ids.add(rec['model'])
             model_ids = list(model_ids)
-            cursor = Transaction().cursor
+            cursor = Transaction().connection.cursor()
             model = Model.__table__()
             cursor.execute(*model.select(model.id, model.model,
                     where=model.id.in_(model_ids)))
@@ -449,11 +450,10 @@ class ModelAccess(ModelSQL, ModelView):
     @classmethod
     def __register__(cls, module_name):
         TableHandler = backend.get('TableHandler')
-        cursor = Transaction().cursor
 
         super(ModelAccess, cls).__register__(module_name)
 
-        table = TableHandler(cursor, cls, module_name)
+        table = TableHandler(cls, module_name)
 
         # Migration from 2.6 (model, group) no more unique
         table.drop_constraint('model_group_uniq')
@@ -488,7 +488,7 @@ class ModelAccess(ModelSQL, ModelView):
         pool = Pool()
         Model = pool.get('ir.model')
         UserGroup = pool.get('res.user-res.group')
-        cursor = Transaction().cursor
+        cursor = Transaction().connection.cursor()
         user = Transaction().user
         model_access = cls.__table__()
         ir_model = Model.__table__()
@@ -628,11 +628,10 @@ class ModelFieldAccess(ModelSQL, ModelView):
     @classmethod
     def __register__(cls, module_name):
         TableHandler = backend.get('TableHandler')
-        cursor = Transaction().cursor
 
         super(ModelFieldAccess, cls).__register__(module_name)
 
-        table = TableHandler(cursor, cls, module_name)
+        table = TableHandler(cls, module_name)
 
         # Migration from 2.6 (field, group) no more unique
         table.drop_constraint('field_group_uniq')
@@ -669,7 +668,6 @@ class ModelFieldAccess(ModelSQL, ModelView):
         Model = pool.get('ir.model')
         ModelField = pool.get('ir.model.field')
         UserGroup = pool.get('res.user-res.group')
-        cursor = Transaction().cursor
         user = Transaction().user
         field_access = cls.__table__()
         ir_model = Model.__table__()
@@ -687,6 +685,7 @@ class ModelFieldAccess(ModelSQL, ModelView):
 
         default = {}
         accesses = dict((m, default) for m in models)
+        cursor = Transaction().connection.cursor()
         cursor.execute(*field_access.join(model_field,
                 condition=field_access.field == model_field.id
                 ).join(ir_model,
@@ -856,12 +855,12 @@ class ModelData(ModelSQL, ModelView):
     @classmethod
     def __register__(cls, module_name):
         TableHandler = backend.get('TableHandler')
-        cursor = Transaction().cursor
+        cursor = Transaction().connection.cursor()
         model_data = cls.__table__()
 
         super(ModelData, cls).__register__(module_name)
 
-        table = TableHandler(cursor, cls, module_name)
+        table = TableHandler(cls, module_name)
 
         # Migration from 2.6: remove inherit
         if table.column_exist('inherit'):
@@ -1097,3 +1096,58 @@ class ModelGraph(Report):
 
                     edge = pydot.Edge(str(tail), str(head), **args)
                     graph.add_edge(edge)
+
+
+class ModelWorkflowGraph(Report):
+    __name__ = 'ir.model.workflow_graph'
+
+    @classmethod
+    def execute(cls, ids, data):
+        import pydot
+        pool = Pool()
+        Model = pool.get('ir.model')
+        ActionReport = pool.get('ir.action.report')
+
+        action_report_ids = ActionReport.search([
+            ('report_name', '=', cls.__name__)
+            ])
+        if not action_report_ids:
+            raise Exception('Error', 'Report (%s) not find!' % cls.__name__)
+        action_report = ActionReport(action_report_ids[0])
+
+        models = Model.browse(ids)
+
+        graph = pydot.Dot()
+        graph.set('center', '1')
+        graph.set('ratio', 'auto')
+        direction = Transaction().context.get('language_direction', 'ltr')
+        graph.set('rankdir', {'ltr': 'LR', 'rtl': 'RL'}[direction])
+        cls.fill_graph(models, graph)
+        data = graph.create(prog='dot', format='png')
+        return ('png', fields.Binary.cast(data), False, action_report.name)
+
+    @classmethod
+    def fill_graph(cls, models, graph):
+        'Fills pydot graph with models wizard.'
+        import pydot
+        pool = Pool()
+
+        for record in models:
+            Model = pool.get(record.model)
+
+            if not issubclass(Model, Workflow):
+                continue
+
+            subgraph = pydot.Cluster('%s' % record.id, label=record.model)
+            graph.add_subgraph(subgraph)
+
+            state_field = getattr(Model, Model._transition_state)
+            for state, _ in state_field.selection:
+                node = pydot.Node(
+                    '"%s"' % state, shape='octagon', label=state)
+                subgraph.add_node(node)
+
+            for from_, to in Model._transitions:
+                edge = pydot.Edge('"%s"' % from_, '"%s"' % to,
+                    arrowhead='normal')
+                subgraph.add_edge(edge)

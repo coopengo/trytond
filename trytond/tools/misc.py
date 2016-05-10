@@ -7,18 +7,16 @@ Miscelleanous tools used by tryton
 import os
 import sys
 import subprocess
-from threading import local
-import smtplib
 from array import array
 from itertools import islice
 import types
-import urllib
+import io
+import warnings
 
 from sql import Literal
 from sql.operators import Or
 
 from trytond.const import OPERATORS
-from trytond.config import config, parse_uri
 
 
 def find_in_path(name):
@@ -50,11 +48,14 @@ def exec_command_pipe(name, *args, **kwargs):
         stdout=subprocess.PIPE, env=child_env)
 
 
-def file_open(name, mode="r", subdir='modules'):
+def file_open(name, mode="r", subdir='modules', encoding=None):
     """Open a file from the root dir, using a subdir folder."""
     from trytond.modules import EGG_MODULES
-    root_path = os.path.dirname(os.path.dirname(os.path.abspath(
-                unicode(__file__, sys.getfilesystemencoding()))))
+    if sys.version_info < (3,):
+        filename = __file__.decode(sys.getfilesystemencoding())
+    else:
+        filename = __file__
+    root_path = os.path.dirname(os.path.dirname(os.path.abspath(filename)))
 
     egg_name = False
     if subdir == 'modules':
@@ -82,7 +83,6 @@ def file_open(name, mode="r", subdir='modules'):
         if (subdir == 'modules'
                 and (name.startswith('ir' + os.sep)
                     or name.startswith('res' + os.sep)
-                    or name.startswith('webdav' + os.sep)
                     or name.startswith('tests' + os.sep))):
             name = os.path.join(root_path, name)
         else:
@@ -92,7 +92,7 @@ def file_open(name, mode="r", subdir='modules'):
 
     for i in (name, egg_name):
         if i and os.path.isfile(i):
-            return open(i, mode)
+            return io.open(i, mode, encoding=encoding)
 
     raise IOError('File not found : %s ' % name)
 
@@ -104,21 +104,11 @@ def get_smtp_server():
     :return: A SMTP instance. The quit() method must be call when all
     the calls to sendmail() have been made.
     """
-    uri = parse_uri(config.get('email', 'uri'))
-    if uri.scheme.startswith('smtps'):
-        smtp_server = smtplib.SMTP_SSL(uri.hostname, uri.port)
-    else:
-        smtp_server = smtplib.SMTP(uri.hostname, uri.port)
-
-    if 'tls' in uri.scheme:
-        smtp_server.starttls()
-
-    if uri.username and uri.password:
-        smtp_server.login(
-            urllib.unquote_plus(uri.username),
-            urllib.unquote_plus(uri.password))
-
-    return smtp_server
+    from ..sendmail import _get_smtp_server
+    warnings.warn(
+        'get_smtp_server is deprecated use trytond.sendmail',
+        DeprecationWarning)
+    return _get_smtp_server()
 
 
 def memoize(maxsize):
@@ -201,103 +191,6 @@ def mod10r(number):
     return result + str((10 - report) % 10)
 
 
-class LocalDict(local):
-
-    def __init__(self):
-        super(LocalDict, self).__init__()
-        self._dict = {}
-
-    def __str__(self):
-        return str(self._dict)
-
-    def __repr__(self):
-        return str(self._dict)
-
-    def clear(self):
-        return self._dict.clear()
-
-    def keys(self):
-        return self._dict.keys()
-
-    def __setitem__(self, i, y):
-        self._dict.__setitem__(i, y)
-
-    def __getitem__(self, i):
-        return self._dict.__getitem__(i)
-
-    def copy(self):
-        return self._dict.copy()
-
-    def iteritems(self):
-        return self._dict.iteritems()
-
-    def iterkeys(self):
-        return self._dict.iterkeys()
-
-    def itervalues(self):
-        return self._dict.itervalues()
-
-    def pop(self, k, d=None):
-        return self._dict.pop(k, d)
-
-    def popitem(self):
-        return self._dict.popitem()
-
-    def setdefault(self, k, d=None):
-        return self._dict.setdefault(k, d)
-
-    def update(self, E, **F):
-        return self._dict.update(E, F)
-
-    def values(self):
-        return self._dict.values()
-
-    def get(self, k, d=None):
-        return self._dict.get(k, d)
-
-    def has_key(self, k):
-        return k in self._dict
-
-    def items(self):
-        return self._dict.items()
-
-    def __cmp__(self, y):
-        return self._dict.__cmp__(y)
-
-    def __contains__(self, k):
-        return self._dict.__contains__(k)
-
-    def __delitem__(self, y):
-        return self._dict.__delitem__(y)
-
-    def __eq__(self, y):
-        return self._dict.__eq__(y)
-
-    def __ge__(self, y):
-        return self._dict.__ge__(y)
-
-    def __gt__(self, y):
-        return self._dict.__gt__(y)
-
-    def __hash__(self):
-        return self._dict.__hash__()
-
-    def __iter__(self):
-        return self._dict.__iter__()
-
-    def __le__(self, y):
-        return self._dict.__le__(y)
-
-    def __len__(self):
-        return self._dict.__len__()
-
-    def __lt__(self, y):
-        return self._dict.__lt__(y)
-
-    def __ne__(self, y):
-        return self._dict.__ne__(y)
-
-
 def reduce_ids(field, ids):
     '''
     Return a small SQL expression for the list of ids and the sql column
@@ -371,7 +264,7 @@ def grouped_slice(records, count=None):
     'Grouped slice'
     from trytond.transaction import Transaction
     if count is None:
-        count = Transaction().cursor.IN_MAX
+        count = Transaction().database.IN_MAX
     for i in xrange(0, len(records), count):
         yield islice(records, i, i + count)
 

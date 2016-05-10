@@ -37,6 +37,10 @@ There is three types of views:
 
     * Graph
 
+    * Board
+
+    * Calendar
+
 Form view
 =========
 
@@ -55,7 +59,7 @@ Elements of the view are put on the screen following the rules:
 
     * Elements take one or more columns when they are put in the table. If
       there are not enough free columns on the current row, the elements are put
-      at the begining of the next row.
+      at the beginning of the next row.
 
 
 XML description
@@ -267,8 +271,8 @@ image
 
 Display an image.
 
-    * ``name``: the name of the image. It must be the name with the extension
-      of an image from ``tryton/share/pixmaps/``.
+    * ``name``: the name of the image. It must be the name of a record of
+      `ir.ui.icon`.
 
     * ``yexpand``: see in common-attributes-yexpand_.
 
