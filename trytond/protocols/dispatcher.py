@@ -19,7 +19,8 @@ from trytond.cache import Cache
 from trytond.exceptions import UserError, UserWarning, ConcurrencyException
 from trytond.tools import is_instance_method
 from trytond.wsgi import app
-from trytond.perf_analyzer import PerfLog, perf_logger, profile
+from trytond.perf_analyzer import PerfLog, profile
+from trytond.perf_analyzer import logger as perf_logger
 
 logger = logging.getLogger(__name__)
 
