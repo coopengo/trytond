@@ -4,6 +4,7 @@ import zipfile
 import polib
 import xml.dom.minidom
 from difflib import SequenceMatcher
+import logging
 import os
 from hashlib import md5
 from lxml import etree
@@ -820,6 +821,9 @@ class Translation(ModelSQL, ModelView):
 
         def override_translation(ressource_id, new_translation):
             res_id_module, res_id = ressource_id.split('.')
+            logging.getLogger(name='trytond.translator').debug('Overriding '
+                'translation of %s (%s)' % (res_id_module,
+                    new_translation.name))
             if res_id:
                 model_data, = ModelData.search([
                         ('module', '=', res_id_module),
