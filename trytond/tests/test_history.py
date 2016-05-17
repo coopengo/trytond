@@ -402,6 +402,13 @@ class HistoryTestCase(unittest.TestCase):
         self.assertEqual(
             [l.name for l in history.lines_at_stamp], ['a', 'b'])
 
+        # COOG - JCA : Test _datetime_exclude
+        with Transaction().set_context(_datetime=second_stamp,
+                _datetime_exclude=True):
+            history = History(history_id)
+        self.assertEqual(history.value, 1)
+        self.assertEqual([l.name for l in history.lines], ['a', 'b'])
+
     @with_transaction()
     def test_search_cursor_max(self):
         'Test search with number of history entries at database.IN_MAX'
