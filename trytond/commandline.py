@@ -58,10 +58,19 @@ def get_parser_admin():
 
 
 def config_log(options):
+    log_level = os.environ.get('LOG_LEVEL', None)
     if options.logconf:
         logging.config.fileConfig(options.logconf)
         logging.getLogger('server').info('using %s as logging '
             'configuration file', options.logconf)
+    elif log_level is not None:
+        logformat = ('%(process)s %(thread)s [%(asctime)s] '
+            '%(levelname)s %(name)s %(message)s')
+        level = getattr(logging, log_level)
+        if options.verbose:
+            level -= 10
+        level = level or 10
+        logging.basicConfig(level=level, format=logformat)
     else:
         logformat = ('%(process)s %(thread)s [%(asctime)s] '
             '%(levelname)s %(name)s %(message)s')
