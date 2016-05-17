@@ -5,7 +5,6 @@
 # - logs server calls
 # - analyse calls (number of calls, server time, queried tables)
 # - for specific methods profile call
-# - for specific methods store io (req, res)
 # - for long db accesses: gets backtrace and sql query
 #
 # Analyse data
@@ -21,7 +20,6 @@
 # broker = redis://127.0.0.1:6379/15  => redis url for storage
 # users = admin                       => users with active analyzing
 #
-# io = model.ir.ui.menu.read          => io extra logs (req, res) for methods
 # profile = model.ir.ui.menu.read     => activate profiling
 # db = model.ir.ui.menu.read          => db extra logs (table / act / tm)
 #
@@ -60,12 +58,6 @@
 #     - tm           => server time
 #     - db_nb        => db select number
 #     - db_tm        => db select server time
-#     - req_size     => raw request size (bytes)
-#     - res_size     => raw response size (bytes)
-#
-# x:io:<sess_id>:<call_rank> => hash
-#     - req: call request data (input)
-#     - res: call response data (output)
 #
 # x:p:<sess_id>:<call_rank> => server call profiling
 #
@@ -108,12 +100,6 @@ def check_user(login):
     users = config.get('perf', 'users', default='')
     users = [u.strip() for u in users.split(',') if len(u) > 0]
     return login in users
-
-
-def check_io(method):
-    methods = config.get('perf', 'io', default='')
-    methods = [m.strip() for m in methods.split(',') if len(m) > 0]
-    return method in methods
 
 
 def check_profile(method):
@@ -199,7 +185,7 @@ class PerfLog(object):
     def _q_key(self):
         return 'q:%s' % self.session
 
-    def on_enter(self, user, session, method):
+    def on_enter(self, user, session, method, args, kwargs):
         if self.broker is not None:
             if check_user(user.login):
                 self.dt = time.time()
@@ -214,30 +200,22 @@ class PerfLog(object):
                 self.broker.hset(sess_key, 'last', dts)
                 # method
                 self.method = method
-                self.broker.zincrby(self._meth_n_key(), self.method)
                 # call
                 self.id = id
                 self.broker.hmset(self._call_key(), {'method': self.method,
                         'dt': dts})
 
-    def on_leave(self, req, res):
+    def on_leave(self, result):
         if self.is_active():
             tm = time.time() - self.dt
             # session
             self.broker.hincrbyfloat(self._sess_key(), 'tm', tm)
             # method
+            self.broker.zincrby(self._meth_n_key(), self.method)
             self.broker.zincrby(self._meth_t_key(), self.method, tm)
             # call
-            req_size = len(req)
-            res_size = len(res)
-            self.broker.hmset(self._call_key(), {'req_size': req_size,
-                     'res_size': res_size, 'tm': tm})
-            if check_io(self.method):
-                self.set_io(req, res)
+            self.broker.hset(self._call_key(), 'tm', tm)
         ThreadLog.inst = None
-
-    def set_io(self, req, res):
-        self.broker.hmset(self._x_key('io'), {'req': req, 'res': res})
 
     def set_profile(self, value):
         self.broker.set(self._x_key('p'), value)

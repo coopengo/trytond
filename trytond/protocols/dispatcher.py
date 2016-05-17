@@ -193,17 +193,16 @@ def _dispatch(request, pool, *args, **kwargs):
     if request.authorization.type == 'session':
         session = request.authorization.get('session')
 
-    try:
-        PerfLog().on_enter(pool.get('res.user')(user), session,
-            '%s.%s' % (obj, method))
-    except:
-        perf_logger.exception('on_enter failed')
-
     for count in range(config.getint('database', 'retry'), -1, -1):
         with Transaction().start(pool.database_name, user,
                 readonly=rpc.readonly,
                 context={'session': session}) as transaction:
             Cache.clean(pool.database_name)
+            try:
+                PerfLog().on_enter(pool.get('res.user')(user), session,
+                    request.method, args, kwargs)
+            except:
+                perf_logger.exception('on_enter failed')
             try:
                 c_args, c_kwargs, transaction.context, transaction.timestamp \
                     = rpc.convert(obj, *args, **kwargs)
@@ -248,9 +247,8 @@ def _dispatch(request, pool, *args, **kwargs):
             except DatabaseOperationalError:
                 logger.debug('Reset session failed', exc_info=True)
         logger.debug('Result: %s', result)
-        # TODO: find req and res
         try:
-            PerfLog().on_leave('', '')
+            PerfLog().on_leave(result)
         except:
             perf_logger.exception('on_leave failed')
         return result
