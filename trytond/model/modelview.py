@@ -559,6 +559,10 @@ class ModelView(Model):
                 view_ids = set_view_ids(element)
                 if type != 'form':
                     continue
+                # Coog Spec : Ignore fields which are not in the view, to allow
+                # dynamic sub_fields for Dict fields
+                if fname not in cls._fields:
+                    continue
                 field = cls._fields[fname]
                 relation = get_relation(field)
                 if element.get('relation'):
