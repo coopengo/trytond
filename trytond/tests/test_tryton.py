@@ -295,8 +295,17 @@ def create_db():
 
 
 def drop_db():
-    if db_exist():
-        drop(None, DB_NAME, None)
+    n = 5
+    i = 0
+    while True:
+        i += 1
+        try:
+            if db_exist():
+                drop(None, DB_NAME, None)
+            break
+        except:
+            if i > n:
+                raise
 
 
 def drop_create():
