@@ -15,6 +15,7 @@ from trytond.pool import Pool
 from trytond.transaction import Transaction
 from trytond.pyson import Eval, If
 from trytond.rpc import RPC
+from trytond.workers import broadcast_init_pool
 
 __all__ = [
     'Module', 'ModuleDependency', 'ModuleConfigWizardItem',
@@ -577,6 +578,7 @@ class ModuleInstallUpgrade(Wizard):
             lang = [x.code for x in langs]
         if update:
             pool.init(update=update, lang=lang)
+            broadcast_init_pool()
         return 'done'
 
 
