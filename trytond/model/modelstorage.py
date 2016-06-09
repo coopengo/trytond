@@ -1341,6 +1341,10 @@ class ModelStorage(Model):
                                 and not value)
                             or (field._type == 'reference'
                                 and not isinstance(value, ModelStorage))):
+                        # JCA : Add log to help debugging
+                        logging.getLogger().debug(
+                            'Field %s of %s is required' %
+                            (field_name, cls.__name__))
                         raise RequiredValidationError(
                             gettext('ir.msg_required_validation_record',
                                 **cls.__names__(field_name)))

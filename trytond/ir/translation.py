@@ -1,5 +1,6 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
+import logging
 import os
 from collections import defaultdict
 from difflib import SequenceMatcher
@@ -837,7 +838,14 @@ class Translation(ModelSQL, ModelView):
                                 to_save.append(old_translation)
                             else:
                                 translations.add(old_translation)
-        cls.save([_f for _f in to_save if _f])
+        # JCA : Add try catch to help with debugging
+        try:
+            cls.save([_f for _f in to_save if _f])
+        except Exception:
+            logging.getLogger().debug('Failed to save translations')
+            for data in to_save:
+                logging.getLogger().debug('    ' + str(data._save_values))
+            raise
         translations |= set(to_save)
 
         if translations:
