@@ -911,7 +911,14 @@ class Translation(ModelSQL, ModelView):
                             to_save.append(old_translation)
                         else:
                             translations.add(old_translation)
-        cls.save(to_save)
+        # JCA : Add try catch to help with debugging
+        try:
+            cls.save(to_save)
+        except:
+            logging.getLogger().debug('Failed to save translations')
+            for data in to_save:
+                logging.getLogger().debug('    ' + str(data._save_values))
+            raise
         translations |= set(to_save)
 
         if translations:

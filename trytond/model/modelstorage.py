@@ -985,6 +985,10 @@ class ModelStorage(Model):
                     if (isinstance(value, (type(None), type(False), list,
                                     tuple, basestring, dict))
                             and not value):
+                        # JCA : Add log to help debugging
+                        logging.getLogger().debug(
+                            'Field %s of %s is required' %
+                            (field_name, cls.__name__))
                         cls.raise_user_error('required_validation_record',
                             error_args=cls._get_error_args(field_name))
                 # validate states required
