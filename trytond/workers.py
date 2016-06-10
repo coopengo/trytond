@@ -47,7 +47,7 @@ def broadcast_init_pool():
         logger.info('sent init pool for database %s', dbname)
 
 
-broker = None
+broker, listener = None, None
 redis_url = get_cache_redis()
 if redis_url:
     url = urlparse(redis_url)
