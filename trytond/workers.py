@@ -9,6 +9,8 @@ from trytond.transaction import Transaction
 from trytond.coog_config import get_cache_redis
 
 logger = logging.getLogger(__name__)
+broker = None
+listener = None
 
 
 class Listener(threading.Thread):
@@ -18,16 +20,20 @@ class Listener(threading.Thread):
         self.redis = r
         self.pubsub = self.redis.pubsub()
         self.pubsub.subscribe(channels.keys())
+        self.started = False
 
     def run(self):
-        self.active = True
+        self.started = True
         for item in self.pubsub.listen():
             channel = item['channel']
             data = item['data']
             fn = self.channels.get(channel, None)
             if fn and type(data) not in (int, long):
                 fn(data)
-        self.active = False
+        self.started = False
+
+    def stop(self):
+        self.pubsub.unsubscribe()
 
 
 def init_pool_cb(data):
@@ -40,27 +46,39 @@ def init_pool_cb(data):
 
 
 def broadcast_init_pool():
-    if is_active():
+    if is_started():
         pid = os.getpid()
         dbname = Transaction().database.name
         broker.publish('init_pool', json.dumps({'pid': pid, 'dbname': dbname}))
         logger.info('sent init pool for database %s', dbname)
 
 
-broker, listener = None, None
-redis_url = get_cache_redis()
-if redis_url:
-    url = urlparse(redis_url)
-    assert url.scheme == 'redis', 'invalid redis url'
-    host = url.hostname
-    port = url.port
-    db = url.path.strip('/')
-    broker = redis.StrictRedis(host=host, port=port, db=db)
-
-if broker:
-    listener = Listener(broker, {'init_pool': init_pool_cb})
-    listener.start()
+def is_started():
+    global listener
+    return listener is not None and listener.started
 
 
-def is_active():
-    return listener is not None and listener.active
+def start():
+    logger.info('starting worker listener')
+    redis_url = get_cache_redis()
+    global broker
+    global listener
+    if redis_url:
+        url = urlparse(redis_url)
+        assert url.scheme == 'redis', 'invalid redis url'
+        host = url.hostname
+        port = url.port
+        db = url.path.strip('/')
+        broker = redis.StrictRedis(host=host, port=port, db=db)
+        listener = Listener(broker, {'init_pool': init_pool_cb})
+        listener.start()
+
+
+def stop():
+    logger.info('stopping worker listener')
+    global listener
+    if listener is not None:
+        listener.stop()
+    global broker
+    if broker is not None:
+        del broker

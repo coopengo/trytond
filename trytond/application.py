@@ -7,4 +7,3 @@ __all__ = ['app']
 
 Pool.start()
 import trytond.protocols.dispatcher
-import trytond.workers

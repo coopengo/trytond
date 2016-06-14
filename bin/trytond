@@ -24,6 +24,7 @@ config.update_etc(options.configfile)
 from trytond.application import app
 from trytond.pool import Pool
 from trytond.modules import get_module_list, get_module_info
+from trytond.workers import start, stop
 
 with commandline.pidfile(options):
     for name in options.database_names:
@@ -43,9 +44,11 @@ with commandline.pidfile(options):
         info = get_module_info(module)
         path = os.path.join(info['directory'], 'view', '*.xml')
         extra_files.extend(glob.glob(path))
+    #start()
     run_simple(hostname, port, app,
         threaded=True,
         extra_files=extra_files,
         static_files=static_files,
         ssl_context=ssl_context,
         use_reloader=options.dev)
+    #stop()
