@@ -15,7 +15,7 @@ from trytond.pool import Pool
 from trytond.transaction import Transaction
 from trytond.pyson import Eval, If
 from trytond.rpc import RPC
-from trytond.workers import broadcast_init_pool
+from trytond.iwc import broadcast_init_pool
 
 __all__ = [
     'Module', 'ModuleDependency', 'ModuleConfigWizardItem',

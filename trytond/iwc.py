@@ -43,6 +43,7 @@ def init_pool_cb(data):
     logger.info('received init pool from %s for database %s', pid, dbname)
     if pid != os.getpid():
         Pool.stop(dbname)
+        Pool(dbname).init()
 
 
 def broadcast_init_pool():
