@@ -104,10 +104,8 @@ class Redis(object):
     def _key(self, key):
         if self.context:
             t = Transaction()
-            res = freeze((key, t.user, t.context))
-        else:
-            res = freeze(key)
-        return '%x' % hash(res)
+            key = (key, t.user, freeze(t.context))
+        return '%x' % hash(key)
 
     def get(self, key, default=None):
         namespace = self._namespace()
@@ -116,7 +114,7 @@ class Redis(object):
         if result is None:
             return default
         else:
-            return msgpack.unpackb(result,  encoding='utf-8',
+            return msgpack.unpackb(result, encoding='utf-8',
                 object_hook=decode_hook)
 
     def set(self, key, value):
