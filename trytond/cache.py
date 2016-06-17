@@ -60,7 +60,8 @@ class _Cache(object):
             try:
                 result = cache[key] = cache.pop(key)
                 return result
-            except (KeyError, TypeError):
+            except KeyError:
+                # JCA : Properly crash on type error
                 return default
 
     def set(self, key, value):
@@ -71,7 +72,9 @@ class _Cache(object):
             try:
                 cache[key] = value
             except TypeError:
-                pass
+                # JCA : Do not silently fail when trying to use a non hashable
+                # key
+                raise
         return value
 
     def _empty(self, dbname):
