@@ -181,7 +181,8 @@ class MemoryCache(BaseCache):
             cache[key] = (expire, result)
             self.hit += 1
             return result
-        except (KeyError, TypeError):
+        except KeyError:
+            # JCA : Properly crash on type error
             self.miss += 1
             return default
 
@@ -192,10 +193,8 @@ class MemoryCache(BaseCache):
             expire = dt.datetime.now() + self.duration
         else:
             expire = None
-        try:
-            cache[key] = (expire, value)
-        except TypeError:
-            pass
+        # JCA : Do not silently fail when trying to use a non hashable key
+        cache[key] = (expire, value)
         return value
 
     def clear(self):
