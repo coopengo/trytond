@@ -135,7 +135,7 @@ class PerfLog(object):
     __metaclass__ = ThreadSingleton
 
     def __init__(self):
-        logger.info('new instance')
+        logger.debug('new instance')
         self.broker = None
         self.session = None
         self.method = None
