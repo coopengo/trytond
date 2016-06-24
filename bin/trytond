@@ -6,6 +6,7 @@ import os
 import glob
 import signal
 import logging
+import threading
 
 logger = logging.getLogger(__name__)
 
@@ -31,8 +32,13 @@ from trytond.modules import get_module_list, get_module_info
 from trytond.iwc import start, stop
 
 with commandline.pidfile(options):
-    for name in options.database_names:
-        Pool(name).init()
+    # Pool.{start,init} are async to avoid slowness on server start
+    # fix #4287
+    def init_pool_db():
+        Pool.start()
+        for name in options.database_names:
+            Pool(name).init()
+    threading.Thread(target=init_pool_db).start()
     hostname, port = split_netloc(config.get('web', 'listen'))
     static_files = {
         '/': config.get('web', 'root'),

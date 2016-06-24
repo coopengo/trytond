@@ -5,5 +5,4 @@ from trytond.wsgi import app
 
 __all__ = ['app']
 
-Pool.start()
 import trytond.protocols.dispatcher
