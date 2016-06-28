@@ -132,7 +132,16 @@ class View(ModelSQL, ModelView):
             xml = view.arch.strip()
             if not xml:
                 continue
-            tree = etree.fromstring(xml)
+            try:
+                tree = etree.fromstring(xml)
+            except etree.XMLSyntaxError:
+                # JCA : print faulty xml
+                try:
+                    import pprint
+                    pprint.pprint(xml)
+                except Exception:
+                    pass
+                raise
 
             if hasattr(etree, 'RelaxNG'):
                 validator = etree.RelaxNG(etree=cls.get_rng(view.rng_type))
