@@ -3,12 +3,14 @@
 import logging
 from threading import Lock
 from collections import OrderedDict
+import msgpack
 
 from sql import Table
 from sql.functions import CurrentTimestamp
 
 from trytond.coog_config import get_cache_redis
 from trytond.transaction import Transaction
+from trytond.cache_utils import freeze, encode_hook, decode_hook, Default
 try:
     from trytond.cache_redis import Redis
 except ImportError:
@@ -17,15 +19,6 @@ except ImportError:
 
 
 __all__ = ['_Cache', 'Cache', 'LRUDict']
-
-
-def freeze(o):
-    if isinstance(o, (set, tuple, list)):
-        return tuple(freeze(x) for x in o)
-    elif isinstance(o, dict):
-        return frozenset((x, freeze(y)) for x, y in o.iteritems())
-    else:
-        return o
 
 
 class _Cache(object):
@@ -52,7 +45,7 @@ class _Cache(object):
             return (key, Transaction().user, freeze(Transaction().context))
         return key
 
-    def get(self, key, default=None):
+    def get(self, key, default):
         dbname = Transaction().database.name
         key = self._key(key)
         with self._lock:
@@ -72,8 +65,7 @@ class _Cache(object):
             try:
                 cache[key] = value
             except TypeError:
-                # JCA : Do not silently fail when trying to use a non hashable
-                # key
+                # JCA : Properly detect non hashable keys
                 raise
         return value
 
@@ -133,13 +125,29 @@ class _Cache(object):
 
 
 class Cache(object):
-    def __new__(cls, *args, **kwargs):
-        use_redis = get_cache_redis()
-        if use_redis is None:
-            return _Cache(*args, **kwargs)
+    # AKE: this class wraps technical holders and manage serialization
+    def __init__(self, *args, **kwargs):
+        redis = get_cache_redis()
+        if redis is None:
+            self.cache = _Cache(*args, **kwargs)
         else:
             assert Redis is not None, 'Packages needed by Redis are missing'
-            return Redis(*args, **kwargs)
+            self.cache = Redis(*args, **kwargs)
+
+    def get(self, key, default=None):
+        result = self.cache.get(key, Default)
+        if result is Default:
+            return default
+        else:
+            return msgpack.unpackb(result, encoding='utf-8',
+                object_hook=decode_hook)
+
+    def set(self, key, value):
+        value = msgpack.packb(value, use_bin_type=True, default=encode_hook)
+        self.cache.set(key, value)
+
+    def clear(self):
+        self.cache.clear()
 
     @staticmethod
     def clean(dbname):

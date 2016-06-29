@@ -118,7 +118,8 @@ class View(ModelSQL, ModelView):
     @classmethod
     def get_rng(cls, type_):
         key = (cls.__name__, type_)
-        rng = cls._get_rng_cache.get(key)
+        # AKE: default is required on _Cache (used for non serializable)
+        rng = cls._get_rng_cache.get(key, None)
         if rng is None:
             if sys.version_info < (3,):
                 filename = __file__.decode(sys.getfilesystemencoding())
