@@ -152,14 +152,17 @@ class View(ModelSQL, ModelView):
             if not xml:
                 continue
             try:
-                tree = etree.fromstring(xml)
-            except etree.XMLSyntaxError:
+                # AKE: file is read as not binary (496d471)
+                # AKE: xml is now unicode
+                # AKE: etree.fromstring does not like that
+                tree = etree.fromstring(xml.encode('utf-8'))
+            except Exception:
                 # JCA : print faulty xml
                 try:
                     import pprint
                     pprint.pprint(xml)
                 except:
-                    pass
+                    print(xml)
                 raise
 
             if hasattr(etree, 'RelaxNG'):
