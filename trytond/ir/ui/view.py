@@ -152,10 +152,7 @@ class View(ModelSQL, ModelView):
             if not xml:
                 continue
             try:
-                # AKE: file is read as not binary (496d471)
-                # AKE: xml is now unicode
-                # AKE: etree.fromstring does not like that
-                tree = etree.fromstring(xml.encode('utf-8'))
+                tree = etree.fromstring(xml)
             except Exception:
                 # JCA : print faulty xml
                 try:
@@ -206,7 +203,7 @@ class View(ModelSQL, ModelView):
         if self.name and self.module:
             path = os.path.join(self.module, 'view', self.name + '.xml')
             try:
-                with file_open(path, subdir='modules', mode='r') as fp:
+                with file_open(path, subdir='modules', mode='rb') as fp:
                     value = fp.read()
             except IOError:
                 pass
