@@ -134,13 +134,13 @@ class View(ModelSQL, ModelView):
                 continue
             try:
                 tree = etree.fromstring(xml)
-            except etree.XMLSyntaxError:
+            except Exception:
                 # JCA : print faulty xml
                 try:
                     import pprint
                     pprint.pprint(xml)
                 except Exception:
-                    pass
+                    print(xml)
                 raise
 
             if hasattr(etree, 'RelaxNG'):
