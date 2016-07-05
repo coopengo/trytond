@@ -2,6 +2,7 @@
 # this repository contains the full copyright notices and license terms.
 import os
 import datetime
+import logging
 import tempfile
 import warnings
 import subprocess
@@ -253,13 +254,20 @@ class Report(URLMixin, PoolBase):
             fp.write(data)
         cmd = ['unoconv', '--no-launch', '--connection=%s' % config.get(
                 'report', 'unoconv'), '-f', oext, '--stdout', path]
+        logger = logging.getLogger(__name__)
         try:
+            # JCA : Pipe stderr
             proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE, close_fds=True)
             stdoutdata, stderrdata = proc.communicate()
-            ret = proc.wait()
-            if ret != 0:
+            # JCA : Use error code rather than wait twice
+            if proc.returncode != 0:
+                logger.info('unoconv.stdout : ' + stdoutdata)
+                logger.error('unoconv.stderr : ' + stderrdata)
                 raise Exception(stderrdata)
+            else:
+                logger.debug('unoconv.stdout : ' + stdoutdata)
+                logger.debug('unoconv.stderr : ' + stderrdata)
             return oext, stdoutdata
         finally:
             os.remove(path)
