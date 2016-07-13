@@ -104,6 +104,12 @@ def home(request):
     return redirect('/index.html')  # XXX find a better way
 
 
+# AKE: route to bench index.html
+@app.route('/bench/', methods=['GET'])
+def bench(request):
+    return redirect('/bench/index.html')  # XXX find a better way
+
+
 def list_lang(*args):
     return [
         ('bg_BG', 'Български'),

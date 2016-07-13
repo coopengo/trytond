@@ -45,6 +45,9 @@ class TrytonConfigParser(ConfigParser.RawConfigParser):
         self.set('web', 'listen', 'localhost:7999')
         self.set('web', 'root',
             os.environ.get('TRYTOND_WEB_ROOT', '/var/www/localhost/tryton'))
+        # AKE: bench web app config
+        self.set('web', 'bench',
+            os.environ.get('TRYTOND_WEB_BENCH', None))
         self.add_section('database')
         self.set('database', 'uri',
             os.environ.get('TRYTOND_DATABASE_URI', 'sqlite://'))

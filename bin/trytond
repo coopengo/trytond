@@ -43,6 +43,10 @@ with commandline.pidfile(options):
     static_files = {
         '/': config.get('web', 'root'),
         }
+    # AKE: add bench web app
+    bench = config.get('web', 'bench')
+    if bench:
+        static_files['/bench/'] = bench
     certificate = config.get('ssl', 'certificate')
     privatekey = config.get('ssl', 'privatekey')
     if certificate or privatekey:
