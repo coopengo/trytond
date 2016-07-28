@@ -36,7 +36,12 @@ config.update_etc(opt.config)
 if backend.name() == 'sqlite':
     database_name = ':memory:'
 else:
-    database_name = 'test_' + str(int(time.time()))
+    # AKE: add virtual_env name test db name (!= branches simultaneously)
+    venv = os.environ.get('VIRTUAL_ENV', None)
+    if venv is not None:
+        database_name = 'test_' + venv + '_' + str(int(time.time()))
+    else:
+        database_name = 'test_' + str(int(time.time()))
 os.environ.setdefault('DB_NAME', database_name)
 
 from trytond.tests.test_tryton import all_suite, modules_suite
