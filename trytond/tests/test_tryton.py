@@ -9,6 +9,7 @@ import re
 from itertools import chain
 import operator
 from functools import wraps
+import time
 
 from lxml import etree
 
@@ -295,7 +296,8 @@ def create_db():
 
 
 def drop_db():
-    n = 5
+    # AKE: fix crash in very concurrent context (opened connections)
+    n = 10
     i = 0
     while True:
         i += 1
@@ -306,6 +308,8 @@ def drop_db():
         except:
             if i > n:
                 raise
+            else:
+                time.sleep(3)
 
 
 def drop_create():
