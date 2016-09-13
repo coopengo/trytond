@@ -766,8 +766,20 @@ class Translation(ModelSQL, ModelView):
                 if new_translation.type in {
                         'report', 'view', 'wizard_button', 'selection'}:
                     domain.append(('src', '=', new_translation.src))
-                translation, = cls.search(domain)
-                if translation.value != new_translation.value:
+                found = cls.search(domain)
+                if found:
+                    translation, = found
+                else:
+                    translation = None
+                    logging.getLogger(name='trytond.translator').warning(
+                        'Impossible to find translation %s'
+                        ' from module %s for lang %s' % (
+                            new_translation.name,
+                            res_id_module,
+                            new_translation.lang,
+                            ))
+
+                if translation and translation.value != new_translation.value:
                     translation.value = new_translation.value
                     translation.overriding_module = module
                     translation.fuzzy = new_translation.fuzzy
