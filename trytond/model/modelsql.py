@@ -265,6 +265,8 @@ class ModelSQL(ModelStorage):
 
     @classmethod
     def __raise_integrity_error(cls, exception, values, field_names=None):
+        import traceback
+        traceback.print_stack()
         pool = Pool()
         if field_names is None:
             field_names = cls._fields.keys()
