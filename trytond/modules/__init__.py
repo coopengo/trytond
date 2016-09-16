@@ -12,6 +12,7 @@ from importlib.machinery import SOURCE_SUFFIXES, FileFinder, SourceFileLoader
 
 from sql import Table
 from sql.functions import CurrentTimestamp
+from sql.aggregate import Count
 
 import trytond.convert as convert
 import trytond.tools as tools
@@ -361,6 +362,87 @@ def load_modules(
     else:
         update = []
 
+    def migrate_modules(cursor):
+        modules_in_dir = get_module_list()
+        modules_to_migrate = {}
+        for module_dir in modules_in_dir:
+            try:
+                with tools.file_open(
+                        OPJ(module_dir, '__migrated_modules')) as f:
+                    for line in f.readlines():
+                        line = line.replace(' ', '').strip('\n')
+                        if not line:
+                            continue
+                        action, old_module = line.split(':')
+                        modules_to_migrate[old_module] = (action, module_dir)
+            except IOError:
+                continue
+
+        cursor.execute(*ir_module.select(ir_module.name))
+        for module_in_db, in cursor.fetchall():
+            if (module_in_db in modules_in_dir
+                    or module_in_db in modules_to_migrate):
+                continue
+            else:
+                modules_to_migrate[module_in_db] = ('to_drop', None)
+
+        def rename(cursor, table_name, old_name, new_name, var_name):
+            table = Table(table_name)
+            cursor.execute(*table.update([getattr(table, var_name)],
+                    [new_name],
+                    where=(getattr(table, var_name) == old_name)))
+
+        def delete(cursor, table_name, old_name, var_name):
+            table = Table(table_name)
+            cursor.execute(*table.delete(
+                    where=(getattr(table, var_name) == old_name)))
+
+        for old_name, (action, new_name) in modules_to_migrate.items():
+            cursor.execute(*ir_module.select(Count(ir_module.id),
+                    where=ir_module.name == old_name))
+            count, = cursor.fetchone()
+            if not count:
+                continue
+
+            if action == 'to_drop':
+                logger.info('%s directory has been removed from filesystem,'
+                    ' deleting entries from database...' % old_name)
+            else:
+                logger.info('%s has been %s %s, updating database...' % (
+                    old_name, {'to_rename': 'renamed into',
+                        'to_merge': 'merged with'}[action], new_name))
+            if new_name:
+                rename(cursor, 'ir_model', old_name, new_name, 'module')
+                rename(cursor, 'ir_action_report', old_name, new_name,
+                    'module')
+                rename(cursor, 'ir_model_field', old_name, new_name, 'module')
+                rename(cursor, 'ir_model_data', old_name, new_name, 'module')
+                rename(cursor, 'ir_translation', old_name, new_name, 'module')
+                rename(cursor, 'ir_translation', old_name, new_name,
+                    'overriding_module')
+                rename(cursor, 'ir_ui_icon', old_name, new_name, 'module')
+                rename(cursor, 'ir_ui_view', old_name, new_name, 'module')
+
+            if action == 'to_rename':
+                rename(cursor, 'ir_module_dependency', old_name, new_name,
+                    'name')
+                rename(cursor, 'ir_module', old_name, new_name, 'name')
+            elif action == 'to_merge':
+                delete(cursor, 'ir_module_dependency', old_name,
+                    'name')
+                delete(cursor, 'ir_module', old_name, 'name')
+            elif action == 'to_drop':
+                delete(cursor, 'ir_model', old_name, 'module')
+                delete(cursor, 'ir_action_report', old_name, 'module')
+                delete(cursor, 'ir_model_field', old_name, 'module')
+                delete(cursor, 'ir_model_data', old_name, 'module')
+                delete(cursor, 'ir_translation', old_name, 'module')
+                delete(cursor, 'ir_translation', old_name, 'overriding_module')
+                delete(cursor, 'ir_ui_icon', old_name, 'module')
+                delete(cursor, 'ir_ui_view', old_name, 'module')
+                delete(cursor, 'ir_module_dependency', old_name, 'name')
+                delete(cursor, 'ir_module', old_name, 'name')
+
     def _load_modules(update):
         global res
         transaction = Transaction()
@@ -385,6 +467,8 @@ def load_modules(
                         where=ir_module.state == 'uninstalled'))
 
             if update:
+                migrate_modules(cursor)
+
                 cursor.execute(*ir_module.select(ir_module.name,
                         where=ir_module.state.in_(('activated', 'to activate',
                                 'to upgrade', 'to remove'))))
