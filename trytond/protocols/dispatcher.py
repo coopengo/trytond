@@ -21,6 +21,7 @@ from trytond.tools import is_instance_method
 from trytond.wsgi import app
 from trytond.perf_analyzer import PerfLog, profile
 from trytond.perf_analyzer import logger as perf_logger
+from trytond.sentry import sentry_wrap
 
 logger = logging.getLogger(__name__)
 
@@ -177,6 +178,7 @@ def help_method(request, pool):
     return pydoc.getdoc(getattr(obj, method))
 
 
+@sentry_wrap  # hide tech exceptions and send then to sentry
 @app.auth_required
 @with_pool
 def _dispatch(request, pool, *args, **kwargs):
