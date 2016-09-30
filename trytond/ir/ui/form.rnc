@@ -34,6 +34,7 @@ attlist.label &=
 attlist.label &= [ a:defaultValue = "1" ] attribute xfill { "0" | "1" }?
 attlist.label &= [ a:defaultValue = "1" ] attribute colspan { text }?
 attlist.label &= attribute help { text }?
+attlist.label &= attribute states { text }?
 
 field = element field { attlist.field, empty }
 attlist.field &= attribute name { text }
@@ -113,6 +114,7 @@ attlist.field &= [a:defaultValue = "0"] attribute expand_toolbar { "0" | "1" }?
 attlist.field &= attribute string { text }?
 attlist.field &= [a:defaultValue = "1"] attribute factor { text }?
 attlist.field &= attribute filename { text }?
+attlist.field &= attribute states { text }?
 image = element image { attlist.image, empty }
 attlist.image &= attribute name { text }
 attlist.image &= [ a:defaultValue = "1" ] attribute colspan { text }?
