@@ -121,11 +121,6 @@
       <attribute name="help"/>
     </optional>
   </define>
-    <define name="attlist.label" combine="interleave">
-    <optional>
-      <attribute name="states"/>
-    </optional>
-  </define>
   <define name="field">
     <element name="field">
       <ref name="attlist.field"/>

@@ -34,7 +34,6 @@ attlist.label &=
 attlist.label &= [ a:defaultValue = "1" ] attribute xfill { "0" | "1" }?
 attlist.label &= [ a:defaultValue = "1" ] attribute colspan { text }?
 attlist.label &= attribute help { text }?
-attlist.label &= attribute states { text }?
 
 field = element field { attlist.field, empty }
 attlist.field &= attribute name { text }
