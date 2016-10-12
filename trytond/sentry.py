@@ -3,6 +3,7 @@
 import logging
 from trytond.coog_config import get_sentry_dsn
 from trytond.exceptions import UserError, UserWarning, ConcurrencyException
+from werkzeug.exceptions import Forbidden
 
 logger = logging.getLogger(__name__)
 sentry_dsn = get_sentry_dsn()
@@ -14,7 +15,7 @@ def sentry_wrap(func):
     def wrap(*args, **kwargs):
         try:
             return func(*args, **kwargs)
-        except (UserError, UserWarning, ConcurrencyException):
+        except (UserError, UserWarning, ConcurrencyException, Forbidden):
             raise
         except Exception:
             event_id = client.captureException()
