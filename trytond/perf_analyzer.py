@@ -245,7 +245,7 @@ select_pattern = re.compile('^SELECT .* FROM "([a-z_\-]+)" AS "[a-z]".*')
 insert_pattern = re.compile('^INSERT INTO "([a-z_\-]+)" .*')
 update_pattern = re.compile('^UPDATE "([a-z_\-]+)" SET .*')
 delete_pattern = re.compile('^DELETE FROM "([a-z_\-]+)".*')
-seq_pattern = re.compile('^SELECT NEXTVAL.*')
+seq_pattern = re.compile('^SELECT nextval.*')
 
 
 def parse_query(sql):

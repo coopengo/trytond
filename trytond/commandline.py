@@ -67,6 +67,9 @@ def config_log(options):
         logformat = ('%(process)s %(thread)s [%(asctime)s] '
             '%(levelname)s %(name)s %(message)s')
         level = getattr(logging, log_level)
+        if options.verbose:
+            level -= 10
+        level = level or 10
         logging.basicConfig(level=level, format=logformat)
     else:
         logformat = ('%(process)s %(thread)s [%(asctime)s] '
