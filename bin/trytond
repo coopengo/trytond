@@ -29,7 +29,6 @@ config.update_etc(options.configfile)
 from trytond.application import app
 from trytond.pool import Pool
 from trytond.modules import get_module_list, get_module_info
-from trytond.iwc import start, stop
 
 with commandline.pidfile(options):
     # Pool.{start,init} are async to avoid slowness on server start
@@ -60,7 +59,6 @@ with commandline.pidfile(options):
         extra_files.extend(glob.glob(path))
 
     def shutdown(signum, frame):
-        stop()
         if options.pidfile:
             os.unlink(options.pidfile)
         logger.info('shutdown')
@@ -71,11 +69,9 @@ with commandline.pidfile(options):
     if hasattr(signal, 'SIGQUIT'):
         signal.signal(signal.SIGQUIT, shutdown)
 
-    start()
     run_simple(hostname, port, app,
         threaded=True,
         extra_files=extra_files,
         static_files=static_files,
         ssl_context=ssl_context,
         use_reloader=options.dev)
-    stop()
