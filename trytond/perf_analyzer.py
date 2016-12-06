@@ -89,9 +89,20 @@ from datetime import datetime
 import cStringIO as StringIO
 import cProfile as Profile
 
+from sql import Table
+from trytond.transaction import Transaction
 from trytond.config import config
 
 logger = logging.getLogger(__name__)
+
+
+def login_from_id(user_id):
+    with Transaction().new_transaction(readonly=True) as t:
+        cursor = t.connection.cursor()
+        table = Table('res_user')
+        cursor.execute(*table.select(table.login,
+                where=table.id == user_id))
+        return cursor.fetchone()[0]
 
 
 def get_broker():
@@ -189,14 +200,15 @@ class PerfLog(object):
 
     def on_enter(self, user, session, method, args, kwargs):
         if self.broker is not None:
-            if check_user(user.login):
+            login = login_from_id(user)
+            if check_user(login):
                 self.dt = time.time()
                 dts = datetime.fromtimestamp(self.dt).strftime(
                     '%Y-%m-%d@%H:%M:%S.%f')
                 # session
                 self.session = session
                 sess_key = self._sess_key()
-                self.broker.hsetnx(sess_key, 'user', user.login)
+                self.broker.hsetnx(sess_key, 'user', login)
                 id = self.broker.hincrby(sess_key, 'nb', 1)
                 self.broker.hsetnx(sess_key, 'first', dts)
                 self.broker.hset(sess_key, 'last', dts)
@@ -240,18 +252,14 @@ class PerfLog(object):
                     'sql': sql, 'bt': bt}))
 
 
-set_transaction_pattern = re.compile('^SET TRANSACTION.*')
-select_pattern = re.compile('^SELECT .* FROM "([a-z_\-]+)" AS "[a-z]".*')
-insert_pattern = re.compile('^INSERT INTO "([a-z_\-]+)" .*')
-update_pattern = re.compile('^UPDATE "([a-z_\-]+)" SET .*')
-delete_pattern = re.compile('^DELETE FROM "([a-z_\-]+)".*')
-seq_pattern = re.compile('^SELECT NEXTVAL.*')
+select_pattern = re.compile('^SELECT .+ FROM "?([a-z_\-]+)"?.*')
+insert_pattern = re.compile('^INSERT INTO "?([a-z_\-]+)"? .+')
+update_pattern = re.compile('^UPDATE "?([a-z_\-]+)"? SET .+')
+delete_pattern = re.compile('^DELETE FROM "?([a-z_\-]+)"?.*')
+seq_pattern = re.compile('^SELECT NEXTVAL.+')
 
 
 def parse_query(sql):
-    r = set_transaction_pattern.search(sql)
-    if r:
-        return 'set', None
     r = select_pattern.search(sql)
     if r:
         return 'select', r.group(1)
@@ -267,7 +275,7 @@ def parse_query(sql):
     r = seq_pattern.search(sql)
     if r:
         return 'seq', None
-    raise Exception('failed on: %s' % sql)
+    return 'other', None
 
 
 def analyze_before(cursor):
