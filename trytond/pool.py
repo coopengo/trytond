@@ -149,6 +149,8 @@ class Pool(object):
         with self._lock:
             if not self._started:
                 self.start()
+                from trytond.iwc import start
+                start()
         with self._locks[self.database_name]:
             # Don't reset pool if already init and not to update
             if not update and self._pool.get(self.database_name):
