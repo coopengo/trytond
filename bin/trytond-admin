@@ -18,4 +18,11 @@ options = parser.parse_args()
 config.update_etc(options.configfile)
 commandline.config_log(options)
 
+# AKE: handle term signals
+handler = commandline.generate_signal_handler(None)
+commandline.handle_signals(handler)
+
 admin.run(options)
+
+# AKE: clean process (stop known threads)
+handler(0, None)

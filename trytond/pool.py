@@ -102,6 +102,9 @@ class Pool(object):
                 classes.clear()
             cls._init_hooks = {}
             register_classes()
+            # AKE: inter-workers communication (start listener)
+            from trytond import iwc
+            iwc.start()
             cls._started = True
 
     @classmethod

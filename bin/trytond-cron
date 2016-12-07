@@ -19,6 +19,10 @@ options = parser.parse_args()
 config.update_etc(options.configfile)
 commandline.config_log(options)
 
+# AKE: handle term signals
+handler = commandline.generate_signal_handler(options.pidfile)
+commandline.handle_signals(handler)
+
 with commandline.pidfile(options):
     while True:
         cron.run(options)
