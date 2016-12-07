@@ -54,6 +54,7 @@ with commandline.pidfile(options):
         path = os.path.join(info['directory'], 'view', '*.xml')
         extra_files.extend(glob.glob(path))
 
+    # AKE: handle term signals
     handler = commandline.generate_signal_handler(options.pidfile)
     commandline.handle_signals(handler)
 
