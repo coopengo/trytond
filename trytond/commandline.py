@@ -106,7 +106,8 @@ def generate_signal_handler(pidfile):
         logging.shutdown()
         if pidfile:
             os.unlink(pidfile)
-        traceback.print_stack(frame)
+        if signum != 0:
+            traceback.print_stack(frame)
         sys.exit(signum)
     return shutdown
 
@@ -115,6 +116,6 @@ def generate_signal_handler(pidfile):
 def handle_signals(handler):
     sig_names = ('SIGINT', 'SIGTERM', 'SIGQUIT')
     for sig_name in sig_names:
-        sig = getattr(signal, sig_name)
-        if sig:
+        sig = getattr(signal, sig_name, None)
+        if sig is not None:
             signal.signal(sig, handler)
