@@ -2,12 +2,16 @@
 # this repository contains the full copyright notices and license terms.
 import argparse
 import os
+import sys
+import signal
+import traceback
 import logging
 import logging.config
 import logging.handlers
 from contextlib import contextmanager
 
 from trytond import __version__
+from trytond import iwc
 
 logger = logging.getLogger(__name__)
 
@@ -92,3 +96,25 @@ def pidfile(options):
             fd.write('%d' % os.getpid())
         yield
         os.unlink(path)
+
+
+# AKE: generates a callback to clean process before stop
+def generate_signal_handler(pidfile):
+    def shutdown(signum, frame):
+        logger.info('shutdown')
+        iwc.stop()
+        logging.shutdown()
+        if pidfile:
+            os.unlink(pidfile)
+        traceback.print_stack(frame)
+        sys.exit(signum)
+    return shutdown
+
+
+# AKE: attach handler to common term signals
+def handle_signals(handler):
+    sig_names = ('SIGINT', 'SIGTERM', 'SIGQUIT')
+    for sig_name in sig_names:
+        sig = getattr(signal, sig_name)
+        if sig:
+            signal.signal(sig, handler)

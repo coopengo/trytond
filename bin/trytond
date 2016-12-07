@@ -4,11 +4,7 @@
 import sys
 import os
 import glob
-import signal
-import logging
 import threading
-
-logger = logging.getLogger(__name__)
 
 from werkzeug.serving import run_simple
 
@@ -58,16 +54,8 @@ with commandline.pidfile(options):
         path = os.path.join(info['directory'], 'view', '*.xml')
         extra_files.extend(glob.glob(path))
 
-    def shutdown(signum, frame):
-        if options.pidfile:
-            os.unlink(options.pidfile)
-        logger.info('shutdown')
-        logging.shutdown()
-        sys.exit(signum)
-
-    signal.signal(signal.SIGTERM, shutdown)
-    if hasattr(signal, 'SIGQUIT'):
-        signal.signal(signal.SIGQUIT, shutdown)
+    handler = commandline.generate_signal_handler(options.pidfile)
+    commandline.handle_signals(handler)
 
     run_simple(hostname, port, app,
         threaded=True,

@@ -102,6 +102,9 @@ class Pool(object):
                 classes.clear()
             cls._init_hooks = {}
             register_classes()
+            # AKE: inter-workers communication (start listener)
+            from trytond import iwc
+            iwc.start()
             cls._started = True
 
     @classmethod
@@ -149,8 +152,6 @@ class Pool(object):
         with self._lock:
             if not self._started:
                 self.start()
-                from trytond.iwc import start
-                start()
         with self._locks[self.database_name]:
             # Don't reset pool if already init and not to update
             if not update and self._pool.get(self.database_name):
