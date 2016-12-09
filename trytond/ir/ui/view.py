@@ -13,7 +13,7 @@ from trytond.tools import file_open
 from trytond.transaction import Transaction
 from trytond.wizard import Wizard, StateView, Button
 from trytond.pool import Pool
-from trytond.cache import _Cache as Cache
+from trytond.cache import MemoryCache
 from trytond.rpc import RPC
 
 __all__ = [
@@ -64,7 +64,7 @@ class View(ModelSQL, ModelView):
     domain = fields.Char('Domain', states={
             'invisible': ~Eval('inherit'),
             }, depends=['inherit'])
-    _get_rng_cache = Cache('ir_ui_view.get_rng')
+    _get_rng_cache = MemoryCache('ir_ui_view.get_rng')
 
     @classmethod
     def __setup__(cls):

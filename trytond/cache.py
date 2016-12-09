@@ -38,7 +38,7 @@ class BaseCache(object):
             return (key, Transaction().user, freeze(Transaction().context))
         return key
 
-    def get(self, key, default):
+    def get(self, key, default=None):
         raise NotImplemented
 
     def set(self, key, value):
@@ -98,7 +98,7 @@ class MemoryCache(BaseCache):
         self._timestamp = None
         self._lock = Lock()
 
-    def get(self, key, default):
+    def get(self, key, default=None):
         dbname = Transaction().database.name
         key = self._key(key)
         with self._lock:
