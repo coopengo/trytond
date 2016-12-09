@@ -145,10 +145,10 @@ class ModelSQL(ModelStorage):
         for field_name, field in cls._fields.iteritems():
             if field_name == 'id':
                 continue
-            default_fun = None
-            if hasattr(field, 'set'):
-                continue
             sql_type = field.sql_type()
+            if not sql_type:
+                continue
+            default_fun = None
             if field_name in cls._defaults:
                 default_fun = cls._defaults[field_name]
 
@@ -199,6 +199,11 @@ class ModelSQL(ModelStorage):
                 field_name, action=field.select and 'add' or 'remove')
 
             required = field.required
+            # Do not set 'NOT NULL' for Binary field as the database column
+            # will be left empty if stored in the filestore or filled later by
+            # the set method.
+            if isinstance(field, fields.Binary):
+                required = False
             table.not_null_action(
                 field_name, action=required and 'add' or 'remove')
 
@@ -228,7 +233,7 @@ class ModelSQL(ModelStorage):
                 cursor.execute(*history_table.select(history_table.id))
                 if not cursor.fetchone():
                     columns = [n for n, f in cls._fields.iteritems()
-                        if not hasattr(f, 'set')]
+                        if f.sql_type()]
                     cursor.execute(*history_table.insert(
                             [Column(history_table, c) for c in columns],
                             sql_table.select(*(Column(sql_table, c)
@@ -264,31 +269,34 @@ class ModelSQL(ModelStorage):
         return None
 
     @classmethod
-    def __raise_integrity_error(cls, exception, values, field_names=None):
+    def __raise_integrity_error(
+            cls, exception, values, field_names=None, transaction=None):
         import traceback
         traceback.print_stack()
         pool = Pool()
         if field_names is None:
             field_names = cls._fields.keys()
+        if transaction is None:
+            transaction = Transaction()
         for field_name in field_names:
             if field_name not in cls._fields:
                 continue
             field = cls._fields[field_name]
             # Check required fields
             if (field.required
-                    and not hasattr(field, 'set')
+                    and field.sql_type()
                     and field_name not in ('create_uid', 'create_date')):
                 if values.get(field_name) is None:
                     cls.raise_user_error('required_field',
                         error_args=cls._get_error_args(field_name))
             if isinstance(field, fields.Many2One) and values.get(field_name):
                 Model = pool.get(field.model_name)
-                create_records = Transaction().create_records.get(
+                create_records = transaction.create_records.get(
                     field.model_name, set())
-                delete_records = Transaction().delete_records.get(
+                delete_records = transaction.delete_records.get(
                     field.model_name, set())
                 target_records = Model.search([
-                        ('id', '=', values[field_name]),
+                        ('id', '=', field.sql_format(values[field_name])),
                         ], order=[])
                 if not ((target_records
                             or (values[field_name] in create_records))
@@ -337,7 +345,7 @@ class ModelSQL(ModelStorage):
         return revisions
 
     @classmethod
-    def __insert_history(cls, ids, deleted=False):
+    def _insert_history(cls, ids, deleted=False):
         transaction = Transaction()
         cursor = transaction.connection.cursor()
         if not cls._history:
@@ -356,7 +364,7 @@ class ModelSQL(ModelStorage):
                 'write_date': cls.write_date,
                 }
         for fname, field in sorted(fields.iteritems()):
-            if hasattr(field, 'set'):
+            if not field.sql_type():
                 continue
             columns.append(Column(table, fname))
             hcolumns.append(Column(history, fname))
@@ -386,7 +394,7 @@ class ModelSQL(ModelStorage):
         columns = []
         hcolumns = []
         fnames = sorted(n for n, f in cls._fields.iteritems()
-            if not hasattr(f, 'set'))
+            if f.sql_type())
         for fname in fnames:
             columns.append(Column(table, fname))
             if fname == 'write_uid':
@@ -432,9 +440,9 @@ class ModelSQL(ModelStorage):
             for sub_ids in grouped_slice(to_delete):
                 where = reduce_ids(table.id, sub_ids)
                 cursor.execute(*table.delete(where=where))
-            cls.__insert_history(to_delete, True)
+            cls._insert_history(to_delete, True)
         if to_update:
-            cls.__insert_history(to_update)
+            cls._insert_history(to_update)
 
     @classmethod
     def restore_history(cls, ids, datetime):
@@ -545,9 +553,11 @@ class ModelSQL(ModelStorage):
                         id_new = transaction.database.lastid(cursor)
                 new_ids.append(id_new)
             except DatabaseIntegrityError, exception:
+                transaction = Transaction()
                 with Transaction().new_transaction(), \
                         Transaction().set_context(_check_access=False):
-                    cls.__raise_integrity_error(exception, values)
+                    cls.__raise_integrity_error(
+                        exception, values, transaction=transaction)
                 raise
 
         domain = Rule.domain_get(cls.__name__, mode='create')
@@ -596,7 +606,7 @@ class ModelSQL(ModelStorage):
             field = cls._fields[fname]
             field.set(cls, fname, *fargs)
 
-        cls.__insert_history(new_ids)
+        cls._insert_history(new_ids)
 
         records = cls.browse(new_ids)
         for sub_records in grouped_slice(records, cache_size()):
@@ -668,7 +678,7 @@ class ModelSQL(ModelStorage):
         columns = []
         for f in fields_names + fields_related.keys() + datetime_fields:
             field = cls._fields.get(f)
-            if field and not hasattr(field, 'set'):
+            if field and field.sql_type():
                 columns.append(field.sql_column(table).as_(f))
             elif f == '_timestamp' and not table_query:
                 sql_type = fields.Char('timestamp').sql_type().base
@@ -720,7 +730,7 @@ class ModelSQL(ModelStorage):
             if field == '_timestamp':
                 continue
             if (getattr(cls._fields[field], 'translate', False)
-                    and not hasattr(field, 'set')):
+                    and not hasattr(field, 'get')):
                 translations = Translation.get_ids(cls.__name__ + ',' + field,
                     'model', Transaction().language, ids)
                 for row in result:
@@ -931,10 +941,12 @@ class ModelSQL(ModelStorage):
                     cursor.execute(*table.update(columns, update_values,
                             where=red_sql))
                 except DatabaseIntegrityError, exception:
-                    with Transaction().new_transaction() as transaction, \
-                            transaction.set_context(_check_access=False):
-                        cls.__raise_integrity_error(exception, values,
-                            values.keys())
+                    transaction = Transaction()
+                    with Transaction().new_transaction(), \
+                            Transaction().set_context(_check_access=False):
+                        cls.__raise_integrity_error(
+                            exception, values, values.keys(),
+                            transaction=transaction)
                     raise
 
             for fname, value in values.iteritems():
@@ -955,7 +967,7 @@ class ModelSQL(ModelStorage):
             field = cls._fields[fname]
             field.set(cls, fname, *fargs)
 
-        cls.__insert_history(all_ids)
+        cls._insert_history(all_ids)
         for sub_records in grouped_slice(all_records, cache_size()):
             cls._validate(sub_records, field_names=all_field_names)
         cls.trigger_write(trigger_eligibles)
@@ -1089,13 +1101,15 @@ class ModelSQL(ModelStorage):
             try:
                 cursor.execute(*table.delete(where=red_sql))
             except DatabaseIntegrityError, exception:
+                transaction = Transaction()
                 with Transaction().new_transaction():
-                    cls.__raise_integrity_error(exception, {})
+                    cls.__raise_integrity_error(
+                        exception, {}, transaction=transaction)
                 raise
 
         Translation.delete_ids(cls.__name__, 'model', ids)
 
-        cls.__insert_history(ids, deleted=True)
+        cls._insert_history(ids, deleted=True)
 
         cls._update_mptt(tree_ids.keys(), tree_ids.values())
 
@@ -1136,7 +1150,7 @@ class ModelSQL(ModelStorage):
         table = convert_from(None, tables)
 
         if count:
-            cursor.execute(*table.select(Count(Literal(1)),
+            cursor.execute(*table.select(Count(Literal('*')),
                     where=expression, limit=limit, offset=offset))
             return cursor.fetchone()[0]
         # execute the "main" query to fetch the ids we were searching for

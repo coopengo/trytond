@@ -21,11 +21,6 @@
   </define>
   <define name="attlist.form" combine="interleave">
     <optional>
-      <attribute name="string" a:defaultValue="Unknown"/>
-    </optional>
-  </define>
-  <define name="attlist.form" combine="interleave">
-    <optional>
       <attribute name="on_write"/>
     </optional>
   </define>
@@ -161,29 +156,15 @@
           <value>callto</value>
           <value>sip</value>
           <value>image</value>
-          <value>icon</value>
           <value>progressbar</value>
           <value>one2one</value>
           <value>richtext</value>
           <value>dict</value>
           <value>multiselection</value>
+          <value>pyson</value>
+          <value>icon</value>
           <value>source</value>
           <value>many2many_selection</value>
-        </choice>
-      </attribute>
-    </optional>
-  </define>
-  <define name="attlist.field" combine="interleave">
-    <optional>
-      <attribute name="context_tree"/>
-    </optional>
-  </define>
-  <define name="attlist.field" combine="interleave">
-    <optional>
-      <attribute name="no_command">
-        <choice>
-          <value>0</value>
-          <value>1</value>
         </choice>
       </attribute>
     </optional>
@@ -300,21 +281,6 @@
   </define>
   <define name="attlist.field" combine="interleave">
     <optional>
-      <attribute name="group"/>
-    </optional>
-  </define>
-  <define name="attlist.field" combine="interleave">
-    <optional>
-      <attribute name="relation"/>
-    </optional>
-  </define>
-  <define name="attlist.field" combine="interleave">
-    <optional>
-      <attribute name="relation_field"/>
-    </optional>
-  </define>
-  <define name="attlist.field" combine="interleave">
-    <optional>
       <attribute name="view_ids"/>
     </optional>
   </define>
@@ -402,6 +368,47 @@
   </define>
   <define name="attlist.field" combine="interleave">
     <optional>
+      <attribute name="toolbar" a:defaultValue="1">
+        <choice>
+          <value>0</value>
+          <value>1</value>
+        </choice>
+      </attribute>
+    </optional>
+  </define>
+  <!-- AKE: coog specific field attrs begin here -->
+  <define name="attlist.field" combine="interleave">
+    <optional>
+      <attribute name="context_tree"/>
+    </optional>
+  </define>
+  <define name="attlist.field" combine="interleave">
+    <optional>
+      <attribute name="no_command">
+        <choice>
+          <value>0</value>
+          <value>1</value>
+        </choice>
+      </attribute>
+    </optional>
+  </define>
+  <define name="attlist.field" combine="interleave">
+    <optional>
+      <attribute name="relation"/>
+    </optional>
+  </define>
+  <define name="attlist.field" combine="interleave">
+    <optional>
+      <attribute name="relation_field"/>
+    </optional>
+  </define>
+  <define name="attlist.field" combine="interleave">
+    <optional>
+      <attribute name="group"/>
+    </optional>
+  </define>
+  <define name="attlist.field" combine="interleave">
+    <optional>
       <attribute name="states"/>
     </optional>
   </define>
@@ -415,6 +422,7 @@
       </attribute>
     </optional>
   </define>
+  <!-- AKE: coog specific field attrs end here -->
   <define name="image">
     <element name="image">
       <ref name="attlist.image"/>
@@ -602,6 +610,16 @@
   <define name="attlist.button" combine="interleave">
     <optional>
       <attribute name="states"/>
+    </optional>
+  </define>
+  <define name="attlist.button" combine="interleave">
+    <optional>
+      <attribute name="rule" a:defaultValue="0">
+        <choice>
+          <value>0</value>
+          <value>1</value>
+        </choice>
+      </attribute>
     </optional>
   </define>
   <define name="attlist.button" combine="interleave">

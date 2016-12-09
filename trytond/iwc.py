@@ -8,7 +8,7 @@ import logging
 import redis
 from trytond.pool import Pool
 from trytond.transaction import Transaction
-from trytond.coog_config import get_cache_redis
+from trytond.config import config
 
 logger = logging.getLogger(__name__)
 broker = None
@@ -63,7 +63,7 @@ def is_started():
 
 def start():
     logger.info('starting worker listener')
-    redis_url = get_cache_redis()
+    redis_url = config.get('cache', 'uri')
     global broker
     global listener
     if redis_url:

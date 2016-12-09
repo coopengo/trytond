@@ -1,19 +1,48 @@
-Version 4.0.5 - 2016-11-06
+Version 4.2.0 - 2016-11-28
 * Bug fixes (see mercurial logs for details)
-
-Version 4.0.4 - 2016-08-30
-* Bug fixes (see mercurial logs for details)
+* Add toolbar attribute for richtext widget
+* Add PYSON widget
+* Allow to define the text color and background color in calendar view
+* Allow to override cache implementation
+* Add button rule
+* Allow to specify translatable languages in trytond-admin
+* Add datetime_field on Reference
+* Merge Spanish's into Spanish (Latin American)
+* Do not check write access on model for wizard with groups
+* Add user application
+* Add sequence_ordered
+* Remove most country specific code in languages
+* Add support for derivative translations
+* Remove IDENTIFIER regexp on ir.model and ir.model.field
+* Enforce suffix and prefix to have id or name
 * Sanitize path in file_open (CVE-2016-1242)
 * Prevent read of user password hash (CVE-2016-1241)
-
-Version 4.0.3 - 2016-08-02
-* Bug fixes (see mercurial logs for details)
-
-Version 4.0.2 - 2016-07-04
-* Bug fixes (see mercurial logs for details)
-
-Version 4.0.1 - 2016-05-11
-* Bug fixes (see mercurial logs for details)
+* Add database dump cache for tests
+* Remove unused tools: find_in_path, exec_command_pipe and mod10r
+* Implementation of drop_column for SQLite
+* Allow to pass many configuration files
+* Remove translate on field name of User
+* Allow to define the default mode in calendar view
+* Use 'default_rec_name' context key in Model.default_get
+* Add option to store Attachment in database
+* Allow to store Binary field in filestore
+* Add filestore module
+* Allow None in Greater/Less PYSON
+* Add option to set admin password with trytond-admin
+* Remove super password
+* Remove database management from RPC
+* Remove ModelView.view_header_get
+* Remove string attribute from views
+* Don't check write access on model for button with groups
+* Limit readonly state for xxx2Many
+* Add option to update modules list with trytond-admin
+* Use home directory as default path for database and web root.
+* Add count option on Action Window Domains
+* Remove window_name on Action Window
+* Return the calling keyword in ActionKeyword.get_keywords
+* Add customizable login process
+* Allow to customize the substitutions used on sequence
+* Allow PYSON in tree_invisible attribute
 
 Version 4.0.0 - 2016-05-02
 * Bug fixes (see mercurial logs for details)

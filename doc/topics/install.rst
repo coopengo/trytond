@@ -23,7 +23,6 @@ Prerequisites
     * Optional: pydot (http://code.google.com/p/pydot/)
     * Optional: unoconv http://dag.wieers.com/home-made/unoconv/)
     * Optional: sphinx (http://sphinx.pocoo.org/)
-    * Optional: simplejson (http://undefined.org/python/#simplejson)
     * Optional: cdecimal (http://www.bytereef.org/mpdecimal/index.html)
     * Optional: python-Levenshtein
       (http://github.com/miohtama/python-Levenshtein)
@@ -46,7 +45,7 @@ There are three easy options to install Tryton:
       For advanced options, please refer to the easy_install and/or the
       distutils documentation:
 
-          * http://peak.telecommunity.com/DevCenter/EasyInstall
+          * http://setuptools.readthedocs.io/en/latest/easy_install.html
           * http://docs.python.org/inst/inst.html
 
     * Without installation, just run ``bin/trytond`` from where the archive was

@@ -20,6 +20,7 @@ from trytond.transaction import Transaction
 from trytond.url import URLMixin
 from trytond.rpc import RPC
 from trytond.exceptions import UserError
+from trytond.tools import get_parent_language
 
 MIMETYPES = {
     'odt': 'application/vnd.oasis.opendocument.text',
@@ -35,6 +36,7 @@ FORMAT2EXT = {
     'doc6': 'doc',
     'doc95': 'doc',
     'docbook': 'xml',
+    'docx7': 'docx',
     'ooxml': 'xml',
     'latex': 'ltx',
     'sdc4': 'sdc',
@@ -72,18 +74,21 @@ class TranslateFactory:
 
     def __call__(self, text):
         if self.language not in self.cache:
-            self.cache[self.language] = {}
-            translations = self.translation.search([
-                ('lang', '=', self.language),
-                ('type', '=', 'report'),
-                ('name', '=', self.report_name),
-                ('value', '!=', ''),
-                ('value', '!=', None),
-                ('fuzzy', '=', False),
-                ('res_id', '=', -1),
-                ])
-            for translation in translations:
-                self.cache[self.language][translation.src] = translation.value
+            cache = self.cache[self.language] = {}
+            code = self.language
+            while code:
+                translations = self.translation.search([
+                    ('lang', '=', code),
+                    ('type', '=', 'report'),
+                    ('name', '=', self.report_name),
+                    ('value', '!=', ''),
+                    ('value', '!=', None),
+                    ('fuzzy', '=', False),
+                    ('res_id', '=', -1),
+                    ])
+                for translation in translations:
+                    cache.setdefault(translation.src, translation.value)
+                code = get_parent_language(code)
         return self.cache[self.language].get(text, text)
 
     def set_language(self, language):

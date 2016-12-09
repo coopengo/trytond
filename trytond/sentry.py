@@ -1,12 +1,12 @@
 # This file is part of Coog. The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
 import logging
-from trytond.coog_config import get_sentry_dsn
+from trytond.config import config
 from trytond.exceptions import UserError, UserWarning, ConcurrencyException
 from werkzeug.exceptions import Forbidden
 
 logger = logging.getLogger(__name__)
-sentry_dsn = get_sentry_dsn()
+sentry_dsn = config.get('sentry', 'dsn')
 
 
 def sentry_wrap(func):

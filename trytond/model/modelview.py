@@ -179,7 +179,10 @@ class ModelView(Model):
 
         # Update __rpc__
         for field_name, field in cls._fields.iteritems():
-            if isinstance(field, (fields.Selection, fields.Reference)) \
+            if (isinstance(field, (fields.Selection, fields.Reference))
+                    or (isinstance(field, fields.Function)
+                        and isinstance(field._field,
+                            (fields.Selection, fields.Reference)))) \
                     and not isinstance(field.selection, (list, tuple)) \
                     and field.selection not in cls.__rpc__:
                 instantiate = 0 if field.selection_change_with else None
@@ -311,7 +314,7 @@ class ModelView(Model):
             if view_type == 'form':
                 res = cls.fields_get()
                 xml = '''<?xml version="1.0"?>''' \
-                    '''<form string="%s" col="4">''' % (cls.__doc__,)
+                    '''<form col="4">'''
                 for i in res:
                     if i in ('create_uid', 'create_date',
                             'write_uid', 'write_date', 'id', 'rec_name'):
@@ -329,8 +332,8 @@ class ModelView(Model):
                 if cls._rec_name in cls._fields:
                     field = cls._rec_name
                 xml = '''<?xml version="1.0"?>''' \
-                    '''<tree string="%s"><field name="%s"/></tree>''' \
-                    % (cls.__doc__, field)
+                    '''<tree><field name="%s"/></tree>''' \
+                    % (field,)
             else:
                 xml = ''
             result['type'] = view_type
@@ -392,18 +395,6 @@ class ModelView(Model):
             }
         cls._view_toolbar_get_cache.set(key, result)
         return result
-
-    @classmethod
-    def view_header_get(cls, value, view_type='form'):
-        """
-        Overload this method if you need a window title.
-        which depends on the context
-
-        :param value: the default header string
-        :param view_type: the type of the view
-        :return: the header string of the view
-        """
-        return value
 
     @classmethod
     def view_attributes(cls):
@@ -502,6 +493,7 @@ class ModelView(Model):
         pool = Pool()
         Translation = pool.get('ir.translation')
         ModelData = pool.get('ir.model.data')
+        ModelAccess = pool.get('ir.model.access')
         Button = pool.get('ir.model.button')
         User = pool.get('res.user')
 
@@ -588,10 +580,17 @@ class ModelView(Model):
                 states = {}
             groups = set(User.get_groups())
             button_groups = Button.get_groups(cls.__name__, button_name)
-            if button_groups and not groups & button_groups:
+            if ((button_groups and not groups & button_groups)
+                    or (not button_groups
+                        and not ModelAccess.check(
+                            cls.__name__, 'write', raise_exception=False))):
                 states = states.copy()
                 states['readonly'] = True
             element.set('states', encoder.encode(states))
+
+            button_rules = Button.get_rules(cls.__name__, button_name)
+            if button_rules:
+                element.set('rule', '1')
 
             change = cls.__change_buttons[button_name]
             if change:
@@ -602,7 +601,7 @@ class ModelView(Model):
                 element.set('type', 'instance')
 
         # translate view
-        if Transaction().language != 'en_US':
+        if Transaction().language != 'en':
             for attr in ('string', 'sum', 'confirm', 'help'):
                 if element.get(attr):
                     trans = Translation.get_source(cls.__name__, 'view',
@@ -610,16 +609,11 @@ class ModelView(Model):
                     if trans:
                         element.set(attr, trans)
 
-        # Set header string
-        if element.tag in ('form', 'tree', 'graph'):
-            element.set('string', cls.view_header_get(
-                element.get('string') or '', view_type=element.tag))
-
         if element.tag == 'tree' and element.get('sequence'):
             fields_attrs.setdefault(element.get('sequence'), {})
 
         if element.tag == 'calendar':
-            for attr in ('dtstart', 'dtend'):
+            for attr in ['dtstart', 'dtend', 'color', 'background_color']:
                 if element.get(attr):
                     fields_attrs.setdefault(element.get(attr), {})
 
@@ -631,24 +625,45 @@ class ModelView(Model):
     @staticmethod
     def button(func):
         @wraps(func)
-        def wrapper(cls, *args, **kwargs):
+        def wrapper(cls, records, *args, **kwargs):
             pool = Pool()
             ModelAccess = pool.get('ir.model.access')
             Button = pool.get('ir.model.button')
+            ButtonClick = pool.get('ir.model.button.click')
             User = pool.get('res.user')
 
-            if ((Transaction().user != 0)
-                    and Transaction().context.get('_check_access')):
+            transaction = Transaction()
+            check_access = transaction.context.get('_check_access')
+
+            if (transaction.user != 0) and check_access:
                 ModelAccess.check(cls.__name__, 'read')
-                ModelAccess.check(cls.__name__, 'write')
                 groups = set(User.get_groups())
                 button_groups = Button.get_groups(cls.__name__,
                     func.__name__)
-                if button_groups and not groups & button_groups:
-                    raise UserError('Calling button %s on %s is not allowed!'
-                        % (func.__name__, cls.__name__))
+                if button_groups:
+                    if not groups & button_groups:
+                        raise UserError(
+                            'Calling button %s on %s is not allowed!'
+                            % (func.__name__, cls.__name__))
+                else:
+                    ModelAccess.check(cls.__name__, 'write')
+
             with Transaction().set_context(_check_access=False):
-                return func(cls, *args, **kwargs)
+                if (transaction.user != 0) and check_access:
+                    button_rules = Button.get_rules(
+                        cls.__name__, func.__name__)
+                    if button_rules:
+                        clicks = ButtonClick.register(
+                            cls.__name__, func.__name__, records)
+                        records = filter(
+                            lambda r: all(br.test(r, clicks.get(r.id, []))
+                                for br in button_rules),
+                            records)
+                # Reset click after filtering in case the button also has rules
+                names = Button.get_reset(cls.__name__, func.__name__)
+                if names:
+                    ButtonClick.reset(cls.__name__, names, records)
+                return func(cls, records, *args, **kwargs)
         return wrapper
 
     @staticmethod
@@ -674,7 +689,6 @@ class ModelView(Model):
     @staticmethod
     def button_change(*fields):
         def decorator(func):
-            func = ModelView.button(func)
             func = on_change(func)
             func.change = set(fields)
             return func

@@ -88,6 +88,16 @@ msgctxt "field:ir.model.button-res.group,write_uid:"
 msgid "Write User"
 msgstr "写入帐号"
 
+#, fuzzy
+msgctxt "field:ir.model.button.click,user:"
+msgid "User"
+msgstr "用户"
+
+#, fuzzy
+msgctxt "field:ir.model.button.rule,group:"
+msgid "Group"
+msgstr "用户组"
+
 msgctxt "field:ir.model.field-res.group,create_date:"
 msgid "Create Date"
 msgstr "创建日期:"
@@ -316,6 +326,10 @@ msgctxt "field:res.user,active:"
 msgid "Active"
 msgstr "启用"
 
+msgctxt "field:res.user,applications:"
+msgid "Applications"
+msgstr ""
+
 msgctxt "field:res.user,create_date:"
 msgid "Create Date"
 msgstr "创建日期"
@@ -464,6 +478,53 @@ msgctxt "field:res.user-res.group,write_uid:"
 msgid "Write User"
 msgstr "写入帐号"
 
+msgctxt "field:res.user.application,application:"
+msgid "Application"
+msgstr ""
+
+#, fuzzy
+msgctxt "field:res.user.application,create_date:"
+msgid "Create Date"
+msgstr "创建日期"
+
+#, fuzzy
+msgctxt "field:res.user.application,create_uid:"
+msgid "Create User"
+msgstr "创建者"
+
+#, fuzzy
+msgctxt "field:res.user.application,id:"
+msgid "ID"
+msgstr "标识"
+
+msgctxt "field:res.user.application,key:"
+msgid "Key"
+msgstr ""
+
+#, fuzzy
+msgctxt "field:res.user.application,rec_name:"
+msgid "Name"
+msgstr "名称"
+
+msgctxt "field:res.user.application,state:"
+msgid "State"
+msgstr ""
+
+#, fuzzy
+msgctxt "field:res.user.application,user:"
+msgid "User"
+msgstr "用户"
+
+#, fuzzy
+msgctxt "field:res.user.application,write_date:"
+msgid "Write Date"
+msgstr "写入日期"
+
+#, fuzzy
+msgctxt "field:res.user.application,write_uid:"
+msgid "Write User"
+msgstr "写入帐号"
+
 msgctxt "field:res.user.config.start,id:"
 msgid "ID"
 msgstr "标识"
@@ -608,14 +669,6 @@ msgctxt "model:res.user,name:"
 msgid "User"
 msgstr "用户"
 
-msgctxt "model:res.user,name:user_admin"
-msgid "Administrator"
-msgstr "Administrator"
-
-msgctxt "model:res.user,name:user_trigger"
-msgid "Cron Trigger"
-msgstr "Cron 触发"
-
 msgctxt "model:res.user-ir.action,name:"
 msgid "User - Action"
 msgstr "用户 - 操作"
@@ -623,6 +676,10 @@ msgstr "用户 - 操作"
 msgctxt "model:res.user-res.group,name:"
 msgid "User - Group"
 msgstr "用户 - 用户组"
+
+msgctxt "model:res.user.application,name:"
+msgid "User Application"
+msgstr ""
 
 msgctxt "model:res.user.config.start,name:"
 msgid "User Config Init"
@@ -636,25 +693,34 @@ msgctxt "model:res.user.warning,name:"
 msgid "User Warning"
 msgstr "用户警告"
 
+msgctxt "selection:res.user.application,state:"
+msgid "Cancelled"
+msgstr ""
+
+msgctxt "selection:res.user.application,state:"
+msgid "Requested"
+msgstr ""
+
+msgctxt "selection:res.user.application,state:"
+msgid "Validated"
+msgstr ""
+
 msgctxt "view:res.group:"
 msgid "Access Permissions"
 msgstr "操作权限"
 
 msgctxt "view:res.group:"
-msgid "Group"
-msgstr "用户组"
-
-msgctxt "view:res.group:"
-msgid "Groups"
-msgstr "用户组"
-
-msgctxt "view:res.group:"
 msgid "Members"
 msgstr "成员"
 
-msgctxt "view:res.user.config.start:"
-msgid "Add Users"
-msgstr "添加用户"
+#, fuzzy
+msgctxt "view:res.user.application:"
+msgid "Cancel"
+msgstr "取消"
+
+msgctxt "view:res.user.application:"
+msgid "Validate"
+msgstr ""
 
 msgctxt "view:res.user.config.start:"
 msgid "Be careful that the login must be unique!"
@@ -663,14 +729,6 @@ msgstr "用户组标识必须唯一！"
 msgctxt "view:res.user.config.start:"
 msgid "You can now add some users into the system."
 msgstr "现在可以给系统添加用户了."
-
-msgctxt "view:res.user.warning:"
-msgid "Warning"
-msgstr "警告"
-
-msgctxt "view:res.user.warning:"
-msgid "Warnings"
-msgstr "警告"
 
 msgctxt "view:res.user:"
 msgid "Access Permissions"
@@ -691,10 +749,6 @@ msgstr "偏好"
 msgctxt "view:res.user:"
 msgid "User"
 msgstr "基本信息"
-
-msgctxt "view:res.user:"
-msgid "Users"
-msgstr "用户"
 
 msgctxt "wizard_button:res.user.config,start,end:"
 msgid "Cancel"

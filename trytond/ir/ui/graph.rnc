@@ -1,11 +1,9 @@
 namespace a = "http://relaxng.org/ns/compatibility/annotations/1.0"
 
-graph = element graph { attlist.graph, x, y }
+graph = element graph { attlist.graph, x+, y* }
 attlist.graph &=
   [ a:defaultValue = "vbar" ]
   attribute type { "vbar" | "hbar" | "line" | "pie" }?
-attlist.graph &=
-  [ a:defaultValue = "Unknown" ] attribute string { text }?
 attlist.graph &=
   [ a:defaultValue = "#f5f5f5" ] attribute background { text }?
 attlist.graph &= [ a:defaultValue = "blue" ] attribute color { text }?
@@ -27,12 +25,13 @@ attlist.field &= attribute timedelta { text }?
 attlist.field &=
     [ a:defaultValue = "linear" ]
     attribute interpolation { "constant-left" | "constant-right" | "constant-center" | "linear" }?
-data = element data { attlist.data, xpath+ }
+data = element data { attlist.data, xpath* }
 attlist.data &= empty
 xpath = element xpath { attlist.xpath,
     (graph
     | x
-    | y)*
+    | y
+    | field)*
   }
 attlist.xpath &= attribute expr { text }
 attlist.xpath &=

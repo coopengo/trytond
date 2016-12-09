@@ -82,6 +82,8 @@ Class methods:
     ``fields_names``. Default values are defined by the returned value of each
     instance method with the pattern ``default_`field_name`()``.
     ``with_rec_name`` allow to add `rec_name` value for each many2one field.
+    The `default_rec_name` key in the context can be used to define the value
+    of the :attr:`Model._rec_name` field.
 
 .. classmethod:: Model.fields_get([fields_names])
 
@@ -122,7 +124,7 @@ Static methods:
 
 .. staticmethod:: ModelView.button
 
-    Decorate button method to check group access.
+    Decorate button method to check group access and rule.
 
 .. staticmethod:: ModelView.button_action(action)
 
@@ -163,10 +165,6 @@ Class methods:
         - `print`: a list of available reports
         - `action`: a list of available actions
         - `relate`: a list of available relations
-
-.. classmethod:: ModelView.view_header_get(value[, view_type])
-
-    Returns the window title used by the client for the specific view type.
 
 .. classmethod:: ModelView.view_attributes()
 
@@ -684,6 +682,19 @@ Class methods:
 .. classmethod:: UnionMixin.union_columns(model)
 
     Return the SQL table and columns to use for the UNION for the model name.
+
+================
+sequence_ordered
+================
+
+.. method:: sequence_ordered([field_name, [field_label, [order, [null_first]]]])
+
+Retuns a mixin_ class which defines the order of a :class:`ModelSQL` with an
+:class:`trytond.model.fields.Integer` field. field_name indicates the name of
+the field to be created and its default values is `sequence`. field_label
+defines the label which will be used by the field and defaults to `Sequence`.
+Order specifies the order direction and defaults to `ASC` and null first
+if the null values should be ordered first and defaults to `True`.
 
 
 .. _mixin: http://en.wikipedia.org/wiki/Mixin

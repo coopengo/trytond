@@ -147,13 +147,16 @@ class ActionKeyword(ModelSQL, ModelView):
     def check_wizard_model(self):
         ActionWizard = Pool().get('ir.action.wizard')
         if self.action.type == 'ir.action.wizard':
-            action_wizard, = ActionWizard.search([
+            action_wizards = ActionWizard.search([
                 ('action', '=', self.action.id),
                 ], limit=1)
-            if action_wizard.model:
-                if self.model.__name__ != action_wizard.model:
-                    self.raise_user_error('wrong_wizard_model', (
-                            action_wizard.rec_name,))
+            # could be empty when copying an action
+            if action_wizards:
+                action_wizard, = action_wizards
+                if action_wizard.model:
+                    if self.model.__name__ != action_wizard.model:
+                        self.raise_user_error('wrong_wizard_model', (
+                                action_wizard.rec_name,))
 
     @staticmethod
     def _convert_vals(vals):
@@ -227,7 +230,9 @@ class ActionKeyword(ModelSQL, ModelView):
             type_ = action_keyword.action.type
             types[type_].append(action_keyword.action.id)
         for type_, action_ids in types.iteritems():
-            keywords.extend(Action.get_action_values(type_, action_ids))
+            for value in Action.get_action_values(type_, action_ids):
+                value['keyword'] = keyword
+                keywords.append(value)
         keywords.sort(key=itemgetter('name'))
         cls._get_keyword_cache.set(key, keywords)
         return keywords
@@ -298,6 +303,7 @@ class ActionMixin(ModelSQL):
         Action = pool.get('ir.action')
         ir_action = cls.__table__()
         new_records = []
+        to_write = []
         for values in vlist:
             later = {}
             action_values = {}
@@ -329,7 +335,9 @@ class ActionMixin(ModelSQL):
                 transaction.connection, cls._table, action.id)
             record = cls(action.id)
             new_records.append(record)
-            cls.write([record], later)
+            to_write.extend(([record], later))
+        if to_write:
+            cls.write(*to_write)
         return new_records
 
     @classmethod
@@ -389,8 +397,7 @@ class ActionReport(ActionMixin, ModelSQL, ModelView):
     report_content = fields.Function(fields.Binary('Content',
             filename='report_content_name'),
         'get_report_content', setter='set_report_content')
-    report_content_name = fields.Function(fields.Char('Content Name',
-            on_change_with=['name', 'template_extension']),
+    report_content_name = fields.Function(fields.Char('Content Name'),
         'on_change_with_report_content_name')
     action = fields.Many2One('ir.action', 'Action', required=True,
             ondelete='CASCADE')
@@ -417,6 +424,8 @@ class ActionReport(ActionMixin, ModelSQL, ModelView):
             ('doc6', 'Microsoft Word 6.0'),
             ('doc95', 'Microsoft Word 95'),
             ('docbook', 'DocBook'),
+            ('docx', 'Microsoft Office Open XML Text'),
+            ('docx7', 'Microsoft Word 2007 XML'),
             ('emf', 'Enhanced Metafile'),
             ('eps', 'Encapsulated PostScript'),
             ('gif', 'Graphics Interchange Format'),
@@ -466,6 +475,7 @@ class ActionReport(ActionMixin, ModelSQL, ModelView):
             ('xls', 'Microsoft Excel 97/2000/XP'),
             ('xls5', 'Microsoft Excel 5.0'),
             ('xls95', 'Microsoft Excel 95'),
+            ('xlsx', 'Microsoft Excel 2007/2010 XML'),
             ('xpm', 'X PixMap'),
             ], translate=False,
         string='Extension', help='Leave empty for the same as template, '
@@ -620,6 +630,7 @@ class ActionReport(ActionMixin, ModelSQL, ModelView):
     def set_report_content(cls, records, name, value):
         cls.write(records, {'%s_custom' % name: value})
 
+    @fields.depends('name', 'template_extension')
     def on_change_with_report_content_name(self, name=None):
         if not self.name:
             return
@@ -686,8 +697,6 @@ class ActionActWindow(ActionMixin, ModelSQL, ModelView):
             help='Default limit for the list view')
     action = fields.Many2One('ir.action', 'Action', required=True,
             ondelete='CASCADE')
-    window_name = fields.Boolean('Window Name',
-            help='Use the action name as window name')
     search_value = fields.Char('Search Criteria',
             help='Default search criteria for the list view')
     pyson_domain = fields.Function(fields.Char('PySON Domain'), 'get_pyson')
@@ -729,6 +738,9 @@ class ActionActWindow(ActionMixin, ModelSQL, ModelView):
         # Migration from 3.0: auto_refresh removed
         table.drop_column('auto_refresh')
 
+        # Migration from 4.0: window_name removed
+        table.drop_column('window_name')
+
     @staticmethod
     def default_type():
         return 'ir.action.act_window'
@@ -740,10 +752,6 @@ class ActionActWindow(ActionMixin, ModelSQL, ModelView):
     @staticmethod
     def default_limit():
         return 0
-
-    @staticmethod
-    def default_window_name():
-        return True
 
     @staticmethod
     def default_search_value():
@@ -858,7 +866,7 @@ class ActionActWindow(ActionMixin, ModelSQL, ModelView):
             for view in self.act_window_views]
 
     def get_domains(self, name):
-        return [(domain.name, domain.domain or '[]')
+        return [(domain.name, domain.domain or '[]', domain.count)
             for domain in self.act_window_domains]
 
     @classmethod
@@ -943,6 +951,7 @@ class ActionActWindowDomain(ModelSQL, ModelView):
     name = fields.Char('Name', translate=True)
     sequence = fields.Integer('Sequence', required=True)
     domain = fields.Char('Domain')
+    count = fields.Boolean('Count')
     act_window = fields.Many2One('ir.action.act_window', 'Action',
         select=True, required=True, ondelete='CASCADE')
     active = fields.Boolean('Active')
@@ -959,6 +968,10 @@ class ActionActWindowDomain(ModelSQL, ModelView):
     @staticmethod
     def default_active():
         return True
+
+    @classmethod
+    def default_count(cls):
+        return False
 
     @classmethod
     def validate(cls, actions):

@@ -11,7 +11,7 @@ from trytond import backend
 from trytond.exceptions import UserError, ConcurrencyException
 from trytond.transaction import Transaction
 from trytond.pool import Pool
-from trytond.tests.test_tryton import install_module, with_transaction
+from trytond.tests.test_tryton import activate_module, with_transaction
 
 
 class ModelSQLTestCase(unittest.TestCase):
@@ -19,7 +19,7 @@ class ModelSQLTestCase(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        install_module('tests')
+        activate_module('tests')
 
     @unittest.skipIf(backend.name() == 'sqlite',
         'SQLite not concerned because tryton don\'t set "NOT NULL"'
@@ -113,6 +113,25 @@ class ModelSQLTestCase(unittest.TestCase):
                     call([records[0], records[2]], 'field', 1),
                     call([records[1]], 'field', 2),
                     ])
+
+    @with_transaction()
+    def test_integrity_error_with_created_record(self):
+        "Test integrity error with created record"
+        pool = Pool()
+        ParentModel = pool.get('test.one2many')
+        TargetModel = pool.get('test.one2many.target')
+
+        # Create target record without required name
+        # to ensure create_records is filled to prevent raising
+        # foreign_model_missing
+        record = ParentModel(name="test")
+        record.targets = [TargetModel()]
+        with self.assertRaises(UserError) as cm:
+            record.save()
+        err = cm.exception
+        msg = 'The field "%s" on "%s" is required.' % (
+            TargetModel.name.string, TargetModel.__doc__)
+        self.assertEqual(err.message, msg)
 
 
 def suite():

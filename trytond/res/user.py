@@ -7,6 +7,8 @@ import random
 import hashlib
 import time
 import datetime
+import logging
+import uuid
 from functools import wraps
 from itertools import groupby, ifilter
 from operator import attrgetter
@@ -22,7 +24,7 @@ try:
 except ImportError:
     bcrypt = None
 
-from ..model import ModelView, ModelSQL, fields, Unique
+from ..model import ModelView, ModelSQL, Workflow, fields, Unique
 from ..wizard import Wizard, StateView, Button, StateTransition
 from ..tools import grouped_slice
 from .. import backend
@@ -30,19 +32,22 @@ from ..transaction import Transaction
 from ..cache import Cache
 from ..pool import Pool
 from ..config import config
-from ..pyson import PYSONEncoder
+from ..pyson import PYSONEncoder, Eval
 from ..rpc import RPC
+from ..exceptions import LoginException
 
 __all__ = [
     'User', 'LoginAttempt', 'UserAction', 'UserGroup', 'Warning_',
+    'UserApplication',
     'UserConfigStart', 'UserConfig',
     ]
+logger = logging.getLogger(__name__)
 
 
 class User(ModelSQL, ModelView):
     "User"
     __name__ = "res.user"
-    name = fields.Char('Name', required=True, select=True, translate=True)
+    name = fields.Char('Name', select=True)
     login = fields.Char('Login', required=True)
     password_hash = fields.Char('Password Hash')
     password = fields.Function(fields.Char('Password'), getter='get_password',
@@ -59,6 +64,8 @@ class User(ModelSQL, ModelView):
     rule_groups = fields.Many2Many('ir.rule.group-res.user',
        'user', 'rule_group', 'Rules',
        domain=[('global_p', '!=', True), ('default_p', '!=', True)])
+    applications = fields.One2Many(
+        'res.user.application', 'user', "Applications")
     language = fields.Many2One('ir.lang', 'Language',
         domain=['OR',
             ('translatable', '=', True),
@@ -97,6 +104,7 @@ class User(ModelSQL, ModelView):
             'actions',
             'status_bar',
             'warnings',
+            'applications',
         ]
         cls._context_fields = [
             'language',
@@ -148,6 +156,9 @@ class User(ModelSQL, ModelView):
                 values=[password_hash_new]))
             table.drop_column('password', exception=True)
             table.drop_column('salt', exception=True)
+
+        # Migration from 4.2: Remove required on name
+        table.not_null_action('name', action='remove')
 
     @staticmethod
     def default_active():
@@ -277,6 +288,9 @@ class User(ModelSQL, ModelView):
     def delete(cls, users):
         cls.raise_user_error('delete_forbidden')
 
+    def get_rec_name(self, name):
+        return self.name if self.name else self.login
+
     @classmethod
     def search_rec_name(cls, name, clause):
         if clause[1].startswith('!') or clause[1].startswith('not '):
@@ -285,7 +299,7 @@ class User(ModelSQL, ModelView):
             bool_op = 'OR'
         return [bool_op,
             ('login',) + tuple(clause[1:]),
-            (cls._rec_name,) + tuple(clause[1:]),
+            ('name',) + tuple(clause[1:]),
             ]
 
     @classmethod
@@ -295,6 +309,8 @@ class User(ModelSQL, ModelView):
         default = default.copy()
 
         default['password'] = ''
+        default.setdefault('warnings')
+        default.setdefault('applications')
 
         new_users = []
         for user in users:
@@ -369,9 +385,9 @@ class User(ModelSQL, ModelView):
         return preferences.copy()
 
     @classmethod
-    def set_preferences(cls, values, old_password=False):
+    def set_preferences(cls, values, parameters):
         '''
-        Set user preferences.
+        Set user preferences using login parameters
         '''
         pool = Pool()
         Lang = pool.get('ir.lang')
@@ -383,7 +399,7 @@ class User(ModelSQL, ModelView):
             if field not in fields or field == 'groups':
                 del values_clean[field]
             if field == 'password':
-                if not cls.get_login(user.login, old_password):
+                if not cls._login_password(user.login, parameters):
                     cls.raise_user_error('wrong_password')
             if field == 'language':
                 langs = Lang.search([
@@ -474,19 +490,35 @@ class User(ModelSQL, ModelView):
         return result
 
     @classmethod
-    def get_login(cls, login, password):
+    def get_login(cls, login, parameters):
         '''
         Return user id if password matches
         '''
         LoginAttempt = Pool().get('res.user.login.attempt')
         time.sleep(2 ** LoginAttempt.count(login) - 1)
-        user_id, password_hash = cls._get_login(login)
-        if user_id:
-            if cls.check_password(password, password_hash):
+        for method in config.get(
+                'session', 'authentications', default='password').split(','):
+            try:
+                func = getattr(cls, '_login_%s' % method)
+            except AttributeError:
+                logger.info('Missing login method: %s', method)
+                continue
+            user_id = func(login, parameters)
+            if user_id:
                 LoginAttempt.remove(login)
                 return user_id
         LoginAttempt.add(login)
-        return 0
+
+    @classmethod
+    def _login_password(cls, login, parameters):
+        if 'password' not in parameters:
+            msg = cls.fields_get(['password'])['password']['string']
+            raise LoginException('password', msg, type='password')
+        user_id, password_hash = cls._get_login(login)
+        if user_id and password_hash:
+            password = parameters['password']
+            if cls.check_password(password, password_hash):
+                return user_id
 
     @staticmethod
     def hash_method():
@@ -677,6 +709,99 @@ class Warning_(ModelSQL, ModelView):
             return True
         cls.delete([x for x in warnings if not x.always])
         return False
+
+
+class UserApplication(Workflow, ModelSQL, ModelView):
+    "User Application"
+    __name__ = 'res.user.application'
+    _rec_name = 'key'
+
+    key = fields.Char("Key", required=True, select=True)
+    user = fields.Many2One('res.user', "User", select=True)
+    application = fields.Selection([], "Application")
+    state = fields.Selection([
+            ('requested', "Requested"),
+            ('validated', "Validated"),
+            ('cancelled', "Cancelled"),
+            ], "State", readonly=True)
+
+    @classmethod
+    def __setup__(cls):
+        super(UserApplication, cls).__setup__()
+        cls._transitions |= set((
+                ('requested', 'validated'),
+                ('requested', 'cancelled'),
+                ('validated', 'cancelled'),
+                ))
+        cls._buttons.update({
+                'validate_': {
+                    'invisible': Eval('state') != 'requested',
+                    },
+                'cancel': {
+                    'invisible': Eval('state') == 'cancelled',
+                    },
+                })
+
+    @classmethod
+    def default_key(cls):
+        return ''.join(uuid.uuid4().hex for _ in xrange(4))
+
+    @classmethod
+    def default_state(cls):
+        return 'requested'
+
+    @classmethod
+    @ModelView.button
+    @Workflow.transition('validated')
+    def validate_(cls, applications):
+        pass
+
+    @classmethod
+    @ModelView.button
+    @Workflow.transition('cancelled')
+    def cancel(cls, applications):
+        pass
+
+    @classmethod
+    def count(cls, user_id):
+        return cls.search([
+                ('user', '=', user_id),
+                ('state', '=', 'requested'),
+                ], count=True)
+
+    @classmethod
+    def check(cls, key, application):
+        records = cls.search([
+                ('key', '=', key),
+                ('application', '=', application),
+                ('state', '=', 'validated'),
+                ], limit=1)
+        if not records:
+            return
+        record, = records
+        return record
+
+    @classmethod
+    def create(cls, vlist):
+        pool = Pool()
+        User = pool.get('res.user')
+        applications = super(UserApplication, cls).create(vlist)
+        User._get_preferences_cache.clear()
+        return applications
+
+    @classmethod
+    def write(cls, *args):
+        pool = Pool()
+        User = pool.get('res.user')
+        super(UserApplication, cls).write(*args)
+        User._get_preferences_cache.clear()
+
+    @classmethod
+    def delete(cls, applications):
+        pool = Pool()
+        User = pool.get('res.user')
+        super(UserApplication, cls).delete(applications)
+        User._get_preferences_cache.clear()
 
 
 class UserConfigStart(ModelView):

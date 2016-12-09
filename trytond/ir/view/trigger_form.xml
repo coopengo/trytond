@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <!-- This file is part of Tryton.  The COPYRIGHT file at the top level of
 this repository contains the full copyright notices and license terms. -->
-<form string="Trigger">
+<form>
     <label name="name"/>
     <field name="name" colspan="3"/>
     <label name="model"/>
@@ -19,7 +19,7 @@ this repository contains the full copyright notices and license terms. -->
         <field name="on_delete" xexpand="0"/>
     </group>
     <label name="condition"/>
-    <field name="condition" colspan="3"/>
+    <field name="condition" colspan="3" widget="pyson"/>
     <label name="limit_number"/>
     <field name="limit_number"/>
     <label name="minimum_time_delay"/>

@@ -1,9 +1,13 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
 from ..pool import Pool
+
 from .group import *
 from .user import *
 from .ir import *
+from . import routes
+
+__all__ = ['register', 'routes']
 
 
 def register():
@@ -15,11 +19,14 @@ def register():
         UserAction,
         UserGroup,
         Warning_,
+        UserApplication,
         UserConfigStart,
         UIMenuGroup,
         ActionGroup,
         ModelFieldGroup,
         ModelButtonGroup,
+        ModelButtonRule,
+        ModelButtonClick,
         RuleGroupGroup,
         RuleGroupUser,
         Lang,

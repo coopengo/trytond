@@ -35,7 +35,7 @@ __all__ = [
     'Property',
     'Selection', 'SelectionRequired',
     'DictSchema', 'Dict', 'DictDefault', 'DictRequired',
-    'Binary', 'BinaryDefault', 'BinaryRequired',
+    'Binary', 'BinaryDefault', 'BinaryRequired', 'BinaryFileStorage',
     'Many2OneDomainValidation', 'Many2OneTarget', 'Many2OneOrderBy',
     'Many2OneSearch', 'Many2OneTree', 'Many2OneMPTT',
     ]
@@ -654,8 +654,11 @@ class Selection(ModelSQL):
     select_string = select.translated('select')
     dyn_select = fields.Selection('get_selection',
         'Instance Dynamic Selection')
+    dyn_select_string = dyn_select.translated('dyn_select')
     dyn_select_static = fields.Selection('static_selection',
         'Static Selection')
+    dyn_select_static_string = dyn_select_static.translated(
+        'dyn_select_static')
 
     @fields.depends('select')
     def get_selection(self):
@@ -725,6 +728,13 @@ class BinaryRequired(ModelSQL):
     'Binary Required'
     __name__ = 'test.binary_required'
     binary = fields.Binary('Binary Required', required=True)
+
+
+class BinaryFileStorage(ModelSQL):
+    "Binary in FileStorage"
+    __name__ = 'test.binary_filestorage'
+    binary = fields.Binary('Binary', file_id='binary_id')
+    binary_id = fields.Char('Binary ID')
 
 
 class Many2OneTarget(ModelSQL):

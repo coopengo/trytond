@@ -89,6 +89,19 @@ this repository contains the full copyright notices and license terms. -->
         <menuitem parent="ir.menu_models"
             action="act_model_access_form" id="menu_model_access_form"/>
 
+        <record model="ir.action.act_window" id="act_model_access_form_relate_model">
+            <field name="name">Access</field>
+            <field name="res_model">ir.model.access</field>
+            <field name="domain"
+                eval="[('model', 'in', Eval('active_ids'))]" pyson="1"/>
+        </record>
+        <record model="ir.action.keyword"
+            id="act_model_access_form_relate_model_keyword1">
+            <field name="keyword">form_relate</field>
+            <field name="model">ir.model,-1</field>
+            <field name="action" ref="act_model_access_form_relate_model"/>
+        </record>
+
         <record model="ir.ui.view" id="model_field_access_view_tree">
             <field name="model">ir.model.field.access</field>
             <field name="type">tree</field>
@@ -119,6 +132,19 @@ this repository contains the full copyright notices and license terms. -->
         </record>
         <menuitem parent="menu_model_access_form"
             action="act_model_field_access_form" id="menu_model_field_access_form"/>
+
+        <record model="ir.action.act_window" id="act_model_field_access_form_relate_field">
+            <field name="name">Access</field>
+            <field name="res_model">ir.model.field.access</field>
+            <field name="domain"
+                eval="[('field', 'in', Eval('active_ids'))]" pyson="1"/>
+        </record>
+        <record model="ir.action.keyword"
+            id="act_modelfield__access_form_relate_field_keyword1">
+            <field name="keyword">form_relate</field>
+            <field name="model">ir.model.field,-1</field>
+            <field name="action" ref="act_model_field_access_form_relate_field"/>
+        </record>
 
         <record model="ir.action.report" id="report_model_graph">
             <field name="name">Graph</field>
@@ -185,6 +211,45 @@ this repository contains the full copyright notices and license terms. -->
         <menuitem parent="menu_model_access_form"
             action="act_model_button_form" id="menu_model_button_form"/>
 
+        <record model="ir.ui.view" id="model_button_rule_view_list">
+            <field name="model">ir.model.button.rule</field>
+            <field name="type">tree</field>
+            <field name="name">model_button_rule_list</field>
+        </record>
+
+        <record model="ir.ui.view" id="model_button_rule_view_form">
+            <field name="model">ir.model.button.rule</field>
+            <field name="type">form</field>
+            <field name="name">model_button_rule_form</field>
+        </record>
+
+        <record model="ir.ui.view" id="model_button_click_view_list">
+            <field name="model">ir.model.button.click</field>
+            <field name="type">tree</field>
+            <field name="name">model_button_click_list</field>
+        </record>
+
+        <record model="ir.ui.view" id="model_button_click_view_form">
+            <field name="model">ir.model.button.click</field>
+            <field name="type">form</field>
+            <field name="name">model_button_click_form</field>
+        </record>
+
+        <record model="ir.action.act_window"
+            id="act_model_button_click_form_relate_model_button">
+            <field name="name">Clicks</field>
+            <field name="res_model">ir.model.button.click</field>
+            <field name="domain"
+                eval="[('button', 'in', Eval('active_ids'))]" pyson="1"/>
+        </record>
+        <record model="ir.action.keyword"
+            id="act_model_button_click_form_relate_model_button_keyword1">
+            <field name="keyword">form_relate</field>
+            <field name="model">ir.model.button,-1</field>
+            <field name="action"
+                ref="act_model_button_click_form_relate_model_button"/>
+        </record>
+
         <record model="ir.ui.view" id="model_data_view_list">
             <field name="model">ir.model.data</field>
             <field name="type">tree</field>
@@ -217,6 +282,7 @@ this repository contains the full copyright notices and license terms. -->
             <field name="name">Out of Sync</field>
             <field name="sequence" eval="10"/>
             <field name="domain" eval="[('out_of_sync', '=', True)]" pyson="1"/>
+            <field name="count" eval="True"/>
             <field name="act_window" ref="act_model_data_form"/>
         </record>
         <record model="ir.action.act_window.domain"

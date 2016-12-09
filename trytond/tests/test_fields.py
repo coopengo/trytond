@@ -11,12 +11,16 @@ except ImportError:
     sys.modules['cdecimal'] = decimal
 import unittest
 import datetime
+import shutil
+import tempfile
+
 from decimal import Decimal
-from trytond.tests.test_tryton import install_module, with_transaction
+from trytond.tests.test_tryton import activate_module, with_transaction
 from trytond.transaction import Transaction
 from trytond.exceptions import UserError
 from trytond.model import fields
 from trytond.pool import Pool
+from trytond.config import config
 
 
 class FieldsTestCase(unittest.TestCase):
@@ -24,7 +28,14 @@ class FieldsTestCase(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        install_module('tests')
+        activate_module('tests')
+
+    def setUp(self):
+        path = config.get('database', 'path')
+        dtemp = tempfile.mkdtemp()
+        config.set('database', 'path', dtemp)
+        self.addCleanup(config.set, 'database', 'path', path)
+        self.addCleanup(shutil.rmtree, dtemp)
 
     @with_transaction()
     def test_boolean(self):
@@ -2666,6 +2677,33 @@ class FieldsTestCase(unittest.TestCase):
         transaction.rollback()
 
     @with_transaction()
+    def test_many2many_add_to_list(self):
+        "Test Many2Many add to list of records"
+        pool = Pool()
+        Many2Many = pool.get('test.many2many')
+        Many2manyTarget = pool.get('test.many2many.target')
+
+        record1, record2 = Many2Many.create([{'name': '1'}, {'name': '2'}])
+        target, = Many2manyTarget.create([{'name': 'target'}])
+
+        # First add to record1
+        Many2Many.write([record1], {
+                'targets': [
+                    ('add', [target.id]),
+                    ],
+                })
+        self.assertEqual(record1.targets, (target,))
+
+        # Add to both records
+        Many2Many.write([record1, record2], {
+                'targets': [
+                    ('add', [target.id]),
+                    ],
+                })
+        self.assertEqual(record1.targets, (target,))
+        self.assertEqual(record2.targets, (target,))
+
+    @with_transaction()
     def test_many2many_tree(self):
         pool = Pool()
         Many2Many = pool.get('test.many2many_tree')
@@ -3154,6 +3192,7 @@ class FieldsTestCase(unittest.TestCase):
         self.assert_(selection3)
         self.assertEqual(selection3.select, 'arabic')
         self.assertEqual(selection3.dyn_select, '1')
+        self.assertEqual(selection3.dyn_select_string, '1')
 
         selection4, = Selection.create(
             [{'select': 'hexa', 'dyn_select': '0x3'}])
@@ -3171,6 +3210,11 @@ class FieldsTestCase(unittest.TestCase):
             [{'select': 'arabic', 'dyn_select': '0x3'}])
         self.assertRaises(UserError, Selection.create,
             [{'select': 'hexa', 'dyn_select': '3'}])
+
+        selection7, = Selection.create(
+            [{'dyn_select_static': '1'}])
+        self.assertEqual(selection7.dyn_select_static, '1')
+        self.assertEqual(selection7.dyn_select_static_string, '1')
 
         self.assertRaises(UserError, SelectionRequired.create, [{}])
         transaction.rollback()
@@ -3285,6 +3329,31 @@ class FieldsTestCase(unittest.TestCase):
 
         self.assertRaises(UserError, BinaryRequired.create,
             [{'binary': fields.Binary.cast(b'')}])
+
+    @with_transaction()
+    def test_binary_filestorage(self):
+        "Test Binary FileStorage"
+        pool = Pool()
+        Binary = pool.get('test.binary_filestorage')
+        transaction = Transaction()
+
+        bin1, = Binary.create([{
+                    'binary': fields.Binary.cast(b'foo'),
+                    }])
+        self.assertEqual(bin1.binary, fields.Binary.cast(b'foo'))
+        self.assertTrue(bin1.binary_id)
+
+        Binary.write([bin1], {'binary': fields.Binary.cast(b'bar')})
+        self.assertEqual(bin1.binary, fields.Binary.cast(b'bar'))
+
+        with transaction.set_context(
+                {'test.binary_filestorage.binary': 'size'}):
+            bin1_size = Binary(bin1.id)
+            self.assertEqual(bin1_size.binary, len(b'bar'))
+
+        Binary.write([bin1], {'binary': None})
+        self.assertEqual(bin1.binary, None)
+        self.assertEqual(bin1.binary_id, None)
 
     @with_transaction()
     def test_many2one(self):

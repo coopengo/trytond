@@ -1,49 +1,102 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
-import logging
 from threading import Lock
 from collections import OrderedDict
-import msgpack
 
 from sql import Table
 from sql.functions import CurrentTimestamp
 
-from trytond.coog_config import get_cache_redis
+from trytond.config import config
 from trytond.transaction import Transaction
-from trytond.cache_utils import freeze, encode_hook, decode_hook, Default
-try:
-    from trytond.cache_redis import Redis
-except ImportError:
-    logging.warning('Could not import Redis packages for cache')
-    Redis = None
+from trytond.tools import resolve
+
+__all__ = ['BaseCache', 'Cache', 'LRUDict']
 
 
-__all__ = ['_Cache', 'Cache', 'LRUDict']
+def freeze(o):
+    if isinstance(o, (set, tuple, list)):
+        return tuple(freeze(x) for x in o)
+    elif isinstance(o, dict):
+        return frozenset((x, freeze(y)) for x, y in o.iteritems())
+    else:
+        return o
 
 
-class _Cache(object):
-    """
-    A key value LRU cache with size limit.
-    """
+class BaseCache(object):
     _cache_instance = []
-    _resets = {}
-    _resets_lock = Lock()
 
     def __init__(self, name, size_limit=1024, context=True):
-        self.size_limit = size_limit
-        self.context = context
-        self._cache = {}
         assert name not in set([i._name for i in self._cache_instance]), \
             '%s is already used' % name
-        self._cache_instance.append(self)
         self._name = name
-        self._timestamp = None
-        self._lock = Lock()
+        self.size_limit = size_limit
+        self.context = context
+        self._cache_instance.append(self)
 
     def _key(self, key):
         if self.context:
             return (key, Transaction().user, freeze(Transaction().context))
         return key
+
+    def get(self, key, default):
+        raise NotImplemented
+
+    def set(self, key, value):
+        raise NotImplemented
+
+    def clear(self):
+        raise NotImplemented
+
+    def clean_inst(self, dbname, timestamps):
+        raise NotImplemented
+
+    @staticmethod
+    def clean(dbname):
+        with Transaction().new_transaction() as transaction,\
+                transaction.connection.cursor() as cursor:
+            table = Table('ir_cache')
+            cursor.execute(*table.select(table.timestamp, table.name))
+            timestamps = {}
+            for timestamp, name in cursor.fetchall():
+                timestamps[name] = timestamp
+        for inst in BaseCache._cache_instance:
+            inst.clean_inst(dbname, timestamps)
+
+    @classmethod
+    def resets_cls(cls, dbname, cursor, table):
+        raise NotImplemented
+
+    @staticmethod
+    def resets(dbname):
+        table = Table('ir_cache')
+        with Transaction().new_transaction() as transaction,\
+                transaction.connection.cursor() as cursor:
+            klasses = [i.__class__ for i in BaseCache._cache_instance]
+            klasses = list(set(klasses))
+            for klass in klasses:
+                klass.resets_cls(dbname, cursor, table)
+
+    def drop_inst(self, dbname):
+        raise NotImplemented
+
+    @staticmethod
+    def drop(dbname):
+        for inst in BaseCache._cache_instance:
+            inst.drop_inst(dbname)
+
+
+class MemoryCache(BaseCache):
+    """
+    A key value LRU cache with size limit.
+    """
+    _resets = {}
+    _resets_lock = Lock()
+
+    def __init__(self, name, size_limit=1024, context=True):
+        super(MemoryCache, self).__init__(name, size_limit, context)
+        self._cache = {}
+        self._timestamp = None
+        self._lock = Lock()
 
     def get(self, key, default):
         dbname = Transaction().database.name
@@ -53,8 +106,8 @@ class _Cache(object):
             try:
                 result = cache[key] = cache.pop(key)
                 return result
+            # JCA: Properly crash on type error
             except KeyError:
-                # JCA : Properly crash on type error
                 return default
 
     def set(self, key, value):
@@ -62,15 +115,9 @@ class _Cache(object):
         key = self._key(key)
         with self._lock:
             cache = self._cache.setdefault(dbname, LRUDict(self.size_limit))
-            try:
-                cache[key] = value
-            except TypeError:
-                # JCA : Properly detect non hashable keys
-                raise
+            # JCA: Properly crash on type error
+            cache[key] = value
         return value
-
-    def _empty(self, dbname):
-        self._cache[dbname] = LRUDict(self.size_limit)
 
     def clear(self):
         dbname = Transaction().database.name
@@ -78,31 +125,19 @@ class _Cache(object):
             self._resets.setdefault(dbname, set())
             self._resets[dbname].add(self._name)
         with self._lock:
-            self._empty(dbname)
+            self._cache[dbname] = LRUDict(self.size_limit)
+
+    def clean_inst(self, dbname, timestamps):
+        if self._name in timestamps:
+            with self._lock:
+                if (not self._timestamp
+                        or timestamps[self._name] > self._timestamp):
+                    self._timestamp = timestamps[self._name]
+                    self._cache[dbname] = LRUDict(self.size_limit)
 
     @classmethod
-    def clean(cls, dbname):
-        with Transaction().new_transaction() as transaction,\
-                transaction.connection.cursor() as cursor:
-            table = Table('ir_cache')
-            cursor.execute(*table.select(table.timestamp, table.name))
-            timestamps = {}
-            for timestamp, name in cursor.fetchall():
-                timestamps[name] = timestamp
-        for inst in cls._cache_instance:
-            if inst._name in timestamps:
-                with inst._lock:
-                    if (not inst._timestamp
-                            or timestamps[inst._name] > inst._timestamp):
-                        inst._timestamp = timestamps[inst._name]
-                        inst._empty(dbname)
-
-    @classmethod
-    def resets(cls, dbname):
-        table = Table('ir_cache')
-        with Transaction().new_transaction() as transaction,\
-                transaction.connection.cursor() as cursor,\
-                cls._resets_lock:
+    def resets_cls(cls, dbname, cursor, table):
+        with cls._resets_lock:
             cls._resets.setdefault(dbname, set())
             for name in cls._resets[dbname]:
                 cursor.execute(*table.select(table.name,
@@ -118,54 +153,14 @@ class _Cache(object):
                             [[CurrentTimestamp(), name]]))
             cls._resets[dbname].clear()
 
-    @classmethod
-    def drop(cls, dbname):
-        for inst in cls._cache_instance:
-            inst._cache.pop(dbname, None)
+    def drop_inst(self, dbname):
+        self._cache.pop(dbname, None)
 
 
-class Cache(object):
-    # AKE: this class wraps technical holders and manage serialization
-    def __init__(self, *args, **kwargs):
-        redis = get_cache_redis()
-        if redis is None:
-            self.cache = _Cache(*args, **kwargs)
-        else:
-            assert Redis is not None, 'Packages needed by Redis are missing'
-            self.cache = Redis(*args, **kwargs)
-
-    def get(self, key, default=None):
-        result = self.cache.get(key, Default)
-        if result is Default:
-            return default
-        else:
-            return msgpack.unpackb(result, encoding='utf-8',
-                object_hook=decode_hook)
-
-    def set(self, key, value):
-        value = msgpack.packb(value, use_bin_type=True, default=encode_hook)
-        self.cache.set(key, value)
-
-    def clear(self):
-        self.cache.clear()
-
-    @staticmethod
-    def clean(dbname):
-        _Cache.clean(dbname)
-        if Redis is not None:
-            Redis.clean(dbname)
-
-    @staticmethod
-    def resets(dbname):
-        _Cache.resets(dbname)
-        if Redis is not None:
-            Redis.resets(dbname)
-
-    @staticmethod
-    def drop(dbname):
-        _Cache.drop(dbname)
-        if Redis is not None:
-            Redis.drop(dbname)
+if config.get('cache', 'class'):
+    Cache = resolve(config.get('cache', 'class'))
+else:
+    Cache = MemoryCache
 
 
 class LRUDict(OrderedDict):
