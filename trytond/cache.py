@@ -47,6 +47,14 @@ class BaseCache(object):
     def clear(self):
         raise NotImplemented
 
+    def drop_inst(self, dbname):
+        raise NotImplemented
+
+    @staticmethod
+    def drop(dbname):
+        for inst in BaseCache._cache_instance:
+            inst.drop_inst(dbname)
+
     def clean_inst(self, dbname, timestamps):
         raise NotImplemented
 
@@ -75,14 +83,6 @@ class BaseCache(object):
             klasses = list(set(klasses))
             for klass in klasses:
                 klass.resets_cls(dbname, cursor, table)
-
-    def drop_inst(self, dbname):
-        raise NotImplemented
-
-    @staticmethod
-    def drop(dbname):
-        for inst in BaseCache._cache_instance:
-            inst.drop_inst(dbname)
 
 
 class MemoryCache(BaseCache):
@@ -127,6 +127,10 @@ class MemoryCache(BaseCache):
         with self._lock:
             self._cache[dbname] = LRUDict(self.size_limit)
 
+    def drop_inst(self, dbname):
+        with self._lock:
+            self._cache.pop(dbname, None)
+
     def clean_inst(self, dbname, timestamps):
         if self._name in timestamps:
             with self._lock:
@@ -152,9 +156,6 @@ class MemoryCache(BaseCache):
                             [table.timestamp, table.name],
                             [[CurrentTimestamp(), name]]))
             cls._resets[dbname].clear()
-
-    def drop_inst(self, dbname):
-        self._cache.pop(dbname, None)
 
 
 if config.get('cache', 'class'):
