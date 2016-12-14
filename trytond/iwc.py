@@ -63,22 +63,23 @@ def is_started():
 
 
 def start():
-    global broker
-    global listener
-    logger.info('init_pool: start on %s', os.getpid())
-    if broker:
-        logger.warning('init_pool: already started on %s', os.getpid())
-        return
-    redis_url = get_cache_redis()
-    if redis_url:
-        url = urlparse(redis_url)
-        assert url.scheme == 'redis', 'invalid redis url'
-        host = url.hostname
-        port = url.port
-        db = url.path.strip('/')
-        broker = redis.StrictRedis(host=host, port=port, db=db)
-        listener = Listener(broker, {'init_pool': init_pool_cb})
-        listener.start()
+    if os.environ.get('WSGI_LOG_FILE'):
+        global broker
+        global listener
+        logger.info('init_pool: start on %s', os.getpid())
+        if broker:
+            logger.warning('init_pool: already started on %s', os.getpid())
+            return
+        redis_url = get_cache_redis()
+        if redis_url:
+            url = urlparse(redis_url)
+            assert url.scheme == 'redis', 'invalid redis url'
+            host = url.hostname
+            port = url.port
+            db = url.path.strip('/')
+            broker = redis.StrictRedis(host=host, port=port, db=db)
+            listener = Listener(broker, {'init_pool': init_pool_cb})
+            listener.start()
 
 
 def stop():
