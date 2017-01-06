@@ -64,6 +64,7 @@ class View(ModelSQL, ModelView):
     domain = fields.Char('Domain', states={
             'invisible': ~Eval('inherit'),
             }, depends=['inherit'])
+    # AKE : Force usage of MemoryCache for non serializable data
     _get_rng_cache = MemoryCache('ir_ui_view.get_rng')
 
     @classmethod
@@ -115,7 +116,6 @@ class View(ModelSQL, ModelView):
     @classmethod
     def get_rng(cls, type_):
         key = (cls.__name__, type_)
-        # AKE: default is required on _Cache (used for non serializable)
         rng = cls._get_rng_cache.get(key, None)
         if rng is None:
             if sys.version_info < (3,):
