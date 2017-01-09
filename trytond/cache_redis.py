@@ -2,12 +2,12 @@
 # this repository contains the full copyright notices and license terms.
 from threading import Lock
 from urlparse import urlparse
-import msgpack
 import redis
 
 from trytond.config import config
 from trytond.transaction import Transaction
-from trytond.cache import BaseCache, encode_hook, decode_hook
+from trytond.cache import BaseCache
+from trytond.cache_serializer import pack, unpack
 
 
 class RedisCache(BaseCache):
@@ -47,13 +47,12 @@ class RedisCache(BaseCache):
         if result is None:
             return default
         else:
-            return msgpack.unpackb(result, encoding='utf-8',
-                object_hook=decode_hook)
+            return unpack(result)
 
     def set(self, key, value):
         namespace = self._namespace()
         key = self._key(key)
-        value = msgpack.packb(value, use_bin_type=True, default=encode_hook)
+        value = pack(value)
         self._client.hset(namespace, key, value)
 
     def clear(self):

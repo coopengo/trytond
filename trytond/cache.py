@@ -1,8 +1,5 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
-import datetime
-from decimal import Decimal
-import msgpack
 from threading import Lock
 from collections import OrderedDict
 
@@ -11,60 +8,10 @@ from sql.functions import CurrentTimestamp
 
 from trytond.config import config
 from trytond.transaction import Transaction
+from trytond.cache_serializer import pack, unpack
 from trytond.tools import resolve
 
 __all__ = ['BaseCache', 'Cache', 'LRUDict']
-
-
-def encode_hook(o):
-    if isinstance(o, Decimal):
-        return {
-            '__decimal__': True,
-            'data': str(o)
-        }
-    if isinstance(o, datetime.datetime):
-        return {
-            '__datetime__': True,
-            'data': (o.year, o.month, o.day, o.hour, o.minute, o.second,
-                o.microsecond)
-        }
-    if isinstance(o, datetime.date):
-        return {
-            '__date__': True,
-            'data': (o.year, o.month, o.day)
-        }
-    if isinstance(o, datetime.time):
-        return {
-            '__time__': True,
-            'data': (o.hour, o.minute, o.second, o.microsecond)
-        }
-    if isinstance(o, datetime.timedelta):
-        return {
-            '__timedelta__': True,
-            'data': o.total_seconds()
-        }
-    if isinstance(o, set):
-        return {
-            '__set__': True,
-            'data': tuple(o)
-        }
-    return o
-
-
-def decode_hook(o):
-    if '__decimal__' in o:
-        return Decimal(o['data'])
-    elif '__datetime__' in o:
-        return datetime.datetime(*o['data'])
-    elif '__date__' in o:
-        return datetime.date(*o['data'])
-    elif '__time__' in o:
-        return datetime.time(*o['data'])
-    elif '__timedelta__' in o:
-        return datetime.timedelta(o['data'])
-    elif '__set__' in o:
-        return set(o['data'])
-    return o
 
 
 def freeze(o):
@@ -214,15 +161,10 @@ class MemoryCache(BaseCache):
 
 class SerializableMemoryCache(MemoryCache):
     def get(self, key, default=None):
-        result = super(SerializableMemoryCache, self).get(key, default)
-        if result == default:
-            return result
-        return msgpack.unpackb(result, encoding='utf-8',
-            object_hook=decode_hook)
+        return unpack(super(SerializableMemoryCache, self).get(key, default))
 
     def set(self, key, value):
-        value = msgpack.packb(value, use_bin_type=True, default=encode_hook)
-        super(SerializableMemoryCache, self).set(key, value)
+        super(SerializableMemoryCache, self).set(key, pack(value))
 
 
 if config.get('cache', 'class'):
