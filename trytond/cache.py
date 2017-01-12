@@ -159,9 +159,18 @@ class MemoryCache(BaseCache):
             cls._resets[dbname].clear()
 
 
+class DefaultCacheValue:
+    pass
+
+
+_default_cache_value = DefaultCacheValue()
+
+
 class SerializableMemoryCache(MemoryCache):
     def get(self, key, default=None):
-        return unpack(super(SerializableMemoryCache, self).get(key, default))
+        result = super(SerializableMemoryCache, self).get(key,
+            _default_cache_value)
+        return default if result == _default_cache_value else unpack(result)
 
     def set(self, key, value):
         super(SerializableMemoryCache, self).set(key, pack(value))

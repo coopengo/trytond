@@ -44,7 +44,8 @@ class TrytonConfigParser(ConfigParser.RawConfigParser):
         self.add_section('web')
         self.set('web', 'listen', 'localhost:8000')
         # AKE: web apps from env vars
-        self.set('web', 'root', os.environ.get('TRYTOND_WEB_ROOT', None))
+        self.set('web', 'root', os.environ.get('TRYTOND_WEB_ROOT',
+                os.path.join(os.path.expanduser('~'), 'www')))
         self.set('web', 'bench', os.environ.get('TRYTOND_WEB_BENCH', None))
         self.add_section('database')
         self.set('database', 'uri',
