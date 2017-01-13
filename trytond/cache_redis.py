@@ -51,8 +51,6 @@ class RedisCache(BaseCache):
 
     def set(self, key, value):
         namespace = self._namespace()
-        if value is None:
-            print "Setting None in redis_cache for key " + str(key)
         key = self._key(key)
         value = pack(value)
         self._client.hset(namespace, key, value)
