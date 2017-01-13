@@ -1,9 +1,6 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
-try:
-    import simplejson as json
-except ImportError:
-    import json
+import json
 import datetime
 from dateutil.relativedelta import relativedelta
 from functools import reduce, wraps
@@ -313,10 +310,10 @@ class Greater(PYSON):
         super(Greater, self).__init__()
         for i in (statement1, statement2):
             if isinstance(i, PYSON):
-                assert i.types().issubset(set([int, long, float])), \
+                assert i.types().issubset({int, long, float, type(None)}), \
                     'statement must be an integer or a float'
             else:
-                assert isinstance(i, (int, long, float)), \
+                assert isinstance(i, (int, long, float, type(None))), \
                     'statement must be an integer or a float'
         if isinstance(equal, PYSON):
             assert equal.types() == set([bool])
@@ -344,6 +341,8 @@ class Greater(PYSON):
     @staticmethod
     def _convert(dct):
         for i in ('s1', 's2'):
+            if dct[i] is None:
+                dct[i] = 0.0
             if not isinstance(dct[i], (int, long, float)):
                 dct = dct.copy()
                 dct[i] = float(dct[i])

@@ -279,31 +279,6 @@ class Database(DatabaseInterface):
         os.remove(os.path.join(config.get('database', 'path'),
             database_name + '.sqlite'))
 
-    @staticmethod
-    def dump(database_name):
-        if database_name == ':memory:':
-            raise Exception('Unable to dump memory database!')
-        if os.sep in database_name:
-            raise Exception('Wrong database name!')
-        path = os.path.join(config.get('database', 'path'),
-                database_name + '.sqlite')
-        with open(path, 'rb') as file_p:
-            data = file_p.read()
-        return data
-
-    @staticmethod
-    def restore(database_name, data):
-        if database_name == ':memory:':
-            raise Exception('Unable to restore memory database!')
-        if os.sep in database_name:
-            raise Exception('Wrong database name!')
-        path = os.path.join(config.get('database', 'path'),
-                database_name + '.sqlite')
-        if os.path.isfile(path):
-            raise Exception('Database already exists!')
-        with open(path, 'wb') as file_p:
-            file_p.write(data)
-
     def list(self):
         res = []
         listdir = [':memory:']
@@ -339,9 +314,9 @@ class Database(DatabaseInterface):
             ir_module = Table('ir_module')
             ir_module_dependency = Table('ir_module_dependency')
             for module in ('ir', 'res'):
-                state = 'uninstalled'
+                state = 'not activated'
                 if module in ('ir', 'res'):
-                    state = 'to install'
+                    state = 'to activate'
                 info = get_module_info(module)
                 insert = ir_module.insert(
                     [ir_module.create_uid, ir_module.create_date,

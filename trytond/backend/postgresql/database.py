@@ -13,7 +13,7 @@ try:
 except ImportError:
     pass
 from psycopg2 import connect
-from psycopg2.pool import ThreadedConnectionPool
+from psycopg2.pool import ThreadedConnectionPool, PoolError
 from psycopg2.extensions import ISOLATION_LEVEL_REPEATABLE_READ
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 from psycopg2.extensions import register_type, register_adapter
@@ -103,6 +103,7 @@ class Database(DatabaseInterface):
         self._databases.setdefault(name, self)
         self._search_path = None
         self._current_user = None
+        self._has_returning = None
 
     @classmethod
     def dsn(cls, name):
@@ -129,7 +130,16 @@ class Database(DatabaseInterface):
     def get_connection(self, autocommit=False, readonly=False):
         if self._connpool is None:
             self.connect()
-        conn = self._connpool.getconn()
+        for count in range(config.getint('database', 'retry'), -1, -1):
+            try:
+                conn = self._connpool.getconn()
+                break
+            except PoolError:
+                if count and not self._connpool.closed:
+                    logger.info('waiting a connection')
+                    time.sleep(1)
+                    continue
+                raise
         if autocommit:
             conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
         else:
@@ -171,84 +181,6 @@ class Database(DatabaseInterface):
                 RE_VERSION.search(version).groups()))
         return self._version_cache[self.name]
 
-    @staticmethod
-    def dump(database_name):
-        from trytond.tools import exec_command_pipe
-
-        cmd = ['pg_dump', '--format=c', '--no-owner']
-        env = {}
-        uri = parse_uri(config.get('database', 'uri'))
-        if uri.username:
-            cmd.append('--username=' + uri.username)
-        if uri.hostname:
-            cmd.append('--host=' + uri.hostname)
-        if uri.port:
-            cmd.append('--port=' + str(uri.port))
-        if uri.password:
-            # if db_password is set in configuration we should pass
-            # an environment variable PGPASSWORD to our subprocess
-            # see libpg documentation
-            env['PGPASSWORD'] = uri.password
-        cmd.append(database_name)
-
-        pipe = exec_command_pipe(*tuple(cmd), env=env)
-        pipe.stdin.close()
-        data = pipe.stdout.read()
-        res = pipe.wait()
-        if res:
-            raise Exception('Couldn\'t dump database!')
-        return data
-
-    @staticmethod
-    def restore(database_name, data):
-        from trytond.tools import exec_command_pipe
-
-        database = Database().connect()
-        connection = database.get_connection(autocommit=True)
-        database.create(connection, database_name)
-        database.close()
-
-        cmd = ['pg_restore', '--no-owner']
-        env = {}
-        uri = parse_uri(config.get('database', 'uri'))
-        if uri.username:
-            cmd.append('--username=' + uri.username)
-        if uri.hostname:
-            cmd.append('--host=' + uri.hostname)
-        if uri.port:
-            cmd.append('--port=' + str(uri.port))
-        if uri.password:
-            env['PGPASSWORD'] = uri.password
-        cmd.append('--dbname=' + database_name)
-        args2 = tuple(cmd)
-
-        if os.name == "nt":
-            tmpfile = (os.environ['TMP'] or 'C:\\') + os.tmpnam()
-            with open(tmpfile, 'wb') as fp:
-                fp.write(data)
-            args2 = list(args2)
-            args2.append(' ' + tmpfile)
-            args2 = tuple(args2)
-
-        pipe = exec_command_pipe(*args2, env=env)
-        if not os.name == "nt":
-            pipe.stdin.write(data)
-        pipe.stdin.close()
-        res = pipe.wait()
-        if res:
-            raise Exception('Couldn\'t restore database')
-
-        database = Database(database_name).connect()
-        cursor = database.get_connection().cursor()
-        if not database.test():
-            cursor.close()
-            database.close()
-            raise Exception('Couldn\'t restore database!')
-        cursor.close()
-        database.close()
-        Database._list_cache = None
-        return True
-
     def list(self):
         now = time.time()
         timeout = config.getint('session', 'timeout')
@@ -286,9 +218,9 @@ class Database(DatabaseInterface):
                     cursor.execute(line)
 
         for module in ('ir', 'res'):
-            state = 'uninstalled'
+            state = 'not activated'
             if module in ('ir', 'res'):
-                state = 'to install'
+                state = 'to activate'
             info = get_module_info(module)
             cursor.execute('SELECT NEXTVAL(\'ir_module_id_seq\')')
             module_id = cursor.fetchone()[0]
@@ -386,6 +318,16 @@ class Database(DatabaseInterface):
             finally:
                 self.put_connection(connection)
         return self._search_path
+
+    def has_returning(self):
+        if self._has_returning is None:
+            connection = self.get_connection()
+            try:
+                # RETURNING clause is available since PostgreSQL 8.2
+                self._has_returning = self.get_version(connection) >= (8, 2)
+            finally:
+                self.put_connection(connection)
+        return self._has_returning
 
 register_type(UNICODE)
 if PYDATE:

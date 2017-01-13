@@ -42,39 +42,48 @@ class TrytonConfigParser(ConfigParser.RawConfigParser):
     def __init__(self):
         ConfigParser.RawConfigParser.__init__(self)
         self.add_section('web')
-        self.set('web', 'listen', 'localhost:7999')
-        self.set('web', 'root',
-            os.environ.get('TRYTOND_WEB_ROOT', '/var/www/localhost/tryton'))
-        # AKE: bench web app config
-        self.set('web', 'bench',
-            os.environ.get('TRYTOND_WEB_BENCH', None))
+        self.set('web', 'listen', 'localhost:8000')
+        # AKE: web apps from env vars
+        self.set('web', 'root', os.environ.get('TRYTOND_WEB_ROOT',
+                os.path.join(os.path.expanduser('~'), 'www')))
+        self.set('web', 'bench', os.environ.get('TRYTOND_WEB_BENCH', None))
         self.add_section('database')
         self.set('database', 'uri',
             os.environ.get('TRYTOND_DATABASE_URI', 'sqlite://'))
-        self.set('database', 'path', '/var/lib/trytond')
+        self.set('database', 'path', os.path.join(
+                os.path.expanduser('~'), 'db'))
         self.set('database', 'list', 'True')
         self.set('database', 'retry', 5)
-        self.set('database', 'language', 'en_US')
+        self.set('database', 'language', 'en')
         self.add_section('cache')
         self.set('cache', 'model', 200)
         self.set('cache', 'record', 2000)
         self.set('cache', 'field', 100)
+        # AKE: cache config from env vars
+        self.set('cache', 'class', os.environ.get('TRYTOND_CACHE_CLASS', None))
+        self.set('cache', 'uri', os.environ.get('TRYTOND_CACHE_URI', None))
         self.set('cache', 'coog_cache_size', 1024)
         self.add_section('ssl')
         self.add_section('email')
         self.set('email', 'uri', 'smtp://localhost:25')
         self.add_section('session')
+        self.set('session', 'authentications', 'password')
         self.set('session', 'timeout', 600)
         self.add_section('report')
         self.set('report', 'unoconv',
             'pipe,name=trytond;urp;StarOffice.ComponentContext')
+        # AKE: sentry config from env vars
+        self.add_section('sentry')
+        self.set('sentry', 'dsn', os.environ.get('TRYTOND_SENTRY_DSN', None))
         self.update_etc()
 
     def update_etc(self, configfile=os.environ.get('TRYTOND_CONFIG')):
-        if not configfile:
+        if isinstance(configfile, basestring):
+            configfile = [configfile]
+        if not configfile or not filter(None, configfile):
             return
-        logger.info('using %s as configuration file', configfile)
-        self.read(configfile)
+        read_files = self.read(configfile)
+        logger.info('using %s as configuration files', ', '.join(read_files))
 
     def get(self, section, option, *args, **kwargs):
         default = kwargs.pop('default', None)

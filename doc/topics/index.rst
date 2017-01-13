@@ -20,10 +20,13 @@ Introduction to all the key parts of trytond:
     domain
     pyson
     access_rights
+    triggers
     actions
     views/index
     views/extension
     wizard
     reports/index
+    rpc
+    user_application
     modules/index
     translation

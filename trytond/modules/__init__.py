@@ -9,6 +9,7 @@ import imp
 import operator
 import ConfigParser
 from glob import iglob
+from collections import defaultdict
 
 from sql import Table
 from sql.functions import CurrentTimestamp
@@ -207,6 +208,13 @@ def load_module_graph(graph, pool, update=None, lang=None):
     modules_todo = []
     models_to_update_history = set()
 
+    # Load also parent languages
+    lang = set(lang)
+    for code in list(lang):
+        while code:
+            lang.add(code)
+            code = tools.get_parent_language(code)
+
     with Transaction().connection.cursor() as cursor:
         modules = [x.name for x in graph]
         cursor.execute(*ir_module.select(ir_module.name, ir_module.state,
@@ -221,15 +229,15 @@ def load_module_graph(graph, pool, update=None, lang=None):
             classes = pool.fill(module)
             if update:
                 pool.setup(classes)
-            package_state = module2state.get(module, 'uninstalled')
+            package_state = module2state.get(module, 'not activated')
             if (is_module_to_install(module, update)
                     or (update
-                        and package_state in ('to install', 'to upgrade'))):
-                if package_state not in ('to install', 'to upgrade'):
-                    if package_state == 'installed':
+                        and package_state in ('to activate', 'to upgrade'))):
+                if package_state not in ('to activate', 'to upgrade'):
+                    if package_state == 'activated':
                         package_state = 'to upgrade'
                     elif package_state != 'to remove':
-                        package_state = 'to install'
+                        package_state = 'to activate'
                 for child in package.childs:
                     module2state[child.name] = package_state
                 for type in classes.keys():
@@ -254,6 +262,7 @@ def load_module_graph(graph, pool, update=None, lang=None):
                 modules_todo.append((module, list(tryton_parser.to_delete)))
 
                 localedir = '%s/%s' % (package.info['directory'], 'locale')
+                lang2filenames = defaultdict(list)
                 for filename in itertools.chain(
                         iglob('%s/*.po' % localedir),
                         iglob('%s/override/*.po' % localedir)):
@@ -261,10 +270,13 @@ def load_module_graph(graph, pool, update=None, lang=None):
                     lang2 = os.path.splitext(os.path.basename(filename))[0]
                     if lang2 not in lang:
                         continue
-                    logger.info('%s:loading %s', module,
-                        filename[len(package.info['directory']) + 1:])
+                    lang2filenames[lang2].append(filename)
+                base_path_position = len(package.info['directory']) + 1
+                for language, files in lang2filenames.iteritems():
+                    filenames = [f[base_path_position:] for f in files]
+                    logger.info('%s:loading %s', module, ','.join(filenames))
                     Translation = pool.get('ir.translation')
-                    Translation.translation_import(lang2, module, filename)
+                    Translation.translation_import(language, module, files)
 
                 if package_state == 'to remove':
                     continue
@@ -273,15 +285,15 @@ def load_module_graph(graph, pool, update=None, lang=None):
                 try:
                     module_id, = cursor.fetchone()
                     cursor.execute(*ir_module.update([ir_module.state],
-                            ['installed'], where=(ir_module.id == module_id)))
+                            ['activated'], where=(ir_module.id == module_id)))
                 except TypeError:
                     cursor.execute(*ir_module.insert(
                             [ir_module.create_uid, ir_module.create_date,
                                 ir_module.name, ir_module.state],
                             [[0, CurrentTimestamp(), package.name,
-                                    'installed'],
+                                    'activated'],
                                 ]))
-                module2state[package.name] = 'installed'
+                module2state[package.name] = 'activated'
 
             Transaction().connection.commit()
 
@@ -464,15 +476,27 @@ def load_modules(database_name, pool, update=None, lang=None):
             new_table = 'ir_module'
             if TableHandler.table_exist(old_table):
                 TableHandler.table_rename(old_table, new_table)
+
+            # Migration from 4.0: rename installed to activated
+            cursor.execute(*ir_module.select(ir_module.name,
+                    where=ir_module.state.in_(('installed', 'uninstalled'))))
+            if cursor.fetchone():
+                cursor.execute(*ir_module.update(
+                        [ir_module.state], ['activated'],
+                        where=ir_module.state == 'installed'))
+                cursor.execute(*ir_module.update(
+                        [ir_module.state], ['not activated'],
+                        where=ir_module.state == 'uninstalled'))
+
             if update:
                 migrate_modules(cursor)
 
                 cursor.execute(*ir_module.select(ir_module.name,
-                        where=ir_module.state.in_(('installed', 'to install',
+                        where=ir_module.state.in_(('activated', 'to activate',
                                 'to upgrade', 'to remove'))))
             else:
                 cursor.execute(*ir_module.select(ir_module.name,
-                        where=ir_module.state.in_(('installed', 'to upgrade',
+                        where=ir_module.state.in_(('activated', 'to upgrade',
                                 'to remove'))))
             module_list = [name for (name,) in cursor.fetchall()]
             if update:
@@ -497,7 +521,7 @@ def load_modules(database_name, pool, update=None, lang=None):
                             Model.delete([Model(rid)])
                         Transaction().connection.commit()
                     cursor.execute(*ir_module.update([ir_module.state],
-                            ['uninstalled'],
+                            ['not activated'],
                             where=(ir_module.state == 'to remove')))
                     Transaction().connection.commit()
                     res = False

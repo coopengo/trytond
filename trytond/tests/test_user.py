@@ -2,9 +2,10 @@
 # repository contains the full copyright notices and license terms.
 
 import unittest
-from trytond.tests.test_tryton import install_module, with_transaction
+from trytond.tests.test_tryton import activate_module, with_transaction
 from trytond.pool import Pool
 from trytond.res.user import bcrypt
+from trytond.config import config
 
 
 class UserTestCase(unittest.TestCase):
@@ -12,7 +13,12 @@ class UserTestCase(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        install_module('res')
+        activate_module('res')
+
+    def setUp(self):
+        methods = config.get('session', 'authentications')
+        config.set('session', 'authentications', 'password')
+        self.addCleanup(config.set, 'session', 'authentications', methods)
 
     def create_user(self, login, password, hash_method=None):
         pool = Pool()
@@ -31,17 +37,22 @@ class UserTestCase(unittest.TestCase):
             User.write([user], {
                     'password': password,
                     })
+        return user
 
     def check_user(self, login, password):
         pool = Pool()
         User = pool.get('res.user')
 
         user, = User.search([('login', '=', login)])
-        user_id = User.get_login(login, password)
+        user_id = User.get_login(login, {
+                'password': password,
+                })
         self.assertEqual(user_id, user.id)
 
-        bad_user_id = User.get_login(login, password + 'wrong')
-        self.assertEqual(bad_user_id, 0)
+        bad_user_id = User.get_login(login, {
+                'password': password + 'wrong',
+                })
+        self.assertFalse(bad_user_id)
 
     @with_transaction()
     def test_test_hash(self):
@@ -61,6 +72,12 @@ class UserTestCase(unittest.TestCase):
         'Test bcrypt password'
         self.create_user('user', '12345', 'bcrypt')
         self.check_user('user', '12345')
+
+    @with_transaction()
+    def test_read_password_hash(self):
+        "Test password_hash can not be read"
+        user = self.create_user('user', '12345')
+        self.assertIsNone(user.password_hash)
 
 
 def suite():

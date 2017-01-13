@@ -88,6 +88,16 @@ msgctxt "field:ir.model.button-res.group,write_uid:"
 msgid "Write User"
 msgstr "Scrivente"
 
+#, fuzzy
+msgctxt "field:ir.model.button.click,user:"
+msgid "User"
+msgstr "Utente"
+
+#, fuzzy
+msgctxt "field:ir.model.button.rule,group:"
+msgid "Group"
+msgstr "Gruppo"
+
 msgctxt "field:ir.model.field-res.group,create_date:"
 msgid "Create Date"
 msgstr "Creazione Data"
@@ -317,6 +327,10 @@ msgctxt "field:res.user,active:"
 msgid "Active"
 msgstr "Attivo"
 
+msgctxt "field:res.user,applications:"
+msgid "Applications"
+msgstr ""
+
 msgctxt "field:res.user,create_date:"
 msgid "Create Date"
 msgstr "Creazione Data"
@@ -465,6 +479,53 @@ msgctxt "field:res.user-res.group,write_uid:"
 msgid "Write User"
 msgstr "Scrivente"
 
+msgctxt "field:res.user.application,application:"
+msgid "Application"
+msgstr ""
+
+#, fuzzy
+msgctxt "field:res.user.application,create_date:"
+msgid "Create Date"
+msgstr "Creazione Data"
+
+#, fuzzy
+msgctxt "field:res.user.application,create_uid:"
+msgid "Create User"
+msgstr "Creazione Utente"
+
+#, fuzzy
+msgctxt "field:res.user.application,id:"
+msgid "ID"
+msgstr "ID"
+
+msgctxt "field:res.user.application,key:"
+msgid "Key"
+msgstr ""
+
+#, fuzzy
+msgctxt "field:res.user.application,rec_name:"
+msgid "Name"
+msgstr "Nome"
+
+msgctxt "field:res.user.application,state:"
+msgid "State"
+msgstr ""
+
+#, fuzzy
+msgctxt "field:res.user.application,user:"
+msgid "User"
+msgstr "Utente"
+
+#, fuzzy
+msgctxt "field:res.user.application,write_date:"
+msgid "Write Date"
+msgstr "Data di Scrittura"
+
+#, fuzzy
+msgctxt "field:res.user.application,write_uid:"
+msgid "Write User"
+msgstr "Scrivente"
+
 msgctxt "field:res.user.config.start,id:"
 msgid "ID"
 msgstr "ID"
@@ -609,14 +670,6 @@ msgctxt "model:res.user,name:"
 msgid "User"
 msgstr "Utente"
 
-msgctxt "model:res.user,name:user_admin"
-msgid "Administrator"
-msgstr "Amministratore"
-
-msgctxt "model:res.user,name:user_trigger"
-msgid "Cron Trigger"
-msgstr "Cron Trigger"
-
 msgctxt "model:res.user-ir.action,name:"
 msgid "User - Action"
 msgstr "Utente - Azione"
@@ -624,6 +677,10 @@ msgstr "Utente - Azione"
 msgctxt "model:res.user-res.group,name:"
 msgid "User - Group"
 msgstr "Utente - Gruppo"
+
+msgctxt "model:res.user.application,name:"
+msgid "User Application"
+msgstr ""
 
 msgctxt "model:res.user.config.start,name:"
 msgid "User Config Init"
@@ -637,25 +694,34 @@ msgctxt "model:res.user.warning,name:"
 msgid "User Warning"
 msgstr "Gruppi Utente"
 
+msgctxt "selection:res.user.application,state:"
+msgid "Cancelled"
+msgstr ""
+
+msgctxt "selection:res.user.application,state:"
+msgid "Requested"
+msgstr ""
+
+msgctxt "selection:res.user.application,state:"
+msgid "Validated"
+msgstr ""
+
 msgctxt "view:res.group:"
 msgid "Access Permissions"
 msgstr "Permessi di Accesso"
 
 msgctxt "view:res.group:"
-msgid "Group"
-msgstr "Gruppo"
-
-msgctxt "view:res.group:"
-msgid "Groups"
-msgstr "Gruppi"
-
-msgctxt "view:res.group:"
 msgid "Members"
 msgstr "Membri"
 
-msgctxt "view:res.user.config.start:"
-msgid "Add Users"
-msgstr "Inserisci Utente"
+#, fuzzy
+msgctxt "view:res.user.application:"
+msgid "Cancel"
+msgstr "Cancella"
+
+msgctxt "view:res.user.application:"
+msgid "Validate"
+msgstr ""
 
 msgctxt "view:res.user.config.start:"
 msgid "Be careful that the login must be unique!"
@@ -664,14 +730,6 @@ msgstr "Attenzione all'unicità della login"
 msgctxt "view:res.user.config.start:"
 msgid "You can now add some users into the system."
 msgstr "Utenti Inseribili a sistema"
-
-msgctxt "view:res.user.warning:"
-msgid "Warning"
-msgstr "Avviso"
-
-msgctxt "view:res.user.warning:"
-msgid "Warnings"
-msgstr "Avvisi"
 
 msgctxt "view:res.user:"
 msgid "Access Permissions"
@@ -693,17 +751,14 @@ msgctxt "view:res.user:"
 msgid "User"
 msgstr "Utente"
 
-msgctxt "view:res.user:"
-msgid "Users"
-msgstr "Utenti"
-
 msgctxt "wizard_button:res.user.config,start,end:"
 msgid "Cancel"
 msgstr "Cancella"
 
+#, fuzzy
 msgctxt "wizard_button:res.user.config,start,user:"
 msgid "OK"
-msgstr ""
+msgstr "OK"
 
 msgctxt "wizard_button:res.user.config,user,add:"
 msgid "Add"

@@ -52,7 +52,7 @@ root
 
 Defines the root path served by `GET` requests.
 
-Default: `/var/www/localhost/tryton`
+Default: Under the `www` directory of user's home running `trytond`.
 
 database
 --------
@@ -95,7 +95,7 @@ path
 The directory where Tryton stores files and so the user running `trytond`
 must have write access on this directory.
 
-Default: `/var/lib/trytond/`
+Default: The db folder under the user home directory running `trytond`.
 
 list
 ~~~~
@@ -117,7 +117,7 @@ language
 The main language of the database that will be used for storage in the main
 table for translations.
 
-Default: `en_US`
+Default: `en`
 
 cache
 -----
@@ -201,21 +201,23 @@ Defines the default `From` address for emails sent by Tryton.
 session
 -------
 
+authentications
+~~~~~~~~~~~~~~~
+
+A comma separated list of login methods to use to authenticate the user.
+By default, Tryton supports only the `password` method which compare the
+password entered by the user against a stored hash. But other modules can
+define new methods (please refers to their documentation).
+The methods are tested following the order of the list.
+
+Default: `password`
+
 timeout
 ~~~~~~~
 
 The time in seconds until a session expires.
 
 Default: `600`
-
-super_pwd
-~~~~~~~~~
-
-The server password used to authenticate from the client for database
-management tasks. It is encrypted using using the Unix `crypt(3)` routine.
-A password can be generated using this command line::
-
-    python -c 'import getpass,crypt,random,string; print crypt.crypt(getpass.getpass(), "".join(random.sample(string.ascii_letters + string.digits, 8)))'
 
 report
 ------
@@ -227,6 +229,24 @@ The parameters for `unoconv`.
 
 Default: `pipe,name=trytond;urp;StarOffice.ComponentContext`
 
+attachment
+----------
+
+Defines how to store the attachments
+
+filestore
+~~~~~~~~~
+
+A boolean value to store attachment in the :ref:`FileStore <ref-filestore>`.
+
+Default: `True`
+
+store_prefix
+~~~~~~~~~~~~
+
+The prefix to use with the `FileStore`.
+
+Default: `None`
 
 .. _JSON-RPC: http://en.wikipedia.org/wiki/JSON-RPC
 .. _XML-RPC: http://en.wikipedia.org/wiki/XML-RPC

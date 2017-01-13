@@ -389,7 +389,7 @@ class Fs2bdAccessor:
                     records = Model.search([
                         ('id', 'in', list(sub_record_ids)),
                         ], order=[('id', 'ASC')])
-                with Transaction().set_context(language='en_US'):
+                with Transaction().set_context(language='en'):
                     models = Model.browse(map(int, records))
                 for model in models:
                     self.browserecord[module][model_name][model.id] = model
@@ -415,8 +415,8 @@ class TrytondXmlHandler(sax.handler.ContentHandler):
         self.grouped_model_data = []
         self.skip_data = False
         Module = pool.get('ir.module')
-        self.installed_modules = [m.name for m in Module.search([
-                    ('state', 'in', ['installed', 'to upgrade']),
+        self.activated_modules = [m.name for m in Module.search([
+                    ('state', 'in', ['activated', 'to upgrade']),
                     ])]
 
         # Tag handlders are used to delegate the processing
@@ -471,7 +471,7 @@ class TrytondXmlHandler(sax.handler.ContentHandler):
                 depends = attributes.get('depends', '').split(',')
                 depends = [m.strip() for m in depends if m]
                 if depends:
-                    if not all((m in self.installed_modules for m in depends)):
+                    if not all((m in self.activated_modules for m in depends)):
                         self.skip_data = True
 
             elif name == "tryton":
@@ -587,7 +587,7 @@ class TrytondXmlHandler(sax.handler.ContentHandler):
             if module == self.module and fs_id in self.to_delete:
                 self.to_delete.remove(fs_id)
 
-            if self.noupdate and self.module_state != 'to install':
+            if self.noupdate and self.module_state != 'to activate':
                 return
 
             # this record is already in the db:
@@ -615,7 +615,7 @@ class TrytondXmlHandler(sax.handler.ContentHandler):
             # Re-create record if it was deleted
             if not record:
                 with Transaction().set_context(
-                        module=module, language='en_US'):
+                        module=module, language='en'):
                     record, = Model.create([values])
 
                 # reset_browsercord
@@ -697,7 +697,7 @@ class TrytondXmlHandler(sax.handler.ContentHandler):
             ', '.join(str(x) for x in fs_ids[0:10]))
         Model = self.pool.get(model)
 
-        with Transaction().set_context(module=self.module, language='en_US'):
+        with Transaction().set_context(module=self.module, language='en'):
             records = Model.create(vlist)
 
         mdata_values = []
@@ -742,7 +742,7 @@ class TrytondXmlHandler(sax.handler.ContentHandler):
         if to_update:
             # write the values in the db:
             with Transaction().set_context(
-                    module=module, language='en_US'):
+                    module=module, language='en'):
                 Model.write(*to_update)
             self.fs2db.reset_browsercord(
                 module, Model.__name__, sum(to_update[::2], []))

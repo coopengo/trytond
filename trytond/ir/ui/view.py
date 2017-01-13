@@ -3,10 +3,7 @@
 import os
 import sys
 import logging
-try:
-    import simplejson as json
-except ImportError:
-    import json
+import json
 
 from lxml import etree
 from trytond.model import ModelView, ModelSQL, fields
@@ -16,7 +13,7 @@ from trytond.tools import file_open
 from trytond.transaction import Transaction
 from trytond.wizard import Wizard, StateView, Button
 from trytond.pool import Pool
-from trytond.cache import _Cache as Cache
+from trytond.cache import MemoryCache
 from trytond.rpc import RPC
 
 __all__ = [
@@ -67,7 +64,8 @@ class View(ModelSQL, ModelView):
     domain = fields.Char('Domain', states={
             'invisible': ~Eval('inherit'),
             }, depends=['inherit'])
-    _get_rng_cache = Cache('ir_ui_view.get_rng')
+    # AKE : Force usage of MemoryCache for non serializable data
+    _get_rng_cache = MemoryCache('ir_ui_view.get_rng')
 
     @classmethod
     def __setup__(cls):
@@ -118,7 +116,6 @@ class View(ModelSQL, ModelView):
     @classmethod
     def get_rng(cls, type_):
         key = (cls.__name__, type_)
-        # AKE: default is required on _Cache (used for non serializable)
         rng = cls._get_rng_cache.get(key, None)
         if rng is None:
             if sys.version_info < (3,):

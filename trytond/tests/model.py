@@ -1,15 +1,25 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
-from trytond.model import ModelSingleton, ModelSQL, UnionMixin, fields
+from trytond.model import (ModelSingleton, ModelSQL, UnionMixin, fields,
+    sequence_ordered)
+from trytond.transaction import Transaction
 
 __all__ = [
+    'Model',
     'Singleton', 'URLObject',
-    'ModelStorage',
+    'ModelStorage', 'ModelStorageRequired', 'ModelStorageContext',
     'ModelSQLRequiredField', 'ModelSQLTimestamp', 'ModelSQLFieldSet',
     'Model4Union1', 'Model4Union2', 'Model4Union3', 'Model4Union4',
     'Union', 'UnionUnion',
     'Model4UnionTree1', 'Model4UnionTree2', 'UnionTree',
+    'SequenceOrderedModel',
     ]
+
+
+class Model(ModelSQL):
+    'Model'
+    __name__ = 'test.model'
+    name = fields.Char('Name')
 
 
 class Singleton(ModelSingleton, ModelSQL):
@@ -32,6 +42,21 @@ class ModelStorage(ModelSQL):
     'Model stored'
     __name__ = 'test.modelstorage'
     name = fields.Char('Name')
+
+
+class ModelStorageRequired(ModelSQL):
+    'Model stored'
+    __name__ = 'test.modelstorage.required'
+    name = fields.Char('Name', required=True)
+
+
+class ModelStorageContext(ModelSQL):
+    'Model Storage to test Context'
+    __name__ = 'test.modelstorage.context'
+    context = fields.Function(fields.Binary('Context'), 'get_context')
+
+    def get_context(self, name):
+        return Transaction().context
 
 
 class ModelSQLRequiredField(ModelSQL):
@@ -131,3 +156,8 @@ class UnionTree(UnionMixin, ModelSQL):
     @staticmethod
     def union_models():
         return ['test.model.union.tree1', 'test.model.union.tree2']
+
+
+class SequenceOrderedModel(sequence_ordered(), ModelSQL):
+    'Sequence Ordered Model'
+    __name__ = 'test.order.sequence'
