@@ -70,7 +70,7 @@ def start():
         if broker:
             logger.warning('init_pool: already started on %s', os.getpid())
             return
-        redis_url = get_cache_redis()
+        redis_url = config.get('cache', 'uri')
         if redis_url:
             url = urlparse(redis_url)
             assert url.scheme == 'redis', 'invalid redis url'
