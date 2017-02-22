@@ -167,7 +167,7 @@ def _dispatch(request, pool, *args, **kwargs):
             Cache.clean(pool.database_name)
             try:
                 PerfLog().on_enter(user, session,
-                    request.method, args, kwargs)
+                    method, args, kwargs)
             except:
                 perf_logger.exception('on_enter failed')
             try:
