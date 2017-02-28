@@ -762,7 +762,6 @@ class ModelView(Model):
                     else:
                         # automically get a one2Many rec_name
                         # to limit number of requests
-                        # WARNING: this may be unstable
                         default_values = target._default_values
                         for k in default_values.keys():
                             val = getattr(target, k, None)
