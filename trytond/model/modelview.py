@@ -760,7 +760,8 @@ class ModelView(Model):
                             target_changed['id'] = target.id
                             value['update'].append(target_changed)
                     else:
-                        # automically get a one2Many rec_name
+                        # JACK: redmine issue #5873
+                        # automatically get a one2Many rec_name
                         # to limit number of requests
                         default_values = target._default_values
                         for k in default_values.keys():
