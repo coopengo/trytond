@@ -760,7 +760,15 @@ class ModelView(Model):
                             target_changed['id'] = target.id
                             value['update'].append(target_changed)
                     else:
-                        value['add'].append((i, target._default_values))
+                        # JACK: redmine issue #5873
+                        # automatically get a one2Many rec_name
+                        # to limit number of requests
+                        default_values = target._default_values
+                        for k in default_values.keys():
+                            val = getattr(target, k, None)
+                            if isinstance(val, ModelStorage):
+                                default_values[k + '.rec_name'] = val.rec_name
+                        value['add'].append((i, default_values))
                 if not value['remove']:
                     del value['remove']
                 if not value:
