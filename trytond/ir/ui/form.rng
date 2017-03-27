@@ -162,9 +162,6 @@
           <value>dict</value>
           <value>multiselection</value>
           <value>pyson</value>
-          <value>icon</value>
-          <value>source</value>
-          <value>many2many_selection</value>
         </choice>
       </attribute>
     </optional>
@@ -376,53 +373,6 @@
       </attribute>
     </optional>
   </define>
-  <!-- AKE: coog specific field attrs begin here -->
-  <define name="attlist.field" combine="interleave">
-    <optional>
-      <attribute name="context_tree"/>
-    </optional>
-  </define>
-  <define name="attlist.field" combine="interleave">
-    <optional>
-      <attribute name="no_command">
-        <choice>
-          <value>0</value>
-          <value>1</value>
-        </choice>
-      </attribute>
-    </optional>
-  </define>
-  <define name="attlist.field" combine="interleave">
-    <optional>
-      <attribute name="relation"/>
-    </optional>
-  </define>
-  <define name="attlist.field" combine="interleave">
-    <optional>
-      <attribute name="relation_field"/>
-    </optional>
-  </define>
-  <define name="attlist.field" combine="interleave">
-    <optional>
-      <attribute name="group"/>
-    </optional>
-  </define>
-  <define name="attlist.field" combine="interleave">
-    <optional>
-      <attribute name="states"/>
-    </optional>
-  </define>
-  <define name="attlist.field" combine="interleave">
-    <optional>
-      <attribute name="expand_toolbar" a:defaultValue="0">
-        <choice>
-          <value>0</value>
-          <value>1</value>
-        </choice>
-      </attribute>
-    </optional>
-  </define>
-  <!-- AKE: coog specific field attrs end here -->
   <define name="image">
     <element name="image">
       <ref name="attlist.image"/>

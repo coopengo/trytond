@@ -66,9 +66,6 @@ attlist.field &=
     | "dict"
     | "multiselection"
     | "pyson"
-    | "icon"
-    | "source"
-    | "many2many_selection"
   }?
 attlist.field &= attribute fill { "0" | "1" }?
 attlist.field &= attribute yexpand { "0" | "1" }?
@@ -108,15 +105,6 @@ attlist.field &= [a:defaultValue = "1"] attribute factor { text }?
 attlist.field &= attribute filename { text }?
 attlist.field &=
   [a:defaultValue = "0"] attribute toolbar { "0" | "1" }?
-# AKE: coog specific field attrs begin here
-attlist.field &= attribute no_command { "0" | "1" }?
-attlist.field &= attribute context_tree { text }?
-attlist.field &= attribute group { text }?
-attlist.field &= attribute relation { text }?
-attlist.field &= attribute relation_field { text }?
-attlist.field &= [a:defaultValue = "0"] attribute expand_toolbar { "0" | "1" }?
-attlist.field &= attribute states { text }?
-# AKE: coog specific field attrs end here
 image = element image { attlist.image, empty }
 attlist.image &= attribute name { text }
 attlist.image &= [ a:defaultValue = "1" ] attribute colspan { text }?

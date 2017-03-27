@@ -28,32 +28,7 @@
   </define>
   <define name="attlist.tree" combine="interleave">
     <optional>
-      <attribute name="always_expand">
-        <choice>
-          <value>0</value>
-          <value>1</value>
-        </choice>
-      </attribute>
-    </optional>
-  </define>
-  <define name="attlist.tree" combine="interleave">
-    <optional>
-      <attribute name="editable_open">
-        <choice>
-          <value>0</value>
-          <value>1</value>
-        </choice>
-      </attribute>
-    </optional>
-  </define>
-  <define name="attlist.tree" combine="interleave">
-    <optional>
       <attribute name="sequence"/>
-    </optional>
-  </define>
-  <define name="attlist.tree" combine="interleave">
-    <optional>
-      <attribute name="colors"/>
     </optional>
   </define>
   <define name="attlist.tree" combine="interleave">
@@ -273,11 +248,6 @@
   <define name="attlist.button" combine="interleave">
     <optional>
       <attribute name="states"/>
-    </optional>
-  </define>
-  <define name="attlist.button" combine="interleave">
-    <optional>
-      <attribute name="keywords"/>
     </optional>
   </define>
   <define name="attlist.button" combine="interleave">
