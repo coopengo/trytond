@@ -639,7 +639,8 @@ class Translation(ModelSQL, ModelView):
             lang = unicode(lang)
             if source is not None:
                 source = unicode(source)
-            trans = cls._translation_cache.get((lang, ttype, name, source), -1)
+            # JCA : include https://tryton-rietveld.appspot.com/33221002/
+            trans = cls._translation_cache.get((name, ttype, lang, source), -1)
             if trans != -1:
                 res[(name, ttype, lang, source)] = trans
             else:
