@@ -169,11 +169,9 @@ class Pool(object):
             if restart:
                 self.init()
 
-    def post_init(self):
+    def post_init(self, update):
         for hook in self._post_init_calls[self.database_name]:
-            logging.getLogger('modules').info('Running post init hook %s' %
-                hook.__name__)
-            hook(self)
+            hook(self, update)
 
     def get(self, name, type='model'):
         '''
@@ -248,7 +246,6 @@ class Pool(object):
                 cls.__setup__()
             for cls in lst:
                 cls.__post_setup__()
-        self.post_init()
 
 
 def isregisteredby(obj, module, type_='model'):

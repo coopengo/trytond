@@ -229,6 +229,7 @@ def load_module_graph(graph, pool, update=None, lang=None):
             classes = pool.fill(module)
             if update:
                 pool.setup(classes)
+                pool.post_init(module)
             package_state = module2state.get(module, 'not activated')
             if (is_module_to_install(module, update)
                     or (update
@@ -299,6 +300,7 @@ def load_module_graph(graph, pool, update=None, lang=None):
 
         if not update:
             pool.setup()
+            pool.post_init(None)
 
         for model_name in models_to_update_history:
             model = pool.get(model_name)
