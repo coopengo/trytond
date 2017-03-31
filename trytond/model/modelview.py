@@ -766,7 +766,8 @@ class ModelView(Model):
                         default_values = target._default_values
                         for k in default_values.keys():
                             val = getattr(target, k, None)
-                            if isinstance(val, ModelStorage):
+                            if isinstance(val, ModelStorage) and getattr(val,
+                                    'id', 0) > 0:
                                 default_values[k + '.rec_name'] = val.rec_name
                         value['add'].append((i, default_values))
                 if not value['remove']:
