@@ -5,7 +5,7 @@ from decimal import Decimal
 import json
 import base64
 
-from werkzeug.wrappers import Response
+from werkzeug.wrappers import Response, Headers
 from werkzeug.utils import cached_property
 from werkzeug.exceptions import BadRequest, InternalServerError
 
@@ -156,5 +156,7 @@ class JSONProtocol:
             if isinstance(data, Exception):
                 return InternalServerError()
             response = data
+        headers = Headers()
+        headers.add('RPC-Method', parsed_data['method'])
         return Response(json.dumps(response, cls=JSONEncoder),
-            content_type='application/json')
+            content_type='application/json', headers=headers)
