@@ -156,6 +156,7 @@ class JSONProtocol:
             if isinstance(data, Exception):
                 return InternalServerError()
             response = data
+        # add RPC Method in HTTP headers (better logging)
         headers = Headers()
         headers.add('RPC-Method', parsed_data['method'])
         return Response(json.dumps(response, cls=JSONEncoder),
