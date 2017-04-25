@@ -154,7 +154,7 @@ class JSONProtocol:
                 response['result'] = data
         else:
             if isinstance(data, Exception):
-                return InternalServerError()
+                return InternalServerError(data)
             response = data
         # add RPC Method in HTTP headers (better logging)
         headers = Headers()
