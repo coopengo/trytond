@@ -272,9 +272,6 @@ class Report(URLMixin, PoolBase):
                 logger.info('unoconv.stdout : ' + stdoutdata)
                 logger.error('unoconv.stderr : ' + stderrdata)
                 raise Exception(stderrdata)
-            else:
-                logger.debug('unoconv.stdout : ' + stdoutdata)
-                logger.debug('unoconv.stderr : ' + stderrdata)
             return oext, stdoutdata
         finally:
             os.remove(path)
