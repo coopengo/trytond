@@ -1431,7 +1431,9 @@ class ModelStorage(Model):
                     if target.id is None or target.id < 0:
                         if field._type == 'one2many':
                             # Don't store old target link
-                            setattr(target, field.field, None)
+                            if field.field:
+                                # Ignore if Function field
+                                setattr(target, field.field, None)
                         to_create.append(target._save_values)
                     else:
                         if target.id in to_remove:
