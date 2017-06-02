@@ -205,13 +205,22 @@ def _dispatch(request, pool, *args, **kwargs):
                 if count and not rpc.readonly:
                     transaction.rollback()
                     continue
+                if log_threshold != -1:
+                    log_end = time.time()
+                    log_args += (str(log_end - log_start),)
                 logger.error(log_message, *log_args, exc_info=True)
                 raise
             except (ConcurrencyException, UserError, UserWarning,
                     LoginException):
+                if log_threshold != -1:
+                    log_end = time.time()
+                    log_args += (str(log_end - log_start),)
                 logger.debug(log_message, *log_args, exc_info=True)
                 raise
             except Exception:
+                if log_threshold != -1:
+                    log_end = time.time()
+                    log_args += (str(log_end - log_start),)
                 logger.error(log_message, *log_args, exc_info=True)
                 raise
             # Need to commit to unlock SQLite database
