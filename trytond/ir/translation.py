@@ -11,7 +11,7 @@ from itertools import izip
 from io import BytesIO
 import logging
 
-from sql import Column, Null
+from sql import Column, Null, Literal
 from sql.functions import Substring, Position
 from sql.conditionals import Case
 from sql.operators import Or, And
@@ -39,6 +39,7 @@ __all__ = ['Translation',
     'TranslationCleanStart', 'TranslationCleanSucceed', 'TranslationClean',
     'TranslationUpdateStart', 'TranslationUpdate',
     'TranslationExportStart', 'TranslationExportResult', 'TranslationExport',
+    'TranslationReport',
     ]
 
 TRANSLATION_TYPE = [
@@ -107,10 +108,7 @@ class Translation(ModelSQL, ModelView):
         # Migration from 1.8: new field src_md5
         src_md5_exist = table.column_exist('src_md5')
         if not src_md5_exist:
-            table.add_raw_column('src_md5',
-                cls.src_md5.sql_type(),
-                cls.src_md5.sql_format, None,
-                cls.src_md5.size, string=cls.src_md5.string)
+            table.add_column('src_md5', cls.src_md5._sql_type)
         table.drop_constraint('translation_uniq')
         table.index_action(['lang', 'type', 'name', 'src'], 'remove')
 
@@ -1086,78 +1084,85 @@ class TranslationSet(Wizard):
         pool = Pool()
         Report = pool.get('ir.action.report')
         Translation = pool.get('ir.translation')
+        context = Transaction().context
 
-        with Transaction().set_context(active_test=False):
-            reports = Report.search([])
-
-        if not reports:
+        if context.get('active_model') == Report.__name__:
+            reports = Report.browse(context.get('active_ids', []))
+        elif context.get('active_model', 'ir.ui.menu') == 'ir.ui.menu':
+            with Transaction().set_context(active_test=False):
+                reports = Report.search([])
+        else:
             return
 
         cursor = Transaction().connection.cursor()
         translation = Translation.__table__()
         for report in reports:
-            cursor.execute(*translation.select(
-                    translation.id, translation.name, translation.src,
-                    where=(translation.lang == 'en')
-                    & (translation.type == 'report')
-                    & (translation.name == report.report_name)
-                    & (translation.module == report.module or '')))
-            trans_reports = {t['src']: t for t in cursor_dict(cursor)}
-
             content = None
             if report.report:
                 with file_open(report.report.replace('/', os.sep),
                         mode='rb') as fp:
                     content = fp.read()
-            strings = []
-            for content in [report.report_content_custom, content]:
+            for content, module in [
+                    (report.report_content_custom, None),
+                    (content, report.module)]:
                 if not content:
                     continue
-                func_name = 'extract_report_%s' % report.template_extension
-                strings.extend(getattr(self, func_name)(content))
 
-            for string in {}.fromkeys(strings).keys():
-                src_md5 = Translation.get_src_md5(string)
-                done = False
-                if string in trans_reports:
-                    del trans_reports[string]
-                    continue
-                for string_trans in trans_reports:
-                    if string_trans in strings:
-                        continue
-                    seqmatch = SequenceMatcher(lambda x: x == ' ',
-                            string, string_trans)
-                    if seqmatch.ratio() == 1.0:
-                        del trans_reports[report.report_name][string_trans]
-                        done = True
-                        break
-                    if seqmatch.ratio() > 0.6:
-                        cursor.execute(*translation.update(
-                                [translation.src, translation.fuzzy,
-                                    translation.src_md5],
-                                [string, True, src_md5],
-                                where=(translation.name == report.report_name)
-                                & (translation.type == 'report')
-                                & (translation.src == string_trans)
-                                & (translation.module == report.module)))
-                        del trans_reports[string_trans]
-                        done = True
-                        break
-                if not done:
-                    cursor.execute(*translation.insert(
-                            [translation.name, translation.lang,
-                                translation.type, translation.src,
-                                translation.value, translation.module,
-                                translation.fuzzy, translation.src_md5,
-                                translation.res_id],
-                            [[report.report_name, 'en', 'report', string,
-                                    '', report.module, False, src_md5, -1]]))
-            if strings:
-                cursor.execute(*translation.delete(
-                        where=(translation.name == report.report_name)
+                cursor.execute(*translation.select(
+                        translation.id, translation.name, translation.src,
+                        where=(translation.lang == 'en')
                         & (translation.type == 'report')
-                        & (translation.module == report.module)
-                        & ~translation.src.in_(strings)))
+                        & (translation.name == report.report_name)
+                        & (translation.module == module)))
+                trans_reports = {t['src']: t for t in cursor_dict(cursor)}
+
+                strings = set()
+                func_name = 'extract_report_%s' % report.template_extension
+                strings.update(getattr(self, func_name)(content))
+
+                for string in strings:
+                    src_md5 = Translation.get_src_md5(string)
+                    done = False
+                    if string in trans_reports:
+                        del trans_reports[string]
+                        continue
+                    for string_trans in trans_reports:
+                        if string_trans in strings:
+                            continue
+                        seqmatch = SequenceMatcher(lambda x: x == ' ',
+                                string, string_trans)
+                        if seqmatch.ratio() == 1.0:
+                            del trans_reports[report.report_name][string_trans]
+                            done = True
+                            break
+                        if seqmatch.ratio() > 0.6:
+                            cursor.execute(*translation.update(
+                                    [translation.src, translation.fuzzy,
+                                        translation.src_md5],
+                                    [string, True, src_md5],
+                                    where=(
+                                        translation.name == report.report_name)
+                                    & (translation.type == 'report')
+                                    & (translation.src == string_trans)
+                                    & (translation.module == module)))
+                            del trans_reports[string_trans]
+                            done = True
+                            break
+                    if not done:
+                        cursor.execute(*translation.insert(
+                                [translation.name, translation.lang,
+                                    translation.type, translation.src,
+                                    translation.value, translation.module,
+                                    translation.fuzzy, translation.src_md5,
+                                    translation.res_id],
+                                [[report.report_name, 'en', 'report', string,
+                                        '', module, False, src_md5, -1]]))
+                if strings:
+                    cursor.execute(*translation.delete(
+                            where=(translation.name == report.report_name)
+                            & (translation.type == 'report')
+                            & (translation.module == module)
+                            & ~translation.src.in_(list(strings))))
 
     def _translate_view(self, element):
         strings = []
@@ -1174,12 +1179,16 @@ class TranslationSet(Wizard):
         pool = Pool()
         View = pool.get('ir.ui.view')
         Translation = pool.get('ir.translation')
+        context = Transaction().context
 
-        with Transaction().set_context(active_test=False):
-            views = View.search([])
-
-        if not views:
+        if context.get('active_model') == View.__name__:
+            views = View.browse(context.get('active_ids', []))
+        elif context.get('active_model', 'ir.ui.menu') == 'ir.ui.menu':
+            with Transaction().set_context(active_test=False):
+                views = View.search([])
+        else:
             return
+
         cursor = Transaction().connection.cursor()
         translation = Translation.__table__()
         for view in views:
@@ -1524,20 +1533,36 @@ class TranslationUpdate(Wizard):
     def do_update(self, action):
         pool = Pool()
         Translation = pool.get('ir.translation')
+        Report = pool.get('ir.action.report')
+        View = pool.get('ir.ui.view')
+        context = Transaction().context
         cursor = Transaction().connection.cursor()
         cursor_update = Transaction().connection.cursor()
         translation = Translation.__table__()
         lang = self.start.language.code
         parent_lang = get_parent(lang)
 
+        if context.get('active_model') == Report.__name__:
+            reports = Report.browse(context.get('active_ids', []))
+            source_clause = ((translation.type == 'report')
+                & translation.name.in_([r.report_name for r in reports]))
+        elif context.get('active_model') == View.__name__:
+            views = View.browse(context.get('active_ids', []))
+            source_clause = ((translation.type == 'view')
+                & translation.name.in_([v.model for v in views]))
+        else:
+            source_clause = Literal(True)
+
         columns = [translation.name.as_('name'),
             translation.res_id.as_('res_id'), translation.type.as_('type'),
             translation.src.as_('src'), translation.module.as_('module')]
         cursor.execute(*(translation.select(*columns,
                     where=(translation.lang == 'en')
+                    & source_clause
                     & translation.type.in_(self._source_types))
                 - translation.select(*columns,
                     where=(translation.lang == lang)
+                    & source_clause
                     & translation.type.in_(self._source_types))))
         to_create = []
         for row in cursor_dict(cursor):
@@ -1556,9 +1581,11 @@ class TranslationUpdate(Wizard):
             columns.append(translation.value)
             cursor.execute(*(translation.select(*columns,
                         where=(translation.lang == parent_lang)
+                        & source_clause
                         & translation.type.in_(self._source_types))
                     & translation.select(*columns,
                         where=(translation.lang == lang)
+                        & source_clause
                         & translation.type.in_(self._source_types))))
             for row in cursor_dict(cursor):
                 cursor_update.execute(*translation.update(
@@ -1570,6 +1597,9 @@ class TranslationUpdate(Wizard):
                         & (translation.src == row['src'])
                         & (translation.module == row['module'])
                         & (translation.lang == lang)))
+
+        if context.get('active_model') in {Report.__name__, View.__name__}:
+            return
 
         columns = [translation.name.as_('name'),
             translation.res_id.as_('res_id'), translation.type.as_('type'),
@@ -1724,4 +1754,29 @@ class TranslationExport(Wizard):
         self.result.file = False  # No need to store it in session
         return {
             'file': cast(file_) if file_ else None,
+            }
+
+
+class TranslationReport(Wizard):
+    "Open translations of report"
+    __name__ = 'ir.translation.report'
+    start_state = 'open_'
+    open_ = StateAction('ir.act_translation_report')
+
+    def do_open_(self, action):
+        pool = Pool()
+        Report = pool.get('ir.action.report')
+        context = Transaction().context
+        assert context['active_model'] == Report.__name__
+        reports = Report.browse(context['active_ids'])
+        action['pyson_domain'] = PYSONEncoder().encode([
+                ('type', '=', 'report'),
+                ('name', 'in', [r.report_name for r in reports]),
+                ])
+        # Behaves like a relate to have name suffix
+        action['keyword'] = 'form_relate'
+        return action, {
+            'model': context['active_model'],
+            'ids': context['active_ids'],
+            'id': context['active_id'],
             }

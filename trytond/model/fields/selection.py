@@ -4,10 +4,10 @@ import warnings
 
 from sql.conditionals import Case
 
-from ... import backend
 from ...transaction import Transaction
 from ...tools import is_instance_method
-from .field import Field, SQLType
+from .field import Field
+from ...rpc import RPC
 
 
 class Selection(Field):
@@ -15,6 +15,7 @@ class Selection(Field):
     Define a selection field (``str``).
     '''
     _type = 'selection'
+    _sql_type = 'VARCHAR'
 
     def __init__(self, selection, string='', sort=True,
             selection_change_with=None, translate=True, help='',
@@ -45,11 +46,14 @@ class Selection(Field):
         self.translate_selection = translate
     __init__.__doc__ += Field.__init__.__doc__
 
-    def sql_type(self):
-        db_type = backend.name()
-        if db_type == 'mysql':
-            return SQLType('CHAR', 'VARCHAR(255)')
-        return SQLType('VARCHAR', 'VARCHAR')
+    def set_rpc(self, model):
+        super(Selection, self).set_rpc(model)
+        if not isinstance(self.selection, (list, tuple)):
+            assert hasattr(model, self.selection), \
+                'Missing %s on model %s' % (self.selection, model.__name__)
+            instantiate = 0 if self.selection_change_with else None
+            model.__rpc__.setdefault(
+                self.selection, RPC(instantiate=instantiate))
 
     def convert_order(self, name, tables, Model):
         if getattr(Model, 'order_%s' % name, None):

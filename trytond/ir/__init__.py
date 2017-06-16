@@ -7,7 +7,6 @@ from .sequence import *
 from .ui.menu import *
 from .ui.view import *
 from .ui.icon import *
-from .property import *
 from .action import *
 from .model import *
 from .attachment import *
@@ -45,7 +44,6 @@ def register():
         ViewTreeState,
         ViewSearch,
         Icon,
-        Property,
         Action,
         ActionKeyword,
         ActionReport,
@@ -93,6 +91,7 @@ def register():
         TranslationClean,
         TranslationUpdate,
         TranslationExport,
+        TranslationReport,
         ShowView,
         PrintModelGraph,
         ModuleConfigWizard,

@@ -5,11 +5,10 @@ import warnings
 from sql import Cast, Literal, Query, Expression
 from sql.functions import Substring, Position
 
-from .field import Field, SQLType
-from .char import Char
+from .field import Field
 from ...transaction import Transaction
 from ...pool import Pool
-from ... import backend
+from ...rpc import RPC
 
 
 class Reference(Field):
@@ -17,6 +16,7 @@ class Reference(Field):
     Define a reference field (``str``).
     '''
     _type = 'reference'
+    _sql_type = 'VARCHAR'
 
     def __init__(self, string='', selection=None, selection_change_with=None,
             help='', required=False, readonly=False, domain=None, states=None,
@@ -47,6 +47,15 @@ class Reference(Field):
                 DeprecationWarning, stacklevel=2)
             self.selection_change_with |= set(selection_change_with)
     __init__.__doc__ += Field.__init__.__doc__
+
+    def set_rpc(self, model):
+        super(Reference, self).set_rpc(model)
+        if not isinstance(self.selection, (list, tuple)):
+            assert hasattr(model, self.selection), \
+                'Missing %s on model %s' % (self.selection, model.__name__)
+            instantiate = 0 if self.selection_change_with else None
+            model.__rpc__.setdefault(
+                self.selection, RPC(instantiate=instantiate))
 
     def get(self, ids, model, name, values=None):
         '''
@@ -112,20 +121,13 @@ class Reference(Field):
                 value = Target(value)
         super(Reference, self).__set__(inst, value)
 
-    @staticmethod
-    def sql_format(value):
+    def sql_format(self, value):
         if not isinstance(value, (basestring, Query, Expression)):
             try:
                 value = '%s,%s' % tuple(value)
             except TypeError:
                 pass
-        return Char.sql_format(value)
-
-    def sql_type(self):
-        db_type = backend.name()
-        if db_type == 'mysql':
-            return SQLType('CHAR', 'VARCHAR(255)')
-        return SQLType('VARCHAR', 'VARCHAR')
+        return super(Reference, self).sql_format(value)
 
     def convert_domain(self, domain, tables, Model):
         if '.' not in domain[0]:

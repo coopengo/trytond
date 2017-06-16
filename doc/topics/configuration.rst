@@ -95,7 +95,7 @@ path
 The directory where Tryton stores files and so the user running `trytond`
 must have write access on this directory.
 
-Default: The db folder under the user home directory running `trytond`.
+Default: The `db` folder under the user home directory running `trytond`.
 
 list
 ~~~~
@@ -218,6 +218,37 @@ timeout
 The time in seconds until a session expires.
 
 Default: `600`
+
+max_attempt
+~~~~~~~~~~~
+
+The maximum authentication attempt before the server answers unconditionally
+`Too Many Requests` for any other attempts. The counting is done on all
+attempts over a period of `timeout`.
+
+Default: `5`
+
+password
+--------
+
+length
+~~~~~~
+
+The minimal length required for the user password.
+
+Default: `8`
+
+forbidden
+~~~~~~~~~
+
+The path to a file containing one forbidden password per line.
+
+entropy
+~~~~~~~
+
+The ratio of non repeated characters for the user password.
+
+Default: `0.75`
 
 report
 ------

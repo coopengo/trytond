@@ -79,6 +79,7 @@ class TranslateFactory:
             cache = self.cache[self.language] = {}
             code = self.language
             while code:
+                # Order to get empty module/custom report first
                 translations = self.translation.search([
                     ('lang', '=', code),
                     ('type', '=', 'report'),
@@ -87,7 +88,7 @@ class TranslateFactory:
                     ('value', '!=', None),
                     ('fuzzy', '=', False),
                     ('res_id', '=', -1),
-                    ])
+                    ], order=[('module', 'DESC')])
                 for translation in translations:
                     cache.setdefault(translation.src, translation.value)
                 code = get_parent_language(code)

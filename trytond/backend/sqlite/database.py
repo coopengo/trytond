@@ -1,6 +1,6 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
-from trytond.backend.database import DatabaseInterface
+from trytond.backend.database import DatabaseInterface, SQLType
 from trytond.config import config
 import os
 from decimal import Decimal
@@ -8,6 +8,7 @@ import datetime
 import time
 import sys
 import threading
+import logging
 
 _FIX_ROWCOUNT = False
 try:
@@ -20,11 +21,12 @@ except ImportError:
     import sqlite3 as sqlite
     from sqlite3 import IntegrityError as DatabaseIntegrityError
     from sqlite3 import OperationalError as DatabaseOperationalError
-from sql import Flavor, Table
+from sql import Flavor, Table, Query, Expression
 from sql.functions import (Function, Extract, Position, Substring,
     Overlay, CharLength, CurrentTimestamp, Trim)
 
 __all__ = ['Database', 'DatabaseIntegrityError', 'DatabaseOperationalError']
+logger = logging.getLogger(__name__)
 
 
 class SQLiteExtract(Function):
@@ -218,8 +220,14 @@ class Database(DatabaseInterface):
 
     _local = threading.local()
     _conn = None
-    flavor = Flavor(paramstyle='qmark', function_mapping=MAPPING)
+    flavor = Flavor(
+        paramstyle='qmark', function_mapping=MAPPING, null_ordering=False)
     IN_MAX = 200
+
+    TYPES_MAPPING = {
+        'DATETIME': SQLType('TIMESTAMP', 'TIMESTAMP'),
+        'BIGINT': SQLType('INTEGER', 'INTEGER'),
+        }
 
     def __new__(cls, name=':memory:'):
         if (name == ':memory:'
@@ -257,6 +265,9 @@ class Database(DatabaseInterface):
         self._conn.create_function('sign', 1, sign)
         self._conn.create_function('greatest', -1, greatest)
         self._conn.create_function('least', -1, least)
+        if (hasattr(self._conn, 'set_trace_callback')
+                and logger.isEnabledFor(logging.DEBUG)):
+            self._conn.set_trace_callback(logger.debug)
         self._conn.execute('PRAGMA foreign_keys = ON')
         return self
 
@@ -394,6 +405,20 @@ class Database(DatabaseInterface):
 
     def has_multirow_insert(self):
         return True
+
+    def sql_type(self, type_):
+        if type_ in self.TYPES_MAPPING:
+            return self.TYPES_MAPPING[type_]
+        if type_.startswith('VARCHAR'):
+            return SQLType('VARCHAR', 'VARCHAR')
+        return SQLType(type_, type_)
+
+    def sql_format(self, type_, value):
+        if type_ in ('INTEGER', 'BIGINT'):
+            if (value is not None
+                    and not isinstance(value, (Query, Expression))):
+                value = int(value)
+        return value
 
 sqlite.register_converter('NUMERIC', lambda val: Decimal(val.decode('utf-8')))
 if sys.version_info[0] == 2:

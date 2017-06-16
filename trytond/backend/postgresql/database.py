@@ -6,19 +6,20 @@ import re
 import os
 import urllib
 from decimal import Decimal
+from threading import RLock
 
 try:
     from psycopg2cffi import compat
     compat.register()
 except ImportError:
     pass
-from psycopg2 import connect
+from psycopg2 import connect, Binary
 from psycopg2.pool import ThreadedConnectionPool, PoolError
+from psycopg2.extensions import cursor
 from psycopg2.extensions import ISOLATION_LEVEL_REPEATABLE_READ
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 from psycopg2.extensions import register_type, register_adapter
 from psycopg2.extensions import UNICODE, AsIs
-from psycopg2.extensions import cursor
 try:
     from psycopg2.extensions import PYDATE, PYDATETIME, PYTIME, PYINTERVAL
 except ImportError:
@@ -28,7 +29,7 @@ from psycopg2 import OperationalError as DatabaseOperationalError
 
 from sql import Flavor
 
-from trytond.backend.database import DatabaseInterface
+from trytond.backend.database import DatabaseInterface, SQLType
 from trytond.config import config, parse_uri
 from trytond.perf_analyzer import analyze_before, analyze_after
 from trytond.perf_analyzer import logger as perf_logger
@@ -56,6 +57,8 @@ def replace_special_values(s, **mapping):
 
 class PerfCursor(cursor):
     def execute(self, query, vars=None):
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(self.mogrify(query, query))
         try:
             context = analyze_before(self)
         except:
@@ -86,29 +89,45 @@ class PerfCursor(cursor):
 
 class Database(DatabaseInterface):
 
+    _lock = RLock()
     _databases = {}
     _connpool = None
     _list_cache = None
     _list_cache_timestamp = None
     _version_cache = {}
+    _search_path = None
+    _current_user = None
+    _has_returning = None
     flavor = Flavor(ilike=True)
 
-    def __new__(cls, name='template1'):
-        if name in cls._databases:
-            return cls._databases[name]
-        return DatabaseInterface.__new__(cls, name=name)
+    TYPES_MAPPING = {
+        'INTEGER': SQLType('INT4', 'INT4'),
+        'BIGINT': SQLType('INT8', 'INT8'),
+        'FLOAT': SQLType('FLOAT8', 'FLOAT8'),
+        'BLOB': SQLType('BYTEA', 'BYTEA'),
+        'DATETIME': SQLType('TIMESTAMP', 'TIMESTAMP(0)'),
+        'TIMESTAMP': SQLType('TIMESTAMP', 'TIMESTAMP(6)'),
+        }
 
-    def __init__(self, name='template1'):
-        super(Database, self).__init__(name=name)
-        self._databases.setdefault(name, self)
-        self._search_path = None
-        self._current_user = None
-        self._has_returning = None
+    def __new__(cls, name='template1'):
+        with cls._lock:
+            if name in cls._databases:
+                return cls._databases[name]
+            inst = DatabaseInterface.__new__(cls, name=name)
+            cls._databases[name] = inst
+
+            logger.info('connect to "%s"', name)
+            minconn = config.getint('database', 'minconn', default=1)
+            maxconn = config.getint('database', 'maxconn', default=64)
+            inst._connpool = ThreadedConnectionPool(
+                minconn, maxconn, cls.dsn(name),
+                cursor_factory=PerfCursor)
+
+            return inst
 
     @classmethod
     def dsn(cls, name):
         uri = parse_uri(config.get('database', 'uri'))
-        assert uri.scheme == 'postgresql'
         host = uri.hostname and "host=%s" % uri.hostname or ''
         port = uri.port and "port=%s" % uri.port or ''
         name = "dbname=%s" % name
@@ -118,18 +137,9 @@ class Database(DatabaseInterface):
         return '%s %s %s %s %s' % (host, port, name, user, password)
 
     def connect(self):
-        if self._connpool is not None:
-            return self
-        logger.info('connect to "%s"', self.name)
-        minconn = config.getint('database', 'minconn', default=1)
-        maxconn = config.getint('database', 'maxconn', default=64)
-        self._connpool = ThreadedConnectionPool(
-            minconn, maxconn, self.dsn(self.name))
         return self
 
     def get_connection(self, autocommit=False, readonly=False):
-        if self._connpool is None:
-            self.connect()
         for count in range(config.getint('database', 'retry'), -1, -1):
             try:
                 conn = self._connpool.getconn()
@@ -154,10 +164,9 @@ class Database(DatabaseInterface):
         self._connpool.putconn(connection, close=close)
 
     def close(self):
-        if self._connpool is None:
-            return
-        self._connpool.closeall()
-        self._connpool = None
+        with self._lock:
+            self._connpool.closeall()
+            self._databases.pop(self.name)
 
     @classmethod
     def create(cls, connection, database_name):
@@ -170,7 +179,7 @@ class Database(DatabaseInterface):
     def drop(self, connection, database_name):
         cursor = connection.cursor()
         cursor.execute('DROP DATABASE "' + database_name + '"')
-        Database._list_cache = None
+        self.__class__._list_cache = None
 
     def get_version(self, connection):
         if self.name not in self._version_cache:
@@ -184,8 +193,8 @@ class Database(DatabaseInterface):
     def list(self):
         now = time.time()
         timeout = config.getint('session', 'timeout')
-        res = Database._list_cache
-        if res and abs(Database._list_cache_timestamp - now) < timeout:
+        res = self.__class__._list_cache
+        if res and abs(self.__class__._list_cache_timestamp - now) < timeout:
             return res
 
         connection = self.get_connection()
@@ -202,8 +211,8 @@ class Database(DatabaseInterface):
                 continue
         self.put_connection(connection)
 
-        Database._list_cache = res
-        Database._list_cache_timestamp = now
+        self.__class__._list_cache = res
+        self.__class__._list_cache_timestamp = now
         return res
 
     def init(self):
@@ -328,6 +337,25 @@ class Database(DatabaseInterface):
             finally:
                 self.put_connection(connection)
         return self._has_returning
+
+    def has_select_for(self):
+        return True
+
+    def has_window_functions(self):
+        return True
+
+    def sql_type(self, type_):
+        if type_ in self.TYPES_MAPPING:
+            return self.TYPES_MAPPING[type_]
+        if type_.startswith('VARCHAR'):
+            return SQLType('VARCHAR', type_)
+        return SQLType(type_, type_)
+
+    def sql_format(self, type_, value):
+        if type_ == 'BLOB':
+            if value is not None:
+                return Binary(value)
+        return value
 
 register_type(UNICODE)
 if PYDATE:

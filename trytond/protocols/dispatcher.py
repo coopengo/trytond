@@ -13,9 +13,9 @@ from trytond import backend
 from trytond.config import config
 from trytond import __version__
 from trytond.transaction import Transaction
-from trytond.cache import Cache
 from trytond.exceptions import (
-    UserError, UserWarning, ConcurrencyException, LoginException)
+    UserError, UserWarning, ConcurrencyException, LoginException,
+    RateLimitException)
 from trytond.tools import is_instance_method
 from trytond.wsgi import app
 from trytond.perf_analyzer import PerfLog, profile
@@ -52,16 +52,18 @@ def login(request, database_name, user, parameters, language=None):
     except DatabaseOperationalError:
         logger.error('fail to connect to %s', database_name, exc_info=True)
         abort(404)
-    session = security.login(
-        database_name, user, parameters, language=language)
-    with Transaction().start(database_name, 0):
-        Cache.clean(database_name)
-        Cache.resets(database_name)
+    try:
+        session = security.login(
+            database_name, user, parameters, language=language)
+        code = 403
+    except RateLimitException:
+        session = None
+        code = 429
     msg = 'successful login' if session else 'bad login or password'
     logger.info('%s \'%s\' from %s using %s on database \'%s\'',
         msg, user, request.remote_addr, request.scheme, database_name)
     if not session:
-        abort(403)
+        abort(code)
     return session
 
 
@@ -107,7 +109,8 @@ def db_exist(request, database_name):
 def db_list(*args):
     if not config.getboolean('database', 'list'):
         raise Exception('AccessDenied')
-    with Transaction().start(None, 0, close=True) as transaction:
+    with Transaction().start(
+            None, 0, close=True, _nocache=True) as transaction:
         return transaction.database.list()
 
 
@@ -165,7 +168,6 @@ def _dispatch(request, pool, *args, **kwargs):
         with Transaction().start(pool.database_name, user,
                 readonly=rpc.readonly,
                 context={'session': session}) as transaction:
-            Cache.clean(pool.database_name)
             try:
                 PerfLog().on_enter(user, session,
                     request.rpc_method, args, kwargs)
@@ -207,7 +209,6 @@ def _dispatch(request, pool, *args, **kwargs):
                 raise
             # Need to commit to unlock SQLite database
             transaction.commit()
-            Cache.resets(pool.database_name)
         if request.authorization.type == 'session':
             try:
                 with Transaction().start(pool.database_name, 0) as transaction:
