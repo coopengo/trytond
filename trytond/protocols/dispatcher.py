@@ -27,6 +27,8 @@ from trytond.wsgi import app
 from .wrappers import with_pool
 
 logger = logging.getLogger(__name__)
+# JCA : enable performance log mode to ease slow calls detection
+log_threshold = config.getfloat('web', 'log_time_threshold', default=-1)
 
 ir_configuration = Table('ir_configuration')
 ir_lang = Table('ir_lang')
@@ -157,13 +159,18 @@ def _dispatch(request, pool, *args, **kwargs):
                 pool.database_name, user, session, context=context):
             abort(HTTPStatus.UNAUTHORIZED)
 
-    log_message = '%s.%s(*%s, **%s) from %s@%s%s'
-    username = request.authorization.username
-    if isinstance(username, bytes):
-        username = username.decode('utf-8')
-    log_args = (
-        obj, method, args, kwargs, username, request.remote_addr, request.path)
-    logger.debug(log_message, *log_args)
+    # JCA : If log_threshold is != -1, we only log the times for calls that
+    # exceed the configured value
+    if log_threshold == -1:
+        log_message = '%s.%s(*%s, **%s) from %s@%s/%s'
+        username = request.authorization.username.decode('utf-8')
+        log_args = (obj, method, args, kwargs,
+            username, request.remote_addr, request.path)
+        logger.debug(log_message, *log_args)
+    else:
+        log_message = '%s.%s (%s s)'
+        log_args = (obj, method)
+        log_start = time.time()
 
     retry = config.getint('database', 'retry')
     for count in range(retry, -1, -1):
@@ -194,13 +201,22 @@ def _dispatch(request, pool, *args, **kwargs):
                 if count and not rpc.readonly:
                     transaction.rollback()
                     continue
+                if log_threshold != -1:
+                    log_end = time.time()
+                    log_args += (str(log_end - log_start),)
                 logger.error(log_message, *log_args, exc_info=True)
                 raise
             except (ConcurrencyException, UserError, UserWarning,
                     LoginException):
+                if log_threshold != -1:
+                    log_end = time.time()
+                    log_args += (str(log_end - log_start),)
                 logger.debug(log_message, *log_args, exc_info=True)
                 raise
             except Exception:
+                if log_threshold != -1:
+                    log_end = time.time()
+                    log_args += (str(log_end - log_start),)
                 logger.error(log_message, *log_args, exc_info=True)
                 raise
             # Need to commit to unlock SQLite database
@@ -211,7 +227,15 @@ def _dispatch(request, pool, *args, **kwargs):
         if session:
             context = {'_request': request.context}
             security.reset(pool.database_name, session, context=context)
-        logger.debug('Result: %s', result)
+        if log_threshold == -1:
+            logger.debug('Result: %s', result)
+        else:
+            log_end = time.time()
+            log_args += (str(log_end - log_start),)
+            if log_end - log_start > log_threshold:
+                logger.info(log_message, *log_args)
+            else:
+                logger.debug(log_message, *log_args)
         response = app.make_response(request, result)
         if rpc.readonly and rpc.cache:
             response.headers.extend(rpc.cache.headers())
