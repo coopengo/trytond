@@ -697,6 +697,7 @@ class ActionActWindow(ActionMixin, ModelSQL, ModelView):
             help='Default limit for the list view')
     action = fields.Many2One('ir.action', 'Action', required=True,
             ondelete='CASCADE')
+    title = fields.Char('Window Name', translate=True)
     search_value = fields.Char('Search Criteria',
             help='Default search criteria for the list view')
     pyson_domain = fields.Function(fields.Char('PySON Domain'), 'get_pyson')
@@ -754,6 +755,10 @@ class ActionActWindow(ActionMixin, ModelSQL, ModelView):
         return 0
 
     @staticmethod
+
+    @staticmethod
+    def default_title():
+        return None
     def default_search_value():
         return '[]'
 

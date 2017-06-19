@@ -30,6 +30,8 @@ this repository contains the full copyright notices and license terms. -->
             <field name="search_value" colspan="3" widget="pyson"/>
             <label name="limit"/>
             <field name="limit"/>
+            <label name="title"/>
+            <field name="title"/>
         </page>
         <page name="keywords">
             <field name="keywords" colspan="4"/>
