@@ -341,6 +341,7 @@ class Model(URLMixin, PoolBase, metaclass=ModelMeta):
             - for One2Many: the list of `_default_values`
         """
         values = {}
+        # JCA : preload rec names if in called from _changed_values
         add_rec_names = ServerContext().get('_default_rec_names', False)
         if self._values:
             for fname, value in self._values._items():
@@ -349,7 +350,7 @@ class Model(URLMixin, PoolBase, metaclass=ModelMeta):
                 if field._type in ('many2one', 'one2one', 'reference'):
                     if value:
                         if add_rec_names:
-                            rec_name = value.rec_name
+                            rec_name = getattr(value, 'rec_name', '')
                         if field._type == 'reference':
                             value = str(value)
                         else:
