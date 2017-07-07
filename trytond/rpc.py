@@ -37,7 +37,7 @@ class RPC(object):
             if key == '_timestamp':
                 timestamp = context[key]
             # Remove all private keyword but _datetime for history
-            if key.startswith('_') and key != '_datetime':
+            if key.startswith('_') and not key.startswith('_datetime'):
                 del context[key]
         if self.instantiate is not None:
 
