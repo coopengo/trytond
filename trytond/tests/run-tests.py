@@ -4,7 +4,7 @@
 import logging
 import argparse
 import os
-import time
+import uuid
 import unittest
 import sys
 
@@ -38,7 +38,7 @@ config.update_etc(opt.config)
 if backend.name() == 'sqlite':
     database_name = ':memory:'
 else:
-    database_name = 'test_' + str(int(time.time()))
+    database_name = 'test_' + str(uuid.uuid4().int)
 os.environ.setdefault('DB_NAME', database_name)
 
 from trytond.tests.test_tryton import all_suite, modules_suite

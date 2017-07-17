@@ -13,6 +13,7 @@ from trytond.cache import Cache
 from trytond.pool import Pool
 from trytond.exceptions import UserError
 from trytond.rpc import RPC
+from trytond.server_context import ServerContext
 
 __all__ = ['ModelView']
 
@@ -763,13 +764,9 @@ class ModelView(Model):
                         # JACK: redmine issue #5873
                         # automatically get a one2Many rec_name
                         # to limit number of requests
-                        default_values = target._default_values
-                        for k in default_values.keys():
-                            val = getattr(target, k, None)
-                            if isinstance(val, ModelStorage) and getattr(val,
-                                    'id', 0) > 0:
-                                default_values[k + '.rec_name'] = val.rec_name
-                        value['add'].append((i, default_values))
+                        with ServerContext().set_context(
+                                _default_rec_names=True):
+                            value['add'].append((i, target._default_values))
                 if not value['remove']:
                     del value['remove']
                 if not value:

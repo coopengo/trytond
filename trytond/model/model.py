@@ -12,6 +12,7 @@ from trytond.pyson import PYSONEncoder
 from trytond.transaction import Transaction
 from trytond.url import URLMixin
 from trytond.rpc import RPC
+from trytond.server_context import ServerContext
 
 __all__ = ['Model']
 
@@ -431,11 +432,16 @@ class Model(WarningErrorMixin, URLMixin, PoolBase):
             - for One2Many: the list of `_default_values`
         """
         values = {}
+        # JCA : preload rec names if in called from _changed_values
+        add_rec_names = ServerContext().get('_default_rec_names', False)
         if self._values:
             for fname, value in self._values.iteritems():
                 field = self._fields[fname]
+                rec_name = None
                 if field._type in ('many2one', 'one2one', 'reference'):
                     if value:
+                        if add_rec_names:
+                            rec_name = getattr(value, 'rec_name', '')
                         if field._type == 'reference':
                             value = str(value)
                         else:
@@ -446,4 +452,6 @@ class Model(WarningErrorMixin, URLMixin, PoolBase):
                     else:
                         value = [r.id for r in value]
                 values[fname] = value
+                if rec_name is not None:
+                    values['%s.rec_name' % fname] = rec_name
         return values
