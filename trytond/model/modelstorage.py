@@ -1432,7 +1432,7 @@ class ModelStorage(Model):
                         if field._type == 'one2many':
                             # Don't store old target link
                             if field.field:
-                                # Ignore if Function field
+                                # JCA : Ignore if Function field
                                 setattr(target, field.field, None)
                         to_create.append(target._save_values)
                     else:
