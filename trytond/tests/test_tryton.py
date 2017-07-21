@@ -24,8 +24,10 @@ from trytond.tools import is_instance_method
 from trytond.transaction import Transaction
 from trytond.cache import Cache
 from trytond.config import config, parse_uri
+from trytond.wizard import StateView, StateAction
+from trytond.pyson import PYSONDecoder
 
-__all__ = ['POOL', 'DB_NAME', 'USER', 'CONTEXT',
+__all__ = ['DB_NAME', 'USER', 'CONTEXT',
     'activate_module', 'ModuleTestCase', 'with_transaction',
     'doctest_setup', 'doctest_teardown', 'doctest_checker',
     'suite', 'all_suite', 'modules_suite']
@@ -35,9 +37,7 @@ USER = 1
 CONTEXT = {}
 DB_NAME = os.environ['DB_NAME']
 DB_CACHE = os.environ.get('DB_CACHE')
-DB = backend.get('Database')(DB_NAME)
 Pool.test = True
-POOL = Pool(DB_NAME)
 
 
 def activate_module(name):
@@ -48,7 +48,8 @@ def activate_module(name):
         return
     create_db()
     with Transaction().start(DB_NAME, 1) as transaction:
-        Module = POOL.get('ir.module')
+        pool = Pool()
+        Module = pool.get('ir.module')
 
         modules = Module.search([
                 ('name', '=', name),
@@ -64,7 +65,7 @@ def activate_module(name):
             Module.activate(modules)
             transaction.commit()
 
-            ActivateUpgrade = POOL.get('ir.module.activate_upgrade',
+            ActivateUpgrade = pool.get('ir.module.activate_upgrade',
                 type='wizard')
             instance_id, _, _ = ActivateUpgrade.create()
             transaction.commit()
@@ -85,7 +86,7 @@ def restore_db_cache(name):
             elif backend_name == 'postgresql':
                 result = _pg_restore(cache_file)
     if result:
-        POOL.init()
+        Pool(DB_NAME).init()
     return result
 
 
@@ -113,7 +114,7 @@ def _sqlite_copy(file_, restore=False):
         return False
     import sqlite3 as sqlite
 
-    with Transaction().start(DB_NAME, 0) as transaction, \
+    with Transaction().start(DB_NAME, 0, _nocache=True) as transaction, \
             sqlite.connect(file_) as conn2:
         conn1 = transaction.connection
         # sqlitebck does not work with pysqlite2
@@ -141,7 +142,8 @@ def _pg_options():
 
 
 def _pg_restore(cache_file):
-    with Transaction().start(None, 0, close=True, autocommit=True) \
+    with Transaction().start(
+            None, 0, close=True, autocommit=True, _nocache=True) \
             as transaction:
         transaction.database.create(transaction.connection, DB_NAME)
     cmd = ['pg_restore', '-d', DB_NAME]
@@ -205,7 +207,8 @@ class ModuleTestCase(unittest.TestCase):
     @with_transaction()
     def test_view(self):
         'Test validity of all views of the module'
-        View = POOL.get('ir.ui.view')
+        pool = Pool()
+        View = pool.get('ir.ui.view')
         views = View.search([
                 ('module', '=', self.module),
                 ('model', '!=', ''),
@@ -216,7 +219,7 @@ class ModuleTestCase(unittest.TestCase):
             else:
                 view_id = view.id
             model = view.model
-            Model = POOL.get(model)
+            Model = pool.get(model)
             res = Model.fields_view_get(view_id)
             assert res['model'] == model
             tree = etree.fromstring(res['arch'])
@@ -262,6 +265,8 @@ class ModuleTestCase(unittest.TestCase):
                     fields |= get_eval_fields(field.digits)
                 if hasattr(field, 'add_remove'):
                     fields |= get_eval_fields(field.add_remove)
+                if hasattr(field, 'size'):
+                    fields |= get_eval_fields(field.size)
                 fields.discard(fname)
                 fields.discard('context')
                 fields.discard('_user')
@@ -388,6 +393,82 @@ class ModuleTestCase(unittest.TestCase):
                     'model': model.__name__,
                     })
 
+    @with_transaction()
+    def test_wizards(self):
+        'Test wizards are correctly defined'
+        for wizard_name, wizard in Pool().iterobject(type='wizard'):
+            if not isregisteredby(wizard, self.module, type_='wizard'):
+                continue
+            session_id, start_state, _ = wizard.create()
+            assert start_state in wizard.states, ('Unknown start state '
+                '"%(state)s" on wizard "%(wizard)s"' % {
+                    'state': start_state,
+                    'wizard': wizard_name,
+                    })
+            wizard_instance = wizard(session_id)
+            for state_name, state in wizard_instance.states.iteritems():
+                if isinstance(state, StateView):
+                    # Don't test defaults as they may depend on context
+                    state.get_view(wizard_instance, state_name)
+                    state.get_buttons(wizard_instance, state_name)
+                if isinstance(state, StateAction):
+                    state.get_action()
+
+    @with_transaction()
+    def test_selection_fields(self):
+        'Test selection values'
+        for mname, model in Pool().iterobject():
+            if not isregisteredby(model, self.module):
+                continue
+            for field_name, field in model._fields.iteritems():
+                selection = getattr(field, 'selection', None)
+                if selection is None:
+                    continue
+                selection_values = field.selection
+                if not isinstance(selection_values, (tuple, list)):
+                    sel_func = getattr(model, field.selection)
+                    if not is_instance_method(model, field.selection):
+                        selection_values = sel_func()
+                    else:
+                        record = model()
+                        selection_values = sel_func(record)
+                assert all(len(v) == 2 for v in selection_values), (
+                    'Invalid selection values "%(values)s" on field '
+                    '"%(field)s" of model "%(model)s"' % {
+                        'values': selection_values,
+                        'field': field_name,
+                        'model': model.__name__,
+                        })
+
+    @with_transaction()
+    def test_ir_action_window(self):
+        'Test action windows are correctly defined'
+        pool = Pool()
+        ModelData = pool.get('ir.model.data')
+        ActionWindow = pool.get('ir.action.act_window')
+        for model_data in ModelData.search([
+                    ('module', '=', self.module),
+                    ('model', '=', 'ir.action.act_window'),
+                    ]):
+            action_window = ActionWindow(model_data.db_id)
+            if not action_window.res_model:
+                continue
+            Model = pool.get(action_window.res_model)
+            decoder = PYSONDecoder({
+                    'active_id': None,
+                    'active_ids': [],
+                    'active_model': action_window.res_model,
+                    })
+            domain = decoder.decode(action_window.pyson_domain)
+            order = decoder.decode(action_window.pyson_order)
+            context = decoder.decode(action_window.pyson_context)
+            with Transaction().set_context(context):
+                Model.search(domain, order=order, limit=action_window.limit)
+            for action_domain in action_window.act_window_domains:
+                if not action_domain.domain:
+                    continue
+                Model.search(decoder.decode(action_domain.domain))
+
 
 def db_exist(name=DB_NAME):
     Database = backend.get('Database')
@@ -398,11 +479,12 @@ def db_exist(name=DB_NAME):
 def create_db(name=DB_NAME, lang='en'):
     Database = backend.get('Database')
     if not db_exist(name):
-        with Transaction().start(None, 0, close=True, autocommit=True) \
+        with Transaction().start(
+                None, 0, close=True, autocommit=True, _nocache=True) \
                 as transaction:
             transaction.database.create(transaction.connection, name)
 
-        with Transaction().start(name, 0) as transaction,\
+        with Transaction().start(name, 0, _nocache=True) as transaction,\
                 transaction.connection.cursor() as cursor:
             Database(name).init()
             ir_configuration = Table('ir_configuration')
@@ -431,7 +513,8 @@ def drop_db(name=DB_NAME):
         database = Database(name)
         database.close()
 
-        with Transaction().start(None, 0, close=True, autocommit=True) \
+        with Transaction().start(
+                None, 0, close=True, autocommit=True, _nocache=True) \
                 as transaction:
             database.drop(transaction.connection, name)
             Pool.stop(name)

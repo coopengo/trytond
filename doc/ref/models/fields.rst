@@ -174,9 +174,19 @@ Instance methods:
     use for creation and casting. Or `None` if the field is not stored in the
     database.
 
+    sql_type is using the `_sql_type` attribute to compute its return value.
+    The backend is responsible for the computation.
+
+    For the list of supported types by Tryton see 
+    :ref:`backend types <topics-backend_types>`.
+
 .. method:: Field.sql_column(table)
 
     Return the Column instance based on table.
+
+.. method:: Field.set_rpc(model)
+
+    Adds to `model` the default RPC instances required by the field.
 
 Default value
 =============
@@ -303,6 +313,8 @@ instance.
     the integer part. The second integer defines the total of numbers in the
     decimal part.
     Integers can be replaced by a :class:`~trytond.pyson.PYSON` statement.
+    If digits is None or any values of the tuple is `None`, no validation on
+    the numbers will be done.
 
 Numeric
 -------
@@ -617,6 +629,11 @@ This field accepts as written value a list of tuples like this:
     client will allow to add/remove existing records instead of only
     create/delete.
 
+.. attribute:: One2Many.filter
+
+    A :ref:`domain <topics-domain>` that is not a constraint but only a
+    filter on the records.
+
 .. attribute:: One2Many.order
 
     A list of tuple defining the default order of the records like for
@@ -685,6 +702,10 @@ This field accepts as written value a list of tuples like the :class:`One2Many`.
 
     An alias to the :attr:`domain` for compatibility with the :class:`One2Many`.
 
+.. attribute:: Many2Many.filter
+
+    Same as :attr:`One2Many.filter`
+
 Instance methods:
 
 .. method:: Many2Many.get_target()
@@ -706,6 +727,10 @@ A one-to-one relation field.
 .. attribute:: One2One.datetime_field
 
     Same as :attr:`Many2One.datetime_field`
+
+.. attribute:: One2MOne.filter
+
+    Same as :attr:`One2Many.filter`
 
 Instance methods:
 
@@ -794,29 +819,25 @@ Instance methods:
     :class:`~trytond.model.Model` instance of the field, `name` is the name of
     the field, `clause` is a clause of :ref:`domain <topics-domain>`.
 
-Property
---------
+MultiValue
+----------
 
-.. class:: Property(field)
+.. class:: MultiValue(field)
 
-A property field that is like a :class:`Function` field but with predifined
-:attr:`~Function.getter`, :attr:`~Function.setter` and
-:attr:`~Function.searcher` that use the :class:`~trytond.model.ModelSQL`
-`ir.property` to store values.
+A multivalue field that is like a :class:`Function` field but with predefined
+:attr:`~Function.getter` and :attr:`~Function.setter` that use the
+:class:`~trytond.model.MultiValueMixin` for stored values.
 
-Instance methods:
+.. warning::
+    The :meth:`~trytond.model.MultiValueMixin.get_multivalue` and
+    :meth:`~trytond.model.MultiValueMixin.set_multivalue` should be prefered
+    over the descriptors of the field.
+..
 
-.. method:: Property.get(ids, model, name[, values])
-
-    Same as :meth:`Function.get`.
-
-.. method:: Property.set(ids, model, name, value)
-
-    Same as :meth:`Function.set`.
-
-.. method:: Property.search(model, name, clause)
-
-    Same as :meth:`Function.search`.
+.. warning::
+    The :ref:`default <topics-fields_default_value>` method of the field must
+    accept pattern as keyword argument.
+..
 
 Dict
 ----

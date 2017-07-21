@@ -1,11 +1,13 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
+import hashlib
 
 
 class TableHandlerInterface(object):
     '''
     Define generic interface to handle database table
     '''
+    namedatalen = None
 
     def __init__(self, model, module_name=None, history=False):
         '''
@@ -113,19 +115,14 @@ class TableHandlerInterface(object):
         '''
         raise NotImplementedError
 
-    def add_raw_column(self, column_name, column_type, column_format,
-            default_fun=None, field_size=None, migrate=True,
-            string=''):
+    def add_column(self, column_name, abstract_type, default=None, comment=''):
         '''
         Add a column
 
         :param column_name: the column name
-        :param column_type: the column definition
-        :param column_format: the function to format default value
-        :param default_fun: the function that return the default value
-        :param field_size: the size of the column if there is one
-        :param migrate: boolean to try to migrate the column if exists
-        :param string: the label of the column
+        :param abstract_type: the abstract type that will represent this column
+        :param default: the method that return default value to use
+        :param comment: An optional comment on the column
         '''
         raise NotImplementedError
 
@@ -209,3 +206,16 @@ class TableHandlerInterface(object):
         :param cascade: a boolean to add "CASCADE" to the delete query
         '''
         raise NotImplementedError
+
+    @classmethod
+    def convert_name(cls, name):
+        '''
+        Convert data name in respect of namedatalen.
+
+        :param name: the data name
+        '''
+        if cls.namedatalen and len(name) >= cls.namedatalen:
+            if isinstance(name, unicode):
+                name = name.encode('utf-8')
+            name = hashlib.sha256(name).hexdigest()[:cls.namedatalen - 1]
+        return name

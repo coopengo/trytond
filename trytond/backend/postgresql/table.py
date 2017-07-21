@@ -1,28 +1,19 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
+import re
+import logging
+
 from trytond.transaction import Transaction
 from trytond.backend.table import TableHandlerInterface
-import logging
 
 __all__ = ['TableHandler']
 
 logger = logging.getLogger(__name__)
-
-
-def hash32(val):
-    return hex(hash(val) & 0xffffffff).lstrip('0x').rstrip('L').zfill(8)
-
-
-def truncate_constraint_name(name):
-    if len(name) < 64:
-        return name
-    else:
-        res = name[:55] + hash32(name)
-        logger.info('constraint %s -> %s', name, res)
-        return res
+VARCHAR_SIZE_RE = re.compile('VARCHAR\(([0-9]+)\)')
 
 
 class TableHandler(TableHandlerInterface):
+    namedatalen = 64
 
     def __init__(self, model, module_name=None, history=False):
         super(TableHandler, self).__init__(model,
@@ -247,23 +238,25 @@ class TableHandler(TableHandlerInterface):
                 'ALTER COLUMN "' + column_name + '" SET DEFAULT %s',
                 (value,))
 
-    def add_raw_column(self, column_name, column_type, column_format,
-            default_fun=None, field_size=None, migrate=True, string=''):
+    def add_column(self, column_name, sql_type, default=None, comment=''):
         cursor = Transaction().connection.cursor()
+        database = Transaction().database
 
-        def comment():
-            if self.is_owner:
+        column_type = database.sql_type(sql_type)
+        match = VARCHAR_SIZE_RE.match(sql_type)
+        field_size = int(match.group(1)) if match else None
+
+        def add_comment():
+            if comment and self.is_owner:
                 cursor.execute('COMMENT ON COLUMN "%s"."%s" IS \'%s\'' %
-                    (self.table_name, column_name, string.replace("'", "''")))
+                    (self.table_name, column_name, comment.replace("'", "''")))
         if self.column_exist(column_name):
             if (column_name in ('create_date', 'write_date')
                     and column_type[1].lower() != 'timestamp(6)'):
                 # Migrate dates from timestamp(0) to timestamp
                 cursor.execute('ALTER TABLE "' + self.table_name + '" '
                     'ALTER COLUMN "' + column_name + '" TYPE timestamp')
-            comment()
-            if not migrate:
-                return
+            add_comment()
             base_type = column_type[0].lower()
             if base_type != self._columns[column_name]['typname']:
                 if (self._columns[column_name]['typname'], base_type) in [
@@ -303,19 +296,15 @@ class TableHandler(TableHandlerInterface):
         column_type = column_type[1]
         cursor.execute('ALTER TABLE "%s" ADD COLUMN "%s" %s'
             % (self.table_name, column_name, column_type))
-        comment()
+        add_comment()
 
-        if column_format:
+        if default:
             # check if table is non-empty:
             cursor.execute('SELECT 1 FROM "%s" limit 1' % self.table_name)
             if cursor.rowcount:
                 # Populate column with default values:
-                default = None
-                if default_fun is not None:
-                    default = default_fun()
                 cursor.execute('UPDATE "' + self.table_name + '" '
-                    'SET "' + column_name + '" = %s',
-                    (column_format(default),))
+                    'SET "' + column_name + '" = %s', (default(),))
 
         self._update_definitions(columns=True)
 
@@ -326,18 +315,14 @@ class TableHandler(TableHandlerInterface):
             on_delete = 'SET NULL'
 
         cursor = Transaction().connection.cursor()
-        name = self.table_name + '_' + column_name + '_fkey'
-        name = truncate_constraint_name(name)
-        cursor.execute('SELECT 1 '
-            'FROM information_schema.key_column_usage '
-            'WHERE table_name = %s AND table_schema = %s '
-            'AND constraint_name = %s',
-            (self.table_name, self.table_schema, name))
-        add = False
-        if not cursor.rowcount:
-            add = True
-        elif self._fk_deltypes.get(column_name) != on_delete:
-            self.drop_fk(column_name)
+        name = self.convert_name(self.table_name + '_' + column_name + '_fkey')
+        if name in self._constraints:
+            if self._fk_deltypes.get(column_name) != on_delete:
+                self.drop_fk(column_name)
+                add = True
+            else:
+                add = False
+        else:
             add = True
         if add:
             cursor.execute('ALTER TABLE "' + self.table_name + '" '
@@ -353,16 +338,13 @@ class TableHandler(TableHandlerInterface):
     def index_action(self, column_name, action='add', table=None):
         if isinstance(column_name, basestring):
             column_name = [column_name]
-        index_name = ((table or self.table_name) + "_" + '_'.join(column_name)
-            + "_index")
-        if self._indexes:
-            test_index_name = index_name[:max(map(len, self._indexes))]
-        else:
-            test_index_name = index_name
+        index_name = self.convert_name(
+            ((table or self.table_name) + "_" + '_'.join(column_name) +
+                "_index"))
 
         with Transaction().connection.cursor() as cursor:
             if action == 'add':
-                if test_index_name in self._indexes:
+                if index_name in self._indexes:
                     return
                 cursor.execute('CREATE INDEX "' + index_name + '" '
                     'ON "' + self.table_name + '" ( '
@@ -374,7 +356,7 @@ class TableHandler(TableHandlerInterface):
                                 self.module_name) != self.module_name):
                         return
 
-                if test_index_name in self._indexes:
+                if index_name in self._indexes:
                     cursor.execute('DROP INDEX "%s" ' % (index_name,))
                     self._update_definitions(indexes=True)
             else:
@@ -420,8 +402,7 @@ class TableHandler(TableHandlerInterface):
                 raise Exception('Not null action not supported!')
 
     def add_constraint(self, ident, constraint, exception=False):
-        ident = self.table_name + "_" + ident
-        ident = truncate_constraint_name(ident)
+        ident = self.convert_name(self.table_name + "_" + ident)
         if ident in self._constraints:
             # This constrain already exist
             return
@@ -443,8 +424,7 @@ class TableHandler(TableHandlerInterface):
         self._update_definitions(constraints=True)
 
     def drop_constraint(self, ident, exception=False, table=None):
-        ident = (table or self.table_name) + "_" + ident
-        ident = truncate_constraint_name(ident)
+        ident = self.convert_name((table or self.table_name) + "_" + ident)
         if ident not in self._constraints:
             return
         cursor = Transaction().connection.cursor()

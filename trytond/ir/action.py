@@ -6,13 +6,13 @@ from operator import itemgetter
 from collections import defaultdict
 from functools import partial
 
-from sql import Table
+from sql import Table, Null
 from sql.aggregate import Count
 
 from ..model import ModelView, ModelStorage, ModelSQL, fields
 from ..tools import file_open
 from .. import backend
-from ..pyson import PYSONDecoder, PYSON
+from ..pyson import PYSONDecoder, PYSON, Eval
 from ..transaction import Transaction
 from ..pool import Pool
 from ..cache import Cache
@@ -154,7 +154,8 @@ class ActionKeyword(ModelSQL, ModelView):
             if action_wizards:
                 action_wizard, = action_wizards
                 if action_wizard.model:
-                    if self.model.__name__ != action_wizard.model:
+                    if not str(self.model).startswith(
+                            '%s,' % action_wizard.model):
                         self.raise_user_error('wrong_wizard_model', (
                                 action_wizard.rec_name,))
 
@@ -392,8 +393,14 @@ class ActionReport(ActionMixin, ModelSQL, ModelView):
     _action_name = 'report_name'
     model = fields.Char('Model')
     report_name = fields.Char('Internal Name', required=True)
-    report = fields.Char('Path')
+    report = fields.Char(
+        "Path",
+        states={
+            'invisible': Eval('is_custom', False),
+            },
+        depends=['is_custom'])
     report_content_custom = fields.Binary('Content')
+    is_custom = fields.Function(fields.Boolean("Is Custom"), 'get_is_custom')
     report_content = fields.Function(fields.Binary('Content',
             filename='report_content_name'),
         'get_report_content', setter='set_report_content')
@@ -603,6 +610,9 @@ class ActionReport(ActionMixin, ModelSQL, ModelView):
                 else:
                     cls.raise_user_error('invalid_email', (report.rec_name,))
 
+    def get_is_custom(self, name):
+        return bool(self.report_content_custom)
+
     @classmethod
     def get_report_content(cls, reports, name):
         contents = {}
@@ -687,14 +697,16 @@ class ActionActWindow(ActionMixin, ModelSQL, ModelView):
     order = fields.Char('Order Value')
     res_model = fields.Char('Model')
     context_model = fields.Char('Context Model')
+    context_domain = fields.Char(
+        "Context Domain",
+        help="Part of the domain that will be evaluated on each refresh")
     act_window_views = fields.One2Many('ir.action.act_window.view',
             'act_window', 'Views')
     views = fields.Function(fields.Binary('Views'), 'get_views')
     act_window_domains = fields.One2Many('ir.action.act_window.domain',
         'act_window', 'Domains')
     domains = fields.Function(fields.Binary('Domains'), 'get_domains')
-    limit = fields.Integer('Limit', required=True,
-            help='Default limit for the list view')
+    limit = fields.Integer('Limit', help='Default limit for the list view')
     action = fields.Many2One('ir.action', 'Action', required=True,
             ondelete='CASCADE')
     search_value = fields.Char('Search Criteria',
@@ -741,6 +753,12 @@ class ActionActWindow(ActionMixin, ModelSQL, ModelView):
         # Migration from 4.0: window_name removed
         table.drop_column('window_name')
 
+        # Migration from 4.2: remove required on limit
+        table.not_null_action('limit', 'remove')
+        cursor.execute(*act_window.update(
+                [act_window.limit], [Null],
+                where=act_window.limit == 0))
+
     @staticmethod
     def default_type():
         return 'ir.action.act_window'
@@ -748,10 +766,6 @@ class ActionActWindow(ActionMixin, ModelSQL, ModelView):
     @staticmethod
     def default_context():
         return '{}'
-
-    @staticmethod
-    def default_limit():
-        return 0
 
     @staticmethod
     def default_search_value():

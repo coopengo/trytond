@@ -6,7 +6,7 @@ from sql import Cast, Literal, Null
 from sql.functions import Substring, Position
 from sql.conditionals import Coalesce
 
-from .field import Field, size_validate, instanciate_values
+from .field import Field, size_validate, instanciate_values, domain_validate
 from ...pool import Pool
 from ...tools import grouped_slice
 from ...transaction import Transaction
@@ -20,8 +20,9 @@ class Many2Many(Field):
 
     def __init__(self, relation_name, origin, target, string='', order=None,
             datetime_field=None, size=None, help='', required=False,
-            readonly=False, domain=None, states=None, on_change=None,
-            on_change_with=None, depends=None, context=None, loading='lazy'):
+            readonly=False, domain=None, filter=None, states=None,
+            on_change=None, on_change_with=None, depends=None, context=None,
+            loading='lazy'):
         '''
         :param relation_name: The name of the relation model
             or the name of the target model for ModelView only.
@@ -32,6 +33,7 @@ class Many2Many(Field):
             allowing to specify the order of result
         :param datetime_field: The name of the field that contains the datetime
             value to read the target records.
+        :param filter: A domain to filter target records.
         '''
         if datetime_field:
             if depends:
@@ -49,6 +51,8 @@ class Many2Many(Field):
         self.datetime_field = datetime_field
         self.__size = None
         self.size = size
+        self.__filter = None
+        self.filter = filter
 
     __init__.__doc__ += Field.__init__.__doc__
 
@@ -62,8 +66,21 @@ class Many2Many(Field):
     size = property(_get_size, _set_size)
 
     @property
+    def filter(self):
+        return self.__filter
+
+    @filter.setter
+    def filter(self, value):
+        if value is not None:
+            domain_validate(value)
+        self.__filter = value
+
+    @property
     def add_remove(self):
         return self.domain
+
+    def sql_type(self):
+        return None
 
     def get(self, ids, model, name, values=None):
         '''
@@ -93,6 +110,8 @@ class Many2Many(Field):
             else:
                 clause = [(self.origin, 'in', list(sub_ids))]
             clause += [(self.target, '!=', None)]
+            if self.filter:
+                clause.append((self.target, 'where', self.filter))
             relations.append(Relation.search(clause, order=order))
         relations = list(chain(*relations))
 
@@ -362,11 +381,7 @@ class Many2Many(Field):
                 relation_domain.append(
                     (self.origin, 'like', Model.__name__ + ',%'))
         else:
-            relation_domain = []
-            for clause in value:
-                relation_domain.append(
-                        ('%s.%s' % (self.target, clause[0]),)
-                        + tuple(clause[1:]))
+            relation_domain = [self.target, operator, value]
         rule_domain = Rule.domain_get(Relation.__name__, mode='read')
         if rule_domain:
             relation_domain = [relation_domain, rule_domain]
@@ -377,8 +392,4 @@ class Many2Many(Field):
             relation_domain, tables=relation_tables)
         query_table = convert_from(None, relation_tables)
         query = query_table.select(origin, where=expression)
-        expression = table.id.in_(query)
-
-        if operator == 'not where':
-            expression = ~expression
-        return expression
+        return table.id.in_(query)

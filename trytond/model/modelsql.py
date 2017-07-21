@@ -4,7 +4,8 @@ import datetime
 from itertools import islice, izip, chain, ifilter
 from collections import OrderedDict
 
-from sql import Table, Column, Literal, Desc, Asc, Expression, Null
+from sql import (Table, Column, Literal, Desc, Asc, Expression, Null,
+    NullsFirst, NullsLast)
 from sql.functions import CurrentTimestamp, Extract
 from sql.conditionals import Coalesce
 from sql.operators import Or, And, Operator
@@ -148,34 +149,18 @@ class ModelSQL(ModelStorage):
             sql_type = field.sql_type()
             if not sql_type:
                 continue
-            default_fun = None
+
+            default = None
             if field_name in cls._defaults:
-                default_fun = cls._defaults[field_name]
+                def default():
+                    default_ = cls._clean_defaults({
+                            field_name: cls._defaults[field_name](),
+                            })[field_name]
+                    return field.sql_format(default_)
 
-                def unpack_wrapper(fun):
-                    def unpack_result(*a):
-                        try:
-                            # XXX ugly hack: some default fct try
-                            # to access the non-existing table
-                            result = fun(*a)
-                        except Exception:
-                            return None
-                        clean_results = cls._clean_defaults(
-                            {field_name: result})
-                        return clean_results[field_name]
-                    return unpack_result
-                default_fun = unpack_wrapper(default_fun)
-
-            if hasattr(field, 'size') and isinstance(field.size, int):
-                field_size = field.size
-            else:
-                field_size = None
-
-            table.add_raw_column(field_name, sql_type, field.sql_format,
-                default_fun, field_size, string=field.string)
+            table.add_column(field_name, field._sql_type, default=default)
             if cls._history:
-                history_table.add_raw_column(field_name, sql_type, None,
-                    string=field.string)
+                history_table.add_column(field_name, field._sql_type)
 
             if isinstance(field, (fields.Integer, fields.Float)):
                 # migration from tryton 2.2
@@ -186,13 +171,22 @@ class ModelSQL(ModelStorage):
 
             if isinstance(field, fields.Many2One):
                 if field.model_name in ('res.user', 'res.group'):
+                    # XXX need to merge ir and res
                     ref = field.model_name.replace('.', '_')
                 else:
-                    ref = pool.get(field.model_name)._table
+                    ref_model = pool.get(field.model_name)
+                    if (issubclass(ref_model, ModelSQL)
+                            and not ref_model.table_query()):
+                        ref = ref_model._table
+                        # Create foreign key table if missing
+                        if not TableHandler.table_exist(ref):
+                            TableHandler(ref_model)
+                    else:
+                        ref = None
                 if field_name in ['create_uid', 'write_uid']:
                     # migration from 3.6
                     table.drop_fk(field_name)
-                else:
+                elif ref:
                     table.add_fk(field_name, ref, field.ondelete)
 
             table.index_action(
@@ -246,16 +240,11 @@ class ModelSQL(ModelStorage):
     def _update_history_table(cls):
         TableHandler = backend.get('TableHandler')
         if cls._history:
-            table = TableHandler(cls)
             history_table = TableHandler(cls, history=True)
-            for column_name in table._columns:
-                string = ''
-                if column_name in cls._fields:
-                    string = cls._fields[column_name].string
-                history_table.add_raw_column(column_name,
-                    (table._columns[column_name]['typname'],
-                        table._columns[column_name]['typname']),
-                    None, string=string)
+            for field_name, field in cls._fields.iteritems():
+                if not field.sql_type():
+                    continue
+                history_table.add_column(field_name, field._sql_type)
 
     @classmethod
     def _get_error_messages(cls):
@@ -275,6 +264,7 @@ class ModelSQL(ModelStorage):
         import traceback
         traceback.print_stack()
         pool = Pool()
+        TableHandler = backend.get('TableHandler')
         if field_names is None:
             field_names = cls._fields.keys()
         if transaction is None:
@@ -307,10 +297,10 @@ class ModelSQL(ModelStorage):
                     cls.raise_user_error('foreign_model_missing',
                         error_args=error_args)
         for name, _, error in cls._sql_constraints:
-            if name in str(exception):
+            if TableHandler.convert_name(name) in str(exception):
                 cls.raise_user_error(error)
         for name, error in cls._sql_error_messages.iteritems():
-            if name in str(exception):
+            if TableHandler.convert_name(name) in str(exception):
                 cls.raise_user_error(error)
 
     @classmethod
@@ -725,22 +715,37 @@ class ModelSQL(ModelStorage):
         else:
             result = [{'id': x} for x in ids]
 
+        cachable_fields = []
         for column in columns:
             # Split the output name to remove SQLite type detection
-            field = column.output_name.split()[0]
-            if field == '_timestamp':
+            fname = column.output_name.split()[0]
+            if fname == '_timestamp':
                 continue
-            if (getattr(cls._fields[field], 'translate', False)
-                    and not hasattr(field, 'get')):
-                translations = Translation.get_ids(cls.__name__ + ',' + field,
-                    'model', Transaction().language, ids)
-                for row in result:
-                    row[field] = translations.get(row['id']) or row[field]
+            field = cls._fields[fname]
+            if not hasattr(field, 'get'):
+                if getattr(field, 'translate', False):
+                    translations = Translation.get_ids(
+                        cls.__name__ + ',' + fname, 'model',
+                        Transaction().language, ids)
+                    for row in result:
+                        row[fname] = translations.get(row['id']) or row[fname]
+                if fname != 'id':
+                    cachable_fields.append(fname)
 
         # all fields for which there is a get attribute
         getter_fields = [f for f in
             fields_names + fields_related.keys() + datetime_fields
             if f in cls._fields and hasattr(cls._fields[f], 'get')]
+
+        if getter_fields and cachable_fields:
+            cache = transaction.get_cache().setdefault(
+                cls.__name__, LRUDict(cache_size()))
+            for row in result:
+                if row['id'] not in cache:
+                    cache[row['id']] = {}
+                for fname in cachable_fields:
+                    cache[row['id']][fname] = row[fname]
+
         func_fields = {}
         for fname in getter_fields:
             field = cls._fields[fname]
@@ -1131,14 +1136,25 @@ class ModelSQL(ModelStorage):
             'DESC': Desc,
             'ASC': Asc,
             }
+        null_ordering_types = {
+            'NULLS FIRST': NullsFirst,
+            'NULLS LAST': NullsLast,
+            None: lambda _: _
+            }
         if order is None or order is False:
             order = cls._order
         for oexpr, otype in order:
             fname, _, extra_expr = oexpr.partition('.')
             field = cls._fields[fname]
-            Order = order_types[otype.upper()]
+            otype = otype.upper()
+            try:
+                otype, null_ordering = otype.split(' ', 1)
+            except ValueError:
+                null_ordering = None
+            Order = order_types[otype]
+            NullOrdering = null_ordering_types[null_ordering]
             forder = field.convert_order(oexpr, tables, cls)
-            order_by.extend((Order(o) for o in forder))
+            order_by.extend((NullOrdering(Order(o)) for o in forder))
 
         # construct a clause for the rules :
         domain = Rule.domain_get(cls.__name__, mode='read')

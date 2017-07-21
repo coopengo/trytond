@@ -124,7 +124,6 @@ class Model(WarningErrorMixin, URLMixin, PoolBase):
         If with_rec_name is True, rec_name will be added.
         '''
         pool = Pool()
-        Property = pool.get('ir.property')
         value = {}
 
         default_rec_name = Transaction().context.get('default_rec_name')
@@ -141,8 +140,6 @@ class Model(WarningErrorMixin, URLMixin, PoolBase):
             if (field._type == 'boolean'
                     and field_name not in value):
                 value[field_name] = False
-            if isinstance(field, fields.Property):
-                value[field_name] = Property.get(field_name, cls.__name__)
             if (with_rec_name
                     and field._type in ('many2one',)
                     and value.get(field_name)):
@@ -242,11 +239,9 @@ class Model(WarningErrorMixin, URLMixin, PoolBase):
                     and not getattr(cls, 'order_%s' % field, None)):
                 res[field]['sortable'] = False
             if ((isinstance(cls._fields[field], fields.Function)
-                    and not cls._fields[field].searcher)
-                    or (cls._fields[field]._type in ('binary', 'sha'))
-                    or (isinstance(cls._fields[field], fields.Property)
-                        and isinstance(cls._fields[field]._field,
-                            fields.Many2One))):
+                        and not (cls._fields[field].searcher
+                            or getattr(cls, 'domain_%s' % field, None)))
+                    or (cls._fields[field]._type in ('binary', 'sha'))):
                 res[field]['searchable'] = False
             else:
                 res[field]['searchable'] = True
@@ -330,6 +325,9 @@ class Model(WarningErrorMixin, URLMixin, PoolBase):
                     True)
                 res[field]['delete'] = accesses.get(field, {}).get('delete',
                     True)
+            filter_ = getattr(cls._fields[field], 'filter', None)
+            if filter_:
+                res[field]['domain'] = ['AND', res[field]['domain'], filter_]
 
             # convert attributes into pyson
             for attr in ('states', 'domain', 'context', 'digits', 'size',
@@ -362,14 +360,21 @@ class Model(WarningErrorMixin, URLMixin, PoolBase):
                     setattr(self, name, value)
                 else:
                     parent_values[name] = value
-            for name, value in parent_values.iteritems():
+
+            def set_parent_value(record, name, value):
                 parent_name, field = name.split('.', 1)
                 parent_name = parent_name[8:]  # Strip '_parent_'
-                parent = getattr(self, parent_name, None)
+                parent = getattr(record, parent_name, None)
                 if parent is not None:
-                    setattr(parent, field, value)
+                    if not field.startswith('_parent_'):
+                        setattr(parent, field, value)
+                    else:
+                        set_parent_value(parent, field, value)
                 else:
-                    setattr(self, parent_name, {field: value})
+                    setattr(record, parent_name, {field: value})
+
+            for name, value in parent_values.iteritems():
+                set_parent_value(self, name, value)
             self._init_values = self._values.copy()
         else:
             self._values = None

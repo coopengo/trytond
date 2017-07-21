@@ -61,7 +61,7 @@ class BaseCache(object):
 
     @staticmethod
     def clean(dbname):
-        with Transaction().new_transaction() as transaction,\
+        with Transaction().new_transaction(_nocache=True) as transaction,\
                 transaction.connection.cursor() as cursor:
             table = Table('ir_cache')
             cursor.execute(*table.select(table.timestamp, table.name))
@@ -78,7 +78,7 @@ class BaseCache(object):
     @staticmethod
     def resets(dbname):
         table = Table('ir_cache')
-        with Transaction().new_transaction() as transaction,\
+        with Transaction().new_transaction(_nocache=True) as transaction,\
                 transaction.connection.cursor() as cursor:
             klasses = [i.__class__ for i in BaseCache._cache_instance]
             klasses = list(set(klasses))

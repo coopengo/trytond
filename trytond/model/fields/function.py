@@ -3,6 +3,7 @@
 
 import inspect
 import copy
+
 from trytond.model.fields.field import Field
 from trytond.tools import is_instance_method
 from trytond.transaction import Transaction
@@ -58,14 +59,24 @@ class Function(Field):
                 return
         setattr(self._field, name, value)
 
+    def set_rpc(self, model):
+        self._field.set_rpc(model)
+
+    def sql_format(self, value):
+        return self._field.sql_format(value)
+
     def sql_type(self):
         return None
 
     def convert_domain(self, domain, tables, Model):
         name, operator, value = domain[:3]
-        if not self.searcher:
-            Model.raise_user_error('search_function_missing', name)
-        return getattr(Model, self.searcher)(name, domain)
+        assert name.startswith(self.name)
+        method = getattr(Model, 'domain_%s' % name, None)
+        if method:
+            return method(domain, tables)
+        if self.searcher:
+            return getattr(Model, self.searcher)(name, domain)
+        Model.raise_user_error('search_function_missing', name)
 
     def get(self, ids, Model, name, values=None):
         '''
@@ -109,3 +120,18 @@ class Function(Field):
 
     def __set__(self, inst, value):
         self._field.__set__(inst, value)
+
+
+class MultiValue(Function):
+
+    def __init__(self, field, loading='lazy'):
+        super(MultiValue, self).__init__(
+            field, '_multivalue_getter', setter='_multivalue_setter',
+            loading=loading)
+
+    def __copy__(self):
+        return MultiValue(copy.copy(self._field), loading=self.loading)
+
+    def __deepcopy__(self, memo):
+        return MultiValue(
+            copy.deepcopy(self._field, memo), loading=self.loading)

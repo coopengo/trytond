@@ -1,6 +1,6 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
-from trytond.backend.database import DatabaseInterface
+from trytond.backend.database import DatabaseInterface, SQLType
 from trytond.config import config, parse_uri
 import MySQLdb
 import MySQLdb.cursors
@@ -75,7 +75,19 @@ class Database(DatabaseInterface):
 
     _list_cache = None
     _list_cache_timestamp = None
-    flavor = Flavor(max_limit=18446744073709551610, function_mapping=MAPPING)
+    flavor = Flavor(
+        max_limit=18446744073709551610, function_mapping=MAPPING,
+        null_ordering=False)
+
+    TYPES_MAPPING = {
+        'BLOB': SQLType('LONGBLOB', 'LONGBLOB'),
+        'DATETIME': SQLType('TIMESTAMP', 'TIMESTAMP NULL'),
+        'TIMESTAMP': SQLType('TIMESTAMP', 'TIMESTAMP NULL'),
+        'FLOAT': SQLType('DOUBLE', 'DOUBLE(255, 15)'),
+        'INTEGER': SQLType('SIGNED INTEGER', 'BIGINT'),
+        'BIGINTEGER': SQLType('SIGNED INTEGER', 'BIGINT'),
+        'NUMERIC': SQLType('DECIMAL', 'DECIMAL(65, 30)'),
+        }
 
     def connect(self):
         return self
@@ -92,7 +104,6 @@ class Database(DatabaseInterface):
             'conv': conv,
         }
         uri = parse_uri(config.get('database', 'uri'))
-        assert uri.scheme == 'mysql'
         if uri.hostname:
             args['host'] = uri.hostname
         if uri.port:
@@ -223,3 +234,15 @@ class Database(DatabaseInterface):
         cursor = connection.cursor()
         cursor.execute('ALTER TABLE `%s` AUTO_INCREMENT = %%s' % table,
                 (value,))
+
+    def sql_type(self, type_):
+        if type_ in self.TYPES_MAPPING:
+            return self.TYPES_MAPPING[type_]
+        if type_.startswith('VARCHAR'):
+            return SQLType('CHAR', 'VARCHAR(255)')
+        return SQLType(type_, type_)
+
+    def sql_format(self, type_, value):
+        if type_ == 'INTERVAL':
+            return value.total_seconds()
+        return value

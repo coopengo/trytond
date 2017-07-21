@@ -250,7 +250,10 @@ class ShowView(Wizard):
         def get_view(self, wizard, state_name):
             pool = Pool()
             View = pool.get('ir.ui.view')
-            view = View(Transaction().context.get('active_id'))
+            view_id = Transaction().context.get('active_id')
+            if not view_id:
+                return {}
+            view = View(view_id)
             Model = pool.get(view.model)
             return Model.fields_view_get(view_id=view.id)
 
@@ -364,7 +367,7 @@ class ViewTreeState(ModelSQL, ModelView):
     @classmethod
     def set(cls, model, domain, child_name, nodes, selected_nodes):
         # Normalize the json domain
-        domain = json.dumps(json.loads(domain))
+        domain = json.dumps(json.loads(domain), separators=(',', ':'))
         current_user = Transaction().user
         records = cls.search([
                 ('user', '=', current_user),
@@ -385,7 +388,7 @@ class ViewTreeState(ModelSQL, ModelView):
     @classmethod
     def get(cls, model, domain, child_name):
         # Normalize the json domain
-        domain = json.dumps(json.loads(domain))
+        domain = json.dumps(json.loads(domain), separators=(',', ':'))
         current_user = Transaction().user
         try:
             expanded_info, = cls.search([

@@ -159,5 +159,6 @@ class JSONProtocol:
         # add RPC Method in HTTP headers (better logging)
         headers = Headers()
         headers.add('RPC-Method', parsed_data['method'])
-        return Response(json.dumps(response, cls=JSONEncoder),
-            content_type='application/json', headers=headers)
+        return Response(json.dumps(
+                response, cls=JSONEncoder, separators=(',', ':')),
+            content_type='application/json')

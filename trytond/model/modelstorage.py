@@ -287,8 +287,8 @@ class ModelStorage(Model):
                 if field_name in default:
                     data[field_name] = default[field_name]
                 elif (isinstance(cls._fields[field_name], fields.Function)
-                        and not isinstance(cls._fields[field_name],
-                            fields.Property)):
+                        and not isinstance(
+                            cls._fields[field_name], fields.MultiValue)):
                     del data[field_name]
                 elif ftype in ('many2one', 'one2one'):
                     try:
@@ -316,7 +316,7 @@ class ModelStorage(Model):
                 mptt.add(field.right)
         fields_names = [n for n, f in cls._fields.iteritems()
             if (not isinstance(f, fields.Function)
-                or isinstance(f, fields.Property))
+                or isinstance(f, fields.MultiValue))
             and n not in mptt]
         ids = map(int, records)
         datas = cls.read(ids, fields_names=fields_names)
@@ -1055,7 +1055,9 @@ class ModelStorage(Model):
                         error_args['value'] = repr(value)
                         cls.raise_user_error('digits_validation_record',
                             error_args=error_args)
-                    if value is None:
+                    if (value is None
+                            or not digits
+                            or any(d is None for d in digits)):
                         return
                     if isinstance(value, Decimal):
                         if (value.quantize(Decimal(str(10.0 ** -digits[1])))
@@ -1065,7 +1067,7 @@ class ModelStorage(Model):
                         if not (round(value, digits[1]) == float(value)):
                             raise_user_error(value)
                 # validate digits
-                if hasattr(field, 'digits') and field.digits:
+                if getattr(field, 'digits', None):
                     if is_pyson(field.digits):
                         pyson_digits = PYSONEncoder().encode(field.digits)
                         for record in records:
@@ -1320,9 +1322,12 @@ class ModelStorage(Model):
                     model_name, record_id = value.split(',')
                     Model = Pool().get(model_name)
                     try:
-                        value = int(record_id)
+                        record_id = int(record_id)
                     except ValueError:
                         return value
+                    if record_id < 0:
+                        return value
+                    value = record_id
                 else:
                     Model = field.get_target()
             except KeyError:
