@@ -1,6 +1,8 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
 import datetime
+import traceback
+import logging
 from itertools import islice, izip, chain, ifilter
 from collections import OrderedDict
 
@@ -261,8 +263,8 @@ class ModelSQL(ModelStorage):
     @classmethod
     def __raise_integrity_error(
             cls, exception, values, field_names=None, transaction=None):
-        import traceback
-        traceback.print_stack()
+        for line in traceback.print_stack().split('\n'):
+            logging.getLogger().debug(line)
         pool = Pool()
         TableHandler = backend.get('TableHandler')
         if field_names is None:
