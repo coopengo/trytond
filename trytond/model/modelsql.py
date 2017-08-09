@@ -274,8 +274,11 @@ class ModelSQL(ModelStorage):
     @classmethod
     def __raise_integrity_error(
             cls, exception, values, field_names=None, transaction=None):
-        for line in traceback.print_stack().split('\n'):
-            logging.getLogger().debug(line)
+        try:
+            for line in traceback.format_stack():
+                logging.getLogger().debug(line)
+        except:
+            pass
         pool = Pool()
         if field_names is None:
             field_names = cls._fields.keys()
