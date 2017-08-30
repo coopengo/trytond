@@ -265,7 +265,9 @@ class ModelSQL(ModelStorage):
             cls, exception, values, field_names=None, transaction=None):
         try:
             for line in traceback.format_stack():
-                logging.getLogger().debug(line)
+                for elem in line.split('\n'):
+                    if elem:
+                        logging.getLogger().debug(elem)
         except:
             pass
         pool = Pool()
