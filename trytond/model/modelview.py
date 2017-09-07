@@ -720,11 +720,11 @@ class ModelView(Model):
                 continue
             if field._type in ('many2one', 'one2one', 'reference'):
                 if value:
-                    if isinstance(value, ModelStorage):
-                        changed['%s.rec_name' % fname] = value.rec_name
-                    if value.id is None:
+                    if value.id is None or value.id < 0:
                         # Don't consider temporary instance as a change
                         continue
+                    if isinstance(value, ModelStorage):
+                        changed['%s.rec_name' % fname] = value.rec_name
                     if field._type == 'reference':
                         value = str(value)
                     else:
