@@ -6,6 +6,7 @@ from functools import wraps
 from lxml import etree
 
 from trytond.cache import Cache
+from trytond.config import config
 from trytond.exceptions import UserError
 from trytond.i18n import gettext
 from trytond.pool import Pool
@@ -274,7 +275,9 @@ class ModelView(Model):
             tree, result['type'], view_id=view_id,
             field_children=result['field_childs'], level=level)
 
-        cls._fields_view_get_cache.set(key, result)
+        if not config.getboolean('cache', 'disable_fields_view_get_cache',
+                default=False):
+            cls._fields_view_get_cache.set(key, result)
         return result
 
     @classmethod
