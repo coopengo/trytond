@@ -10,6 +10,7 @@ from trytond.tools import ClassProperty, is_instance_method
 from trytond.pyson import PYSONDecoder, PYSONEncoder
 from trytond.transaction import Transaction
 from trytond.cache import Cache
+from trytond.config import config
 from trytond.pool import Pool
 from trytond.exceptions import UserError
 from trytond.rpc import RPC
@@ -350,7 +351,9 @@ class ModelView(Model):
         else:
             result['children_definitions'] = {}
 
-        cls._fields_view_get_cache.set(key, result)
+        if not config.getboolean('cache', 'disable_fields_view_get_cache',
+                default=False):
+            cls._fields_view_get_cache.set(key, result)
         return result
 
     @classmethod
