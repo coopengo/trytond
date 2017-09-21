@@ -441,6 +441,7 @@ def drop_db(name=DB_NAME):
                 attempt += 1
                 try:
                     database.drop(transaction.connection, name)
+                    break
                 except:
                     if attempt > max_attempts:
                         raise
