@@ -7,6 +7,7 @@ import unittest
 import doctest
 import re
 import subprocess
+import time
 from itertools import chain
 import operator
 from functools import wraps
@@ -433,7 +434,18 @@ def drop_db(name=DB_NAME):
 
         with Transaction().start(None, 0, close=True, autocommit=True) \
                 as transaction:
-            database.drop(transaction.connection, name)
+            # PJA: fix concurrent access when dropping database
+            attempt = 0
+            max_attempts = 10
+            while True:
+                attempt += 1
+                try:
+                    database.drop(transaction.connection, name)
+                except:
+                    if attempt > max_attempts:
+                        raise
+                    else:
+                        time.sleep(3)
             Pool.stop(name)
             Cache.drop(name)
 
