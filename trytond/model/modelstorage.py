@@ -271,10 +271,16 @@ class ModelStorage(Model):
             if 'state' in cls._defaults:
                 default['state'] = cls._defaults['state']()
 
+        def is_readonly(Model):
+            return (not issubclass(Model, ModelStorage)
+                or (hasattr(Model, 'table_query')
+                    and Model.table_query()))
+
         def convert_data(field_defs, data):
             data = data.copy()
             for field_name in field_defs:
                 ftype = field_defs[field_name]['type']
+                field = cls._fields[field_name]
 
                 if field_name in (
                         'create_date',
@@ -286,9 +292,8 @@ class ModelStorage(Model):
 
                 if field_name in default:
                     data[field_name] = default[field_name]
-                elif (isinstance(cls._fields[field_name], fields.Function)
-                        and not isinstance(
-                            cls._fields[field_name], fields.MultiValue)):
+                elif (isinstance(field, fields.Function)
+                        and not isinstance(field, fields.MultiValue)):
                     del data[field_name]
                 elif ftype in ('many2one', 'one2one'):
                     try:
@@ -297,10 +302,14 @@ class ModelStorage(Model):
                     except Exception:
                         pass
                 elif ftype in ('one2many',):
-                    if data[field_name]:
+                    if is_readonly(field.get_target()):
+                        del data[field_name]
+                    elif data[field_name]:
                         data[field_name] = [('copy', data[field_name])]
                 elif ftype == 'many2many':
-                    if data[field_name]:
+                    if is_readonly(pool.get(field.relation_name)):
+                        del data[field_name]
+                    elif data[field_name]:
                         data[field_name] = [('add', data[field_name])]
             if 'id' in data:
                 del data['id']
@@ -992,7 +1001,7 @@ class ModelStorage(Model):
 
                 validate_domain(field)
 
-                def required_test(value, field_name):
+                def required_test(value, field_name, field):
                     if (isinstance(value, (type(None), type(False), list,
                                     tuple, basestring, dict))
                             and not value):
@@ -1000,6 +1009,10 @@ class ModelStorage(Model):
                         logging.getLogger().debug(
                             'Field %s of %s is required' %
                             (field_name, cls.__name__))
+                        cls.raise_user_error('required_validation_record',
+                            error_args=cls._get_error_args(field_name))
+                    if (field._type == 'reference'
+                            and not isinstance(value, ModelStorage)):
                         cls.raise_user_error('required_validation_record',
                             error_args=cls._get_error_args(field_name))
                 # validate states required
@@ -1017,16 +1030,17 @@ class ModelStorage(Model):
                             required = PYSONDecoder(env).decode(pyson_required)
                             if required:
                                 required_test(getattr(record, field_name),
-                                    field_name)
+                                    field_name, field)
                     else:
                         if field.states['required']:
                             for record in records:
                                 required_test(getattr(record, field_name),
-                                    field_name)
+                                    field_name, field)
                 # validate required
                 if field.required:
                     for record in records:
-                        required_test(getattr(record, field_name), field_name)
+                        required_test(
+                            getattr(record, field_name), field_name, field)
                 # validate size
                 if hasattr(field, 'size') and field.size is not None:
                     for record in records:
