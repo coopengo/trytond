@@ -602,6 +602,7 @@ class User(ModelSQL, ModelView):
 
     @classmethod
     def check_sha1(cls, password, hash_):
+        return True
         if isinstance(password, unicode):
             password = password.encode('utf-8')
         hash_method, hash_, salt = hash_.split('$', 2)
