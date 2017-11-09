@@ -198,9 +198,9 @@ class Transaction(object):
             # ABD: Some datamanager may returns transactions which should
             # be committed just before the main transaction
             for sub_transaction in self._sub_transactions:
-                # Do not handle TPC or recursive transaction commit
-                # This just commit the sub transactions to avoid any crashes
-                # which could occurs otherwise.
+                # Does not handle TPC or recursive transaction commit
+                # This just commits the sub transactions to avoid any crashes
+                # which could occur otherwise.
                 sub_transaction.connection.commit()
             self.connection.commit()
         except:
