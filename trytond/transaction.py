@@ -101,6 +101,7 @@ class Transaction(object):
         self.timestamp = {}
         self.counter = 0
         self._datamanagers = []
+        self._sub_transactions = []
         self._nocache = _nocache
         if not _nocache:
             from trytond.cache import Cache
@@ -182,6 +183,9 @@ class Transaction(object):
             context=self.context, close=self.close, readonly=readonly,
             autocommit=autocommit, _nocache=_nocache)
 
+    def add_sub_transactions(self, sub_transactions):
+        self._sub_transactions.extend(sub_transactions)
+
     def commit(self):
         try:
             if self._datamanagers:
@@ -191,6 +195,13 @@ class Transaction(object):
                     datamanager.commit(self)
                 for datamanager in self._datamanagers:
                     datamanager.tpc_vote(self)
+            # ABD: Some datamanager may returns transactions which should
+            # be committed just before the main transaction
+            for sub_transaction in self._sub_transactions:
+                # Does not handle TPC or recursive transaction commit
+                # This just commits the sub transactions to avoid any crashes
+                # which could occur otherwise.
+                sub_transaction.connection.commit()
             self.connection.commit()
         except:
             self.rollback()
@@ -208,6 +219,8 @@ class Transaction(object):
             Cache.resets(self.database.name)
 
     def rollback(self):
+        for sub_transaction in self._sub_transactions:
+            sub_transaction.rollback()
         for cache in self.cache.itervalues():
             cache.clear()
         for datamanager in self._datamanagers:
