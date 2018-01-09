@@ -632,11 +632,7 @@ class Translation(ModelSQL, ModelView):
                 res.update(cls.get_sources(list(sub_args)))
             return res
 
-<<<<<<< HEAD
-        update_cache = False
-=======
         to_cache = []
->>>>>>> 4.6
         for name, ttype, lang, source in args:
             name = unicode(name)
             ttype = unicode(ttype)
@@ -647,11 +643,7 @@ class Translation(ModelSQL, ModelView):
             if trans != -1:
                 res[(name, ttype, lang, source)] = trans
             else:
-<<<<<<< HEAD
-                update_cache = True
-=======
                 to_cache.append((name, ttype, lang, source))
->>>>>>> 4.6
                 parent_lang = get_parent(lang)
                 if parent_lang:
                     parent_args.append((name, ttype, parent_lang, source))
@@ -688,14 +680,8 @@ class Translation(ModelSQL, ModelView):
                     if (name, ttype, lang, source) not in args:
                         source = None
                     res[(name, ttype, lang, source)] = value
-<<<<<<< HEAD
-        if update_cache:
-            for key, value in res.iteritems():
-                cls._translation_cache.set(key, value)
-=======
         for key in to_cache:
             cls._translation_cache.set(key, res[key])
->>>>>>> 4.6
         return res
 
     @classmethod
