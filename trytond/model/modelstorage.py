@@ -53,7 +53,7 @@ class ModelStorage(Model):
     create_date = fields.Timestamp('Create Date', readonly=True)
     write_uid = fields.Many2One('res.user', 'Write User', readonly=True)
     write_date = fields.Timestamp('Write Date', readonly=True)
-    rec_name = fields.Function(fields.Char('Name'), 'get_rec_name',
+    rec_name = fields.Function(fields.Char('Record Name'), 'get_rec_name',
             searcher='search_rec_name')
 
     @classmethod
@@ -67,12 +67,12 @@ class ModelStorage(Model):
                     'write': RPC(readonly=False,
                         instantiate=slice(0, None, 2)),
                     'delete': RPC(readonly=False, instantiate=0),
-                    'copy': RPC(readonly=False, instantiate=0,
+                    'copy': RPC(readonly=False, instantiate=0, unique=False,
                         result=lambda r: map(int, r)),
                     'search': RPC(result=lambda r: map(int, r)),
                     'search_count': RPC(),
                     'search_read': RPC(),
-                    'export_data': RPC(instantiate=0),
+                    'export_data': RPC(instantiate=0, unique=False),
                     'import_data': RPC(readonly=False),
                     })
         cls._constraints = []
@@ -292,7 +292,11 @@ class ModelStorage(Model):
 
                 if field_name in default:
                     data[field_name] = default[field_name]
+<<<<<<< HEAD
                 elif (isinstance(field, fields.Function)
+=======
+                if (isinstance(field, fields.Function)
+>>>>>>> 4.6
                         and not isinstance(field, fields.MultiValue)):
                     del data[field_name]
                 elif ftype in ('many2one', 'one2one'):
@@ -1015,6 +1019,10 @@ class ModelStorage(Model):
                             and not isinstance(value, ModelStorage)):
                         cls.raise_user_error('required_validation_record',
                             error_args=cls._get_error_args(field_name))
+                    if (field._type == 'reference'
+                            and not isinstance(value, ModelStorage)):
+                        cls.raise_user_error('required_validation_record',
+                            error_args=cls._get_error_args(field_name))
                 # validate states required
                 if field.states and 'required' in field.states:
                     if is_pyson(field.states['required']):
@@ -1483,9 +1491,10 @@ class ModelStorage(Model):
             save_values = {}
             to_create = []
             to_write = []
-            transaction = records[0]._transaction
-            user = records[0]._user
-            context = records[0]._context
+            first = next(iter(records))
+            transaction = first._transaction
+            user = first._user
+            context = first._context
             for record in records:
                 if (record._transaction != transaction
                         or user != record._user

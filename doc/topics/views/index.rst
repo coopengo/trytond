@@ -470,7 +470,7 @@ Example
 
 ::
 
-  <form string="Party" col="6">
+  <form col="6">
       <label name="name"/>
       <field name="name" xexpand="1"/>
       <label name="code"/>
@@ -599,7 +599,7 @@ Example
 
 ::
 
-  <tree string="Taxes" sequence="sequence">
+  <tree sequence="sequence">
       <field name="name"/>
       <field name="percentage">
           <suffix name="percentage" string="%"/>
@@ -832,7 +832,7 @@ Example
 
 ::
 
-  <calendar string="Productions" dtstart="planned_date">
+  <calendar dtstart="planned_date">
       <field name="code"/>
       <field name="product"/>
       <field name="reference"/>

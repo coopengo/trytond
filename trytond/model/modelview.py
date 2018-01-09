@@ -433,6 +433,11 @@ class ModelView(Model):
                     if colspan is not None:
                         element.attrib['colspan'] = colspan
 
+        # Remove empty pages
+        if type == 'form':
+            for page in tree.xpath('//page[not(descendant::*)]'):
+                page.getparent().remove(page)
+
         if type == 'tree':
             ViewTreeWidth = pool.get('ir.ui.view_tree_width')
             viewtreewidth_ids = ViewTreeWidth.search([
@@ -620,6 +625,8 @@ class ModelView(Model):
             transaction = Transaction()
             check_access = transaction.context.get('_check_access')
 
+            assert len(records) == len(set(records)), "Duplicate records"
+
             if (transaction.user != 0) and check_access:
                 ModelAccess.check(cls.__name__, 'read')
                 groups = set(User.get_groups())
@@ -745,12 +752,27 @@ class ModelView(Model):
                             target_changed['id'] = target.id
                             value['update'].append(target_changed)
                     else:
+<<<<<<< HEAD
                         # JACK: redmine issue #5873
                         # automatically get a one2Many rec_name
                         # to limit number of requests
                         with ServerContext().set_context(
                                 _default_rec_names=True):
                             value['add'].append((i, target._default_values))
+=======
+                        if isinstance(target, ModelView):
+                            # Ensure initial values are returned because target
+                            # was instantiated on server side.
+                            target_init_values = target._init_values
+                            target._init_values = None
+                            try:
+                                added_values = target._changed_values
+                            finally:
+                                target._init_values = target_init_values
+                        else:
+                            added_values = target._default_values
+                        value['add'].append((i, added_values))
+>>>>>>> 4.6
                 if not value['remove']:
                     del value['remove']
                 if not value:

@@ -2,9 +2,9 @@
 # this repository contains the full copyright notices and license terms.
 import time
 import logging
-import re
 import os
 import urllib
+import json
 from decimal import Decimal
 from threading import RLock
 
@@ -26,19 +26,22 @@ except ImportError:
     PYDATE, PYDATETIME, PYTIME, PYINTERVAL = None, None, None, None
 from psycopg2 import IntegrityError as DatabaseIntegrityError
 from psycopg2 import OperationalError as DatabaseOperationalError
+from psycopg2.extras import register_default_json, register_default_jsonb
 
 from sql import Flavor
 
 from trytond.backend.database import DatabaseInterface, SQLType
 from trytond.config import config, parse_uri
+<<<<<<< HEAD
 from trytond.perf_analyzer import analyze_before, analyze_after
 from trytond.perf_analyzer import logger as perf_logger
+=======
+from trytond.protocols.jsonrpc import JSONDecoder
+>>>>>>> 4.6
 
 __all__ = ['Database', 'DatabaseIntegrityError', 'DatabaseOperationalError']
 
 logger = logging.getLogger(__name__)
-
-RE_VERSION = re.compile(r'\S+ (\d+)\.(\d+)')
 
 os.environ['PGTZ'] = os.environ.get('TZ', '')
 
@@ -114,7 +117,6 @@ class Database(DatabaseInterface):
             if name in cls._databases:
                 return cls._databases[name]
             inst = DatabaseInterface.__new__(cls, name=name)
-            cls._databases[name] = inst
 
             logger.info('connect to "%s"', name)
             minconn = config.getint('database', 'minconn', default=1)
@@ -123,6 +125,7 @@ class Database(DatabaseInterface):
                 minconn, maxconn, cls.dsn(name),
                 cursor_factory=PerfCursor)
 
+            cls._databases[name] = inst
             return inst
 
     @classmethod
@@ -169,10 +172,10 @@ class Database(DatabaseInterface):
             self._databases.pop(self.name)
 
     @classmethod
-    def create(cls, connection, database_name):
+    def create(cls, connection, database_name, template='template0'):
         cursor = connection.cursor()
         cursor.execute('CREATE DATABASE "' + database_name + '" '
-            'TEMPLATE template0 ENCODING \'unicode\'')
+            'TEMPLATE "' + template + '" ENCODING \'unicode\'')
         connection.commit()
         cls._list_cache = None
 
@@ -184,10 +187,11 @@ class Database(DatabaseInterface):
     def get_version(self, connection):
         if self.name not in self._version_cache:
             cursor = connection.cursor()
-            cursor.execute('SELECT version()')
+            cursor.execute('SHOW server_version_num')
             version, = cursor.fetchone()
-            self._version_cache[self.name] = tuple(map(int,
-                RE_VERSION.search(version).groups()))
+            major, rest = divmod(int(version), 10000)
+            minor, patch = divmod(rest, 100)
+            self._version_cache[self.name] = (major, minor, patch)
         return self._version_cache[self.name]
 
     def list(self):
@@ -344,6 +348,10 @@ class Database(DatabaseInterface):
     def has_window_functions(self):
         return True
 
+    @classmethod
+    def has_sequence(cls):
+        return True
+
     def sql_type(self, type_):
         if type_ in self.TYPES_MAPPING:
             return self.TYPES_MAPPING[type_]
@@ -357,6 +365,76 @@ class Database(DatabaseInterface):
                 return Binary(value)
         return value
 
+    def sequence_exist(self, connection, name):
+        cursor = connection.cursor()
+        for schema in self.search_path:
+            cursor.execute('SELECT 1 '
+                'FROM information_schema.sequences '
+                'WHERE sequence_name = %s AND sequence_schema = %s',
+                (name, schema))
+            if cursor.rowcount:
+                return True
+        return False
+
+    def sequence_create(
+            self, connection, name, number_increment=1, start_value=1):
+        cursor = connection.cursor()
+
+        param = self.flavor.param
+        cursor.execute(
+            'CREATE SEQUENCE "%s" '
+            'INCREMENT BY %s '
+            'START WITH %s'
+            % (name, param, param),
+            (number_increment, start_value))
+
+    def sequence_update(
+            self, connection, name, number_increment=1, start_value=1):
+        cursor = connection.cursor()
+        param = self.flavor.param
+        cursor.execute(
+            'ALTER SEQUENCE "%s" '
+            'INCREMENT BY %s '
+            'RESTART WITH %s'
+            % (name, param, param),
+            (number_increment, start_value))
+
+    def sequence_rename(self, connection, old_name, new_name):
+        cursor = connection.cursor()
+        if (self.sequence_exist(connection, old_name)
+                and not self.sequence_exist(connection, new_name)):
+            cursor.execute('ALTER TABLE "%s" RENAME TO "%s"'
+                % (old_name, new_name))
+
+    def sequence_delete(self, connection, name):
+        cursor = connection.cursor()
+        cursor.execute('DROP SEQUENCE "%s"' % name)
+
+    def sequence_next_number(self, connection, name):
+        cursor = connection.cursor()
+        version = self.get_version(connection)
+        if version >= (10, 0):
+            cursor.execute(
+                'SELECT increment_by '
+                'FROM pg_sequences '
+                'WHERE sequencename=%s '
+                % self.flavor.param,
+                (name,))
+            increment, = cursor.fetchone()
+            cursor.execute(
+                'SELECT CASE WHEN NOT is_called THEN last_value '
+                            'ELSE last_value + %s '
+                        'END '
+                'FROM "%s"' % (self.flavor.param, name),
+                (increment,))
+        else:
+            cursor.execute(
+                'SELECT CASE WHEN NOT is_called THEN last_value '
+                            'ELSE last_value + increment_by '
+                       'END '
+                'FROM "%s"' % name)
+        return cursor.fetchone()[0]
+
 register_type(UNICODE)
 if PYDATE:
     register_type(PYDATE)
@@ -368,3 +446,9 @@ if PYINTERVAL:
     register_type(PYINTERVAL)
 register_adapter(float, lambda value: AsIs(repr(value)))
 register_adapter(Decimal, lambda value: AsIs(str(value)))
+
+
+def convert_json(value):
+    return json.loads(value, object_hook=JSONDecoder())
+register_default_json(loads=convert_json)
+register_default_jsonb(loads=convert_json)

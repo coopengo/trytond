@@ -2,6 +2,7 @@
 # this repository contains the full copyright notices and license terms.
 import unittest
 import smtplib
+import sys
 from email.message import Message
 from mock import Mock, patch, call
 
@@ -66,6 +67,17 @@ class SendmailTestCase(unittest.TestCase):
                 get_smtp_server('smtp+tls://localhost:25'), server)
             SMTP.assert_called_once_with('localhost', 25)
             server.starttls.assert_called_once_with()
+
+    @unittest.skipIf(sys.version_info < (2, 7, 4), "python bug #9374")
+    def test_get_smtp_server_extra_parameters(self):
+        'Test get_smtp_server uri extra parameters'
+        with patch.object(smtplib, 'SMTP') as SMTP:
+            SMTP.return_value = server = Mock()
+            params = 'timeout=30&local_hostname=smtp.example.com'
+            self.assertEqual(
+                get_smtp_server('smtp://localhost:25?%s' % params), server)
+            SMTP.assert_called_once_with(
+                'localhost', 25, timeout=30, local_hostname='smtp.example.com')
 
     @patch('trytond.sendmail.get_smtp_server')
     @with_transaction()
