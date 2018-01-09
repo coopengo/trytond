@@ -164,12 +164,13 @@ def _dispatch(request, pool, *args, **kwargs):
         raise UserError('Calling method %s on %s is not allowed'
             % (method, obj))
 
-<<<<<<< HEAD
     # JCA : If log_threshold is != -1, we only log the times for calls that
     # exceed the configured value
     if log_threshold == -1:
         log_message = '%s.%s(*%s, **%s) from %s@%s/%s'
-        username = request.authorization.username.decode('utf-8')
+        username = request.authorization.username
+        if isinstance(username, bytes):
+            username = username.decode('utf-8')
         log_args = (obj, method, args, kwargs,
             username, request.remote_addr, request.path)
         logger.info(log_message, *log_args)
@@ -177,15 +178,6 @@ def _dispatch(request, pool, *args, **kwargs):
         log_message = '%s.%s (%s s)'
         log_args = (obj, method)
         log_start = time.time()
-=======
-    log_message = '%s.%s(*%s, **%s) from %s@%s/%s'
-    username = request.authorization.username
-    if isinstance(username, bytes):
-        username = username.decode('utf-8')
-    log_args = (
-        obj, method, args, kwargs, username, request.remote_addr, request.path)
-    logger.info(log_message, *log_args)
->>>>>>> 4.6
 
     user = request.user_id
     session = None
