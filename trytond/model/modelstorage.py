@@ -292,11 +292,7 @@ class ModelStorage(Model):
 
                 if field_name in default:
                     data[field_name] = default[field_name]
-<<<<<<< HEAD
-                elif (isinstance(field, fields.Function)
-=======
                 if (isinstance(field, fields.Function)
->>>>>>> 4.6
                         and not isinstance(field, fields.MultiValue)):
                     del data[field_name]
                 elif ftype in ('many2one', 'one2one'):
