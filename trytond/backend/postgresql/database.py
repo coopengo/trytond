@@ -32,12 +32,11 @@ from sql import Flavor
 
 from trytond.backend.database import DatabaseInterface, SQLType
 from trytond.config import config, parse_uri
-<<<<<<< HEAD
+from trytond.protocols.jsonrpc import JSONDecoder
+
 from trytond.perf_analyzer import analyze_before, analyze_after
 from trytond.perf_analyzer import logger as perf_logger
-=======
-from trytond.protocols.jsonrpc import JSONDecoder
->>>>>>> 4.6
+
 
 __all__ = ['Database', 'DatabaseIntegrityError', 'DatabaseOperationalError']
 
