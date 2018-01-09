@@ -22,15 +22,10 @@ from sql import Table
 
 from trytond.pool import Pool, isregisteredby
 from trytond import backend
-<<<<<<< HEAD
-from trytond.model import Workflow
-from trytond.model.fields import get_eval_fields
-from trytond.model.fields.selection import TranslatedSelection
-from trytond.model.fields.dict import TranslatedDict
-=======
 from trytond.model import Workflow, ModelSQL, ModelSingleton, fields
 from trytond.model.fields import get_eval_fields, Function
->>>>>>> 4.6
+from trytond.model.fields.selection import TranslatedSelection
+from trytond.model.fields.dict import TranslatedDict
 from trytond.tools import is_instance_method
 from trytond.transaction import Transaction
 from trytond.cache import Cache
