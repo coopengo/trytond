@@ -390,7 +390,6 @@ def load_modules(
     else:
         update = []
 
-<<<<<<< HEAD
     def migrate_modules(cursor):
         modules_in_dir = get_module_list()
         modules_to_migrate = {}
@@ -472,10 +471,7 @@ def load_modules(
                 delete(cursor, 'ir_module_dependency', old_name, 'name')
                 delete(cursor, 'ir_module', old_name, 'name')
 
-    def _load_modules():
-=======
     def _load_modules(update):
->>>>>>> 4.6
         global res
         TableHandler = backend.get('TableHandler')
         transaction = Transaction()
