@@ -8,9 +8,14 @@ except ImportError:
     import json
 import base64
 
-from werkzeug.wrappers import Response
+from werkzeug.wrappers import Response, Headers
 from werkzeug.utils import cached_property
 from werkzeug.exceptions import BadRequest
+
+try:
+    import uwsgi
+except ImportError:
+    uwsgi = None
 
 from trytond.protocols.wrappers import Request
 from trytond.exceptions import TrytonException
@@ -148,6 +153,7 @@ class JSONProtocol:
     def response(cls, data, request):
         if isinstance(request, JSONRequest):
             response = {'id': request.parsed_data.get('id', 0)}
+            method = request.parsed_data.get('method', 'unknown')
         else:
             response = {}
         if isinstance(data, TrytonException):
@@ -157,5 +163,9 @@ class JSONProtocol:
             response['error'] = (str(data), data.__format_traceback__)
         else:
             response['result'] = data
+        if uwsgi:
+            uwsgi.set_logvar('rpc', method)
+        headers = Headers()
+        headers.add('RPC-Method', method)
         return Response(json.dumps(response, cls=JSONEncoder),
-            content_type='application/json')
+            content_type='application/json', headers=headers)
