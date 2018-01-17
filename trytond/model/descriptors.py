@@ -22,6 +22,7 @@ class dualmethod(object):
     """
     def __init__(self, func):
         self.func = func
+        func.__dualmethod = True
 
     def __get__(self, instance, owner):
 
