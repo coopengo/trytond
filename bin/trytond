@@ -22,7 +22,7 @@ commandline.config_log(options)
 config.update_etc(options.configfile)
 
 # Import trytond things after it is configured
-from trytond.application import app
+from trytond.wsgi import app
 from trytond.pool import Pool
 from trytond.modules import get_module_list, get_module_info
 

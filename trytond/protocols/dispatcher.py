@@ -169,6 +169,8 @@ def _dispatch(request, pool, *args, **kwargs):
     if log_threshold == -1:
         log_message = '%s.%s(*%s, **%s) from %s@%s/%s'
         username = request.authorization.username
+        if isinstance(username, bytes):
+            username = username.decode('utf-8')
         log_args = (obj, method, args, kwargs,
             username, request.remote_addr, request.path)
         logger.info(log_message, *log_args)

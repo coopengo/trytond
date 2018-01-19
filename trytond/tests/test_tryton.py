@@ -11,14 +11,19 @@ import time
 from itertools import chain
 import operator
 from functools import wraps
+import inspect
+try:
+    import pkg_resources
+except ImportError:
+    pkg_resources = None
 
 from lxml import etree
 from sql import Table
 
 from trytond.pool import Pool, isregisteredby
 from trytond import backend
-from trytond.model import Workflow
-from trytond.model.fields import get_eval_fields
+from trytond.model import Workflow, ModelSQL, ModelSingleton, fields
+from trytond.model.fields import get_eval_fields, Function
 from trytond.model.fields.selection import TranslatedSelection
 from trytond.model.fields.dict import TranslatedDict
 from trytond.tools import is_instance_method
@@ -48,7 +53,7 @@ def activate_module(name):
     if not db_exist(DB_NAME) and restore_db_cache(name):
         return
     create_db()
-    with Transaction().start(DB_NAME, 1) as transaction:
+    with Transaction().start(DB_NAME, 1, close=True) as transaction:
         pool = Pool()
         Module = pool.get('ir.module')
 
@@ -97,10 +102,11 @@ def backup_db_cache(name):
             os.makedirs(DB_CACHE)
         backend_name = backend.name()
         cache_file = _db_cache_file(DB_CACHE, name, backend_name)
-        if backend_name == 'sqlite':
-            _sqlite_copy(cache_file)
-        elif backend_name == 'postgresql':
-            _pg_dump(cache_file)
+        if not os.path.exists(cache_file):
+            if backend_name == 'sqlite':
+                _sqlite_copy(cache_file)
+            elif backend_name == 'postgresql':
+                _pg_dump(cache_file)
 
 
 def _db_cache_file(path, name, backend_name):
@@ -151,7 +157,17 @@ def _pg_restore(cache_file):
     options, env = _pg_options()
     cmd.extend(options)
     cmd.append(cache_file)
-    return not subprocess.call(cmd, env=env)
+    try:
+        return not subprocess.call(cmd, env=env)
+    except OSError:
+        cache_name, _ = os.path.splitext(os.path.basename(cache_file))
+        with Transaction().start(
+                None, 0, close=True, autocommit=True, _nocache=True) \
+                as transaction:
+            transaction.database.drop(transaction.connection, DB_NAME)
+            transaction.database.create(
+                transaction.connection, DB_NAME, cache_name)
+        return True
 
 
 def _pg_dump(cache_file):
@@ -159,7 +175,19 @@ def _pg_dump(cache_file):
     options, env = _pg_options()
     cmd.extend(options)
     cmd.append(DB_NAME)
-    return not subprocess.call(cmd, env=env)
+    try:
+        return not subprocess.call(cmd, env=env)
+    except OSError:
+        cache_name, _ = os.path.splitext(os.path.basename(cache_file))
+        # Ensure any connection is left open
+        backend.get('Database')(DB_NAME).close()
+        with Transaction().start(
+                None, 0, close=True, autocommit=True, _nocache=True) \
+                as transaction:
+            transaction.database.create(
+                transaction.connection, cache_name, DB_NAME)
+        open(cache_file, 'a').close()
+        return True
 
 
 def with_transaction(user=1, context=None):
@@ -204,6 +232,10 @@ class ModuleTestCase(unittest.TestCase):
             assert model._rec_name in model._fields, (
                 'Wrong _rec_name "%s" for %s'
                 % (model._rec_name, mname))
+            field = model._fields[model._rec_name]
+            assert field._type in {'char', 'text'}, (
+                "Wrong '%s' type for _rec_name of %s'"
+                % (field._type, mname))
 
     @with_transaction()
     def test_view(self):
@@ -312,7 +344,16 @@ class ModuleTestCase(unittest.TestCase):
                             mname, attr))
 
                     if attr.startswith('default_'):
-                        getattr(model, attr)()
+                        fname = attr[len('default_'):]
+                        if isinstance(model._fields[fname], fields.MultiValue):
+                            try:
+                                getattr(model, attr)(pattern=None)
+                            # get_multivalue may raise an AttributeError
+                            # if pattern is not defined on the model
+                            except AttributeError:
+                                pass
+                        else:
+                            getattr(model, attr)()
                     elif attr.startswith('order_'):
                         tables = {None: (model.__table__(), None)}
                         getattr(model, attr)(tables)
@@ -442,6 +483,26 @@ class ModuleTestCase(unittest.TestCase):
                         })
 
     @with_transaction()
+    def test_function_fields(self):
+        "Test function fields methods"
+        for mname, model in Pool().iterobject():
+            if not isregisteredby(model, self.module):
+                continue
+            for field_name, field in model._fields.iteritems():
+                if not isinstance(field, Function):
+                    continue
+                for func_name in [field.getter, field.setter, field.searcher]:
+                    if not func_name:
+                        continue
+                    assert getattr(model, func_name, None), (
+                        "Missing method '%(func_name)s' "
+                        "on model '%(model)s' for field '%(field)s" % {
+                            'func_name': func_name,
+                            'model': model.__name__,
+                            'field': field_name,
+                            })
+
+    @with_transaction()
     def test_ir_action_window(self):
         'Test action windows are correctly defined'
         pool = Pool()
@@ -469,6 +530,22 @@ class ModuleTestCase(unittest.TestCase):
                 if not action_domain.domain:
                     continue
                 Model.search(decoder.decode(action_domain.domain))
+
+    @with_transaction()
+    def test_modelsingleton_inherit_order(self):
+        'Test ModelSingleton, ModelSQL, ModelStorage order in the MRO'
+        for mname, model in Pool().iterobject():
+            if not isregisteredby(model, self.module):
+                continue
+            if (not issubclass(model, ModelSingleton)
+                    or not issubclass(model, ModelSQL)):
+                continue
+            mro = inspect.getmro(model)
+            singleton_index = mro.index(ModelSingleton)
+            sql_index = mro.index(ModelSQL)
+            assert singleton_index < sql_index, (
+                "ModelSingleton must appear before ModelSQL in the parent "
+                "classes of '%s'." % mname)
 
 
 def db_exist(name=DB_NAME):
@@ -555,7 +632,15 @@ doctest_checker = Py23DocChecker()
 
 class TestSuite(unittest.TestSuite):
     def run(self, *args, **kwargs):
-        exist = db_exist()
+        DatabaseOperationalError = backend.get('DatabaseOperationalError')
+        while True:
+            try:
+                exist = db_exist()
+                break
+            except DatabaseOperationalError, err:
+                # Retry on connection error
+                sys.stderr.write(str(err))
+                time.sleep(1)
         result = super(TestSuite, self).run(*args, **kwargs)
         if not exist:
             drop_db()
@@ -574,14 +659,28 @@ def all_suite(modules=None):
     Return all tests suite of current module
     '''
     suite_ = suite()
+
+    def add_tests(filename, module_prefix):
+        if not (filename.startswith('test_') and filename.endswith('.py')):
+            return
+        if modules and fn[:-3] not in modules:
+            return
+        modname = module_prefix + '.' + filename[:-3]
+        __import__(modname)
+        module = sys.modules[modname]
+        suite_.addTest(module.suite())
+
     for fn in os.listdir(os.path.dirname(__file__)):
-        if fn.startswith('test_') and fn.endswith('.py'):
-            if modules and fn[:-3] not in modules:
-                continue
-            modname = 'trytond.tests.' + fn[:-3]
-            __import__(modname)
-            module = module = sys.modules[modname]
-            suite_.addTest(module.suite())
+        add_tests(fn, 'trytond.tests')
+    if pkg_resources is not None:
+        entry_points = pkg_resources.iter_entry_points('trytond.tests')
+        for test_entry_point in entry_points:
+            base_location = os.path.join(
+                test_entry_point.dist.location,
+                *test_entry_point.module_name.split('.'))
+            for fn in os.listdir(base_location):
+                add_tests(fn, test_entry_point.module_name)
+
     return suite_
 
 

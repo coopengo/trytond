@@ -1,6 +1,7 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
 import time
+import datetime
 from xml import sax
 import logging
 import re
@@ -229,8 +230,8 @@ class RecordTagHandler:
                 context['time'] = time
                 context['version'] = __version__.rsplit('.', 1)[0]
                 context['ref'] = self.mh.get_id
-                context['obj'] = lambda *a: 1
                 context['Decimal'] = Decimal
+                context['datetime'] = datetime
                 if pyson_attr:
                     context.update(CONTEXT)
                 value = eval(eval_attr, context)

@@ -409,12 +409,14 @@ class ActionReport(ActionMixin, ModelSQL, ModelView):
     action = fields.Many2One('ir.action', 'Action', required=True,
             ondelete='CASCADE')
     direct_print = fields.Boolean('Direct Print')
+    single = fields.Boolean("Single",
+        help="Check if the template works only for one record.")
     template_extension = fields.Selection([
             ('odt', 'OpenDocument Text'),
             ('odp', 'OpenDocument Presentation'),
             ('ods', 'OpenDocument Spreadsheet'),
             ('odg', 'OpenDocument Graphics'),
-            ('plain', 'Plain Text'),
+            ('txt', 'Plain Text'),
             ('xml', 'XML'),
             ('html', 'HTML'),
             ('xhtml', 'XHTML'),
@@ -564,6 +566,12 @@ class ActionReport(ActionMixin, ModelSQL, ModelView):
         # Migration from 3.4 remove report_name_module_uniq constraint
         table.drop_constraint('report_name_module_uniq')
 
+        # Migration from 4.4 replace plain extension by txt
+        cursor.execute(*action_report.update(
+                [action_report.extension],
+                ['txt'],
+                where=action_report.extension == 'plain'))
+
     @staticmethod
     def default_type():
         return 'ir.action.report'
@@ -574,6 +582,10 @@ class ActionReport(ActionMixin, ModelSQL, ModelView):
 
     @staticmethod
     def default_direct_print():
+        return False
+
+    @classmethod
+    def default_single(cls):
         return False
 
     @staticmethod

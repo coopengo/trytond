@@ -507,6 +507,12 @@ But a ``tuple`` can be used to search or set value.
 
     Same as :attr:`Many2One.datetime_field`
 
+Instance methods:
+
+.. method:: Reference.translated([name])
+
+    Same as :meth:`~Selection.translated` but for the translated name of the
+    target model.
 
 Many2One
 --------
@@ -845,6 +851,10 @@ Dict
 .. class:: Dict(schema_model[, \**options])
 
 A dictionary field with predefined keys.
+
+.. note::
+    It is possible to store the dict as JSON in the database if the backend
+    supports by manually altering the column type to JSON on the database.
 
 :class:`Dict` has one extra required argument:
 

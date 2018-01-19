@@ -21,6 +21,7 @@ from trytond.exceptions import UserError
 from trytond.model import fields
 from trytond.pool import Pool
 from trytond.config import config
+from trytond import backend
 
 
 class FieldsTestCase(unittest.TestCase):
@@ -2502,7 +2503,7 @@ class FieldsTestCase(unittest.TestCase):
         self.assertEqual(filtered_target.value, 3)
 
     @with_transaction()
-    def test_one2many_filter_fomain(self):
+    def test_one2many_filter_domain(self):
         'Test one2many with filter and domain'
         pool = Pool()
         One2ManyFilterDomain = pool.get('test.one2many_filter_domain')
@@ -3041,6 +3042,12 @@ class FieldsTestCase(unittest.TestCase):
                     }])
         transaction.rollback()
 
+        self.assertRaises(UserError, ReferenceRequired.create, [{
+                    'name': 'reference4',
+                    'reference': str(ReferenceTarget()),
+                    }])
+        transaction.rollback()
+
         target4, = ReferenceTarget.create([{
                     'name': 'target4_id',
                     }])
@@ -3175,6 +3182,31 @@ class FieldsTestCase(unittest.TestCase):
 
         self.assertRaises(UserError, DictRequired.create,
             [{'dico': {}}])
+
+    @with_transaction()
+    @unittest.skipIf(
+        backend.name() != 'postgresql', 'jsonb only suported by postgresql')
+    def test_dict_jsonb(self):
+        'Test Dict stored as jsonb'
+        pool = Pool()
+        Dict = pool.get('test.dict_jsonb')
+        connection = Transaction().connection
+        cursor = connection.cursor()
+
+        Database = backend.get('Database')
+        if Database().get_version(connection) < (9, 2):
+            return
+
+        cursor.execute('ALTER TABLE "%s" '
+            'ALTER COLUMN dico TYPE json USING dico::json' % Dict._table)
+
+        dict1, = Dict.create([{
+                    'dico': {'a': 1, 'b': 2},
+                    }])
+        self.assert_(dict1.dico == {'a': 1, 'b': 2})
+
+        Dict.write([dict1], {'dico': {'z': 26}})
+        self.assert_(dict1.dico == {'z': 26})
 
     @with_transaction()
     def test_binary(self):
