@@ -13,7 +13,7 @@ from trytond.wizard import Wizard, StateView, Button, StateTransition, \
 from trytond import backend
 from trytond.pool import Pool
 from trytond.transaction import Transaction
-from trytond.pyson import Eval, If
+from trytond.pyson import Eval
 from trytond.rpc import RPC
 from trytond.iwc import broadcast_init_pool
 
@@ -146,15 +146,6 @@ class Module(ModelSQL, ModelView):
                 if dep.name in name2id:
                     child_ids[name2id[dep.name]].append(child.id)
         return child_ids
-
-    @classmethod
-    def view_attributes(cls):
-        return [('/tree', 'colors',
-                If(Eval('state').in_(['to upgrade', 'to install']),
-                    'blue',
-                    If(Eval('state') == 'uninstalled',
-                        'grey',
-                        'black')))]
 
     @classmethod
     def delete(cls, records):
@@ -295,6 +286,8 @@ class Module(ModelSQL, ModelView):
 
         modules = cls.search([])
         name2module = dict((m.name, m) for m in modules)
+        cls.delete([m for m in modules
+                if m.state != 'activated' and m.name not in module_names])
 
         # iterate through activated modules and mark them as being so
         for name in module_names:

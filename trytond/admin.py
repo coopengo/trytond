@@ -30,7 +30,7 @@ def run(options):
                     database.init()
                     init[db_name] = True
             elif not database.test():
-                raise Exception("'%s' is not a Tryton database!" % db_name)
+                raise Exception('"%s" is not a Tryton database.' % db_name)
 
     for db_name in options.database_names:
         if options.update:
@@ -39,7 +39,7 @@ def run(options):
                 database = Database(db_name)
                 database.connect()
                 if not database.test():
-                    raise Exception("'%s' is not a Tryton database!" % db_name)
+                    raise Exception('"%s" is not a Tryton database.' % db_name)
                 lang = Table('ir_lang')
                 cursor.execute(*lang.select(lang.code,
                         where=lang.translatable == True))
@@ -50,7 +50,8 @@ def run(options):
             lang = set()
         lang |= set(options.languages)
         pool = Pool(db_name)
-        pool.init(update=options.update, lang=list(lang))
+        pool.init(update=options.update, lang=list(lang),
+            installdeps=options.installdeps)
 
         if options.update_modules_list:
             with Transaction().start(db_name, 0) as transaction:
@@ -77,21 +78,21 @@ def run(options):
             if passpath:
                 try:
                     with open(passpath) as passfile:
-                        password = passfile.readline()[:-1]
+                        password, = passfile.read().splitlines()
                 except Exception, err:
                     sys.stderr.write('Can not read password '
                         'from "%s": "%s"\n' % (passpath, err))
 
             if not password:
                 while True:
-                    password = getpass('Admin Password for %s: ' % db_name)
-                    password2 = getpass('Admin Password Confirmation: ')
+                    password = getpass('"admin" password for "%s": ' % db_name)
+                    password2 = getpass('"admin" password confirmation: ')
                     if password != password2:
-                        sys.stderr.write('Admin Password Confirmation '
-                            'doesn\'t match Admin Password!\n')
+                        sys.stderr.write('"admin" password confirmation '
+                            'doesn\'t match "admin" password.\n')
                         continue
                     if not password:
-                        sys.stderr.write('Admin Password is required!\n')
+                        sys.stderr.write('"admin" password is required.\n')
                         continue
                     break
 

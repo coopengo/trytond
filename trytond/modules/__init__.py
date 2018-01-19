@@ -17,6 +17,7 @@ from sql.aggregate import Count
 
 import trytond.tools as tools
 from trytond.config import config
+from trytond.exceptions import MissingDependenciesException
 from trytond.transaction import Transaction
 from trytond import backend
 import trytond.convert as convert
@@ -39,8 +40,7 @@ def update_egg_modules():
     try:
         import pkg_resources
         for ep in pkg_resources.iter_entry_points('trytond.modules'):
-            mod_name = ep.module_name.split('.')[-1]
-            EGG_MODULES[mod_name] = ep
+            EGG_MODULES[ep.name] = ep
     except ImportError:
         pass
 update_egg_modules()
@@ -188,7 +188,7 @@ def create_graph(module_list):
             continue
         missings |= set((x for x in deps if x not in graph))
     if missings:
-        raise Exception('Missing dependencies: %s' % list(missings
+        raise MissingDependenciesException(list(missings
                 - set((p[0] for p in packages))))
     return graph, packages, later
 
@@ -382,8 +382,13 @@ def register_classes():
         MODULES.append(module)
 
 
-def load_modules(database_name, pool, update=None, lang=None):
+def load_modules(
+        database_name, pool, update=None, lang=None, installdeps=False):
     res = True
+    if update:
+        update = update[:]
+    else:
+        update = []
 
     def migrate_modules(cursor):
         modules_in_dir = get_module_list()
@@ -466,7 +471,7 @@ def load_modules(database_name, pool, update=None, lang=None):
                 delete(cursor, 'ir_module_dependency', old_name, 'name')
                 delete(cursor, 'ir_module', old_name, 'name')
 
-    def _load_modules():
+    def _load_modules(update):
         global res
         TableHandler = backend.get('TableHandler')
         transaction = Transaction()
@@ -500,9 +505,15 @@ def load_modules(database_name, pool, update=None, lang=None):
                         where=ir_module.state.in_(('activated', 'to upgrade',
                                 'to remove'))))
             module_list = [name for (name,) in cursor.fetchall()]
-            if update:
+            graph = None
+            while graph is None:
                 module_list += update
-            graph = create_graph(module_list)[0]
+                try:
+                    graph = create_graph(module_list)[0]
+                except MissingDependenciesException as e:
+                    if not installdeps:
+                        raise
+                    update += e.missings
 
             load_module_graph(graph, pool, update, lang)
 
@@ -534,11 +545,11 @@ def load_modules(database_name, pool, update=None, lang=None):
 
     if not Transaction().connection:
         with Transaction().start(database_name, 0):
-            _load_modules()
+            _load_modules(update)
     else:
         with Transaction().new_transaction(), \
                 Transaction().set_user(0), \
                 Transaction().reset_context():
-            _load_modules()
+            _load_modules(update)
 
     return res

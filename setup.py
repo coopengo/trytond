@@ -33,9 +33,9 @@ if minor_version % 2:
         name, name, version)
 
 if platform.python_implementation() == 'PyPy':
-    pg_require = ['psycopg2cffi >= 2.5']
+    pg_require = ['psycopg2cffi >= 2.5.4']
 else:
-    pg_require = ['psycopg2 >= 2.5']
+    pg_require = ['psycopg2 >= 2.5.4']
 
 setup(name=name,
     version=version,
@@ -83,9 +83,9 @@ setup(name=name,
         'Natural Language :: Spanish',
         'Operating System :: OS Independent',
         'Programming Language :: Python :: 2.7',
-        'Programming Language :: Python :: 3.3',
         'Programming Language :: Python :: 3.4',
         'Programming Language :: Python :: 3.5',
+        'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: Implementation :: CPython',
         'Programming Language :: Python :: Implementation :: PyPy',
         'Topic :: Software Development :: Libraries :: Application Frameworks',
@@ -94,7 +94,7 @@ setup(name=name,
     license='GPL-3',
     install_requires=[
         'lxml >= 2.0',
-        'relatorio >= 0.2.0',
+        'relatorio[fodt] >= 0.7.0',
         'Genshi',
         'python-dateutil',
         'polib',
@@ -110,6 +110,7 @@ setup(name=name,
         'cdecimal': ['cdecimal'],
         'Levenshtein': ['python-Levenshtein'],
         'BCrypt': ['bcrypt'],
+        'html2text': ['html2text'],
         },
     zip_safe=False,
     test_suite='trytond.tests',

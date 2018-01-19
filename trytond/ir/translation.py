@@ -1,6 +1,5 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
-import zipfile
 import polib
 import xml.dom.minidom
 from difflib import SequenceMatcher
@@ -19,6 +18,7 @@ from sql.aggregate import Max
 
 from genshi.filters.i18n import extract as genshi_extract
 from relatorio.reporting import MIMETemplateLoader
+from relatorio.templates.opendocument import get_zip_file
 
 from ..model import ModelView, ModelSQL, fields, Unique
 from ..wizard import Wizard, StateView, StateTransition, StateAction, \
@@ -471,11 +471,12 @@ class Translation(ModelSQL, ModelView):
                 cursor.execute(*table.select(table.res_id, table.value,
                         where=where))
                 translations.update(cursor)
-        for res_id in ids:
-            value = translations.setdefault(res_id)
             # Don't store fuzzy translation in cache
             if not Transaction().context.get('fuzzy_translation', False):
-                cls._translation_cache.set((name, ttype, lang, res_id), value)
+                for res_id in to_fetch:
+                    value = translations.setdefault(res_id)
+                    cls._translation_cache.set(
+                        (name, ttype, lang, res_id), value)
         return translations
 
     @classmethod
@@ -631,7 +632,7 @@ class Translation(ModelSQL, ModelView):
                 res.update(cls.get_sources(list(sub_args)))
             return res
 
-        update_cache = False
+        to_cache = []
         for name, ttype, lang, source in args:
             name = unicode(name)
             ttype = unicode(ttype)
@@ -642,7 +643,7 @@ class Translation(ModelSQL, ModelView):
             if trans != -1:
                 res[(name, ttype, lang, source)] = trans
             else:
-                update_cache = True
+                to_cache.append((name, ttype, lang, source))
                 parent_lang = get_parent(lang)
                 if parent_lang:
                     parent_args.append((name, ttype, parent_lang, source))
@@ -679,9 +680,8 @@ class Translation(ModelSQL, ModelView):
                     if (name, ttype, lang, source) not in args:
                         source = None
                     res[(name, ttype, lang, source)] = value
-        if update_cache:
-            for key, value in res.iteritems():
-                cls._translation_cache.set(key, value)
+        for key in to_cache:
+            cls._translation_cache.set(key, res[key])
         return res
 
     @classmethod
@@ -1011,21 +1011,15 @@ class TranslationSet(Wizard):
                 for string in extract(child):
                     yield string
 
-        content = BytesIO(content)
-        try:
-            content = zipfile.ZipFile(content, mode='r')
-        except zipfile.BadZipfile:
-            return
+        zip_ = get_zip_file(BytesIO(content))
+        for content_xml in [
+                zip_.read('content.xml'),
+                zip_.read('styles.xml'),
+                ]:
+            document = xml.dom.minidom.parseString(content_xml)
+            for string in extract(document.documentElement):
+                yield string
 
-        content_xml = content.read('content.xml')
-        document = xml.dom.minidom.parseString(content_xml)
-        for string in extract(document.documentElement):
-            yield string
-
-        style_xml = content.read('styles.xml')
-        document = xml.dom.minidom.parseString(style_xml)
-        for string in extract(document.documentElement):
-            yield string
     extract_report_odt = extract_report_opendocument
     extract_report_odp = extract_report_opendocument
     extract_report_ods = extract_report_opendocument

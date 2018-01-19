@@ -1,11 +1,21 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
-import os
 import datetime
 import logging
+import os
+import subprocess
 import tempfile
 import warnings
-import subprocess
+import zipfile
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from io import BytesIO
+
+try:
+    import html2text
+except ImportError:
+    html2text = None
+
 warnings.simplefilter("ignore")
 import relatorio.reporting
 warnings.resetwarnings()
@@ -27,7 +37,7 @@ MIMETYPES = {
     'odp': 'application/vnd.oasis.opendocument.presentation',
     'ods': 'application/vnd.oasis.opendocument.spreadsheet',
     'odg': 'application/vnd.oasis.opendocument.graphics',
-    'plain': 'text/plain',
+    'txt': 'text/plain',
     'xml': 'text/xml',
     'html': 'text/html',
     'xhtml': 'text/xhtml',
@@ -147,23 +157,38 @@ class Report(URLMixin, PoolBase):
         else:
             action_report = ActionReport(action_id)
 
-        records = None
+        records = []
         model = action_report.model or data.get('model')
         if model:
             records = cls._get_records(ids, model, data)
-        report_context = cls.get_context(records, data)
-        oext, content = cls.convert(action_report,
-            cls.render(action_report, report_context))
+        if action_report.single and len(records) > 1:
+            content = BytesIO()
+            with zipfile.ZipFile(content, 'w') as content_zip:
+                for record in records:
+                    oext, rcontent = cls._execute(
+                        [record], data, action_report)
+                    rfilename = '%s-%s.%s' % (
+                        record.id, record.rec_name, oext)
+                    content_zip.writestr(rfilename, rcontent)
+            content = content.getvalue()
+            oext = 'zip'
+        else:
+            oext, content = cls._execute(records, data, action_report)
         if not isinstance(content, unicode):
             content = bytearray(content) if bytes == str else bytes(content)
         return (oext, content, action_report.direct_print, action_report.name)
+
+    @classmethod
+    def _execute(cls, records, data, action):
+        report_context = cls.get_context(records, data)
+        return cls.convert(action, cls.render(action, report_context))
 
     @classmethod
     def _get_records(cls, ids, model, data):
         pool = Pool()
         Model = pool.get(model)
 
-        class TranslateModel:
+        class TranslateModel(object):
             _languages = {}
 
             def __init__(self, id):
@@ -183,6 +208,15 @@ class Report(URLMixin, PoolBase):
                     id2record = TranslateModel._languages[self._language]
                 record = id2record[self.id]
                 return getattr(record, name)
+
+            def __int__(self):
+                return int(self.id)
+
+            def __str__(self):
+                return '%s,%s' % (Model.__name__, self.id)
+
+            def __unicode__(self):
+                return u'%s,%s' % (Model.__name__, self.id)
         return [TranslateModel(id) for id in ids]
 
     @classmethod
@@ -195,6 +229,7 @@ class Report(URLMixin, PoolBase):
         report_context['context'] = Transaction().context
         report_context['user'] = User(Transaction().user)
         report_context['records'] = records
+        report_context['record'] = records[0] if records else None
         report_context['format_date'] = cls.format_date
         report_context['format_currency'] = cls.format_currency
         report_context['format_number'] = cls.format_number
@@ -307,3 +342,40 @@ class Report(URLMixin, PoolBase):
 
         return Lang.format(lang, '%.' + str(digits) + 'f', value,
             grouping=grouping, monetary=monetary)
+
+
+def get_email(report, record, languages):
+    "Return email.mime and title from the report execution"
+    pool = Pool()
+    ActionReport = pool.get('ir.action.report')
+    report_id = None
+    if isinstance(report, Report):
+        Report_ = report
+    else:
+        if isinstance(report, ActionReport):
+            report_name = report.report_name
+            report_id = report.id
+        else:
+            report_name = report
+        Report_ = pool.get(report_name, type='report')
+    converter = None
+    msg = MIMEMultipart('alternative')
+    msg.add_header('Content-Language', ', '.join(l.code for l in languages))
+    for language in languages:
+        with Transaction().set_context(language=language.code):
+            ext, content, _, title = Report_.execute(
+                [record.id], {
+                    'action_id': report_id,
+                    'language': language,
+                    })
+        if ext == 'html' and html2text:
+            if not converter:
+                converter = html2text.HTML2Text()
+            part = MIMEText(
+                converter.handle(content), 'plain', _charset='utf-8')
+            part.add_header('Content-Language', language.code)
+            msg.attach(part)
+        part = MIMEText(content, ext, _charset='utf-8')
+        part.add_header('Content-Language', language.code)
+        msg.attach(part)
+    return msg, title

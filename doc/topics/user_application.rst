@@ -22,8 +22,11 @@ Example::
 
 .. _Rule Format: http://werkzeug.pocoo.org/docs/latest/routing/#rule-format
 
-Tryton also provides some wrappers in `trytond.procotols.wrappers` to ease the
+Tryton also provides some wrappers in `trytond.protocols.wrappers` to ease the
 creation of such route.
+
+    - `set_max_request_size(size)`: change the default limit of the request to
+      the size in bytes.
 
     - `with_pool`: which takes the first parameter as database name and
       replace it by the corresponding instance of the :ref:`Pool <ref-pool>`.
