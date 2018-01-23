@@ -305,8 +305,8 @@ class Report(URLMixin, PoolBase):
             stdoutdata, stderrdata = proc.communicate()
             # JCA : Use error code rather than wait twice
             if proc.returncode != 0:
-                logger.info('unoconv.stdout : ' + stdoutdata)
-                logger.error('unoconv.stderr : ' + stderrdata)
+                logger.info('unoconv.stdout : ' + str(stdoutdata))
+                logger.error('unoconv.stderr : ' + str(stderrdata))
                 raise Exception(stderrdata)
             return oext, stdoutdata
         finally:
