@@ -45,7 +45,7 @@ def login(dbname, loginname, parameters, cache=True, language=None):
         with Transaction().start(dbname, user_id):
             Session = pool.get('ir.session')
             session, = Session.create([{}])
-            redis.set_session(user_id, session.key)
+            redis.set_session(dbname, user_id, session.key)
             return user_id, session.key
     return
 
@@ -65,7 +65,7 @@ def logout(dbname, user, session):
                 session, = sessions
                 name = session.create_uid.login
                 Session.delete(sessions)
-                redis.del_session(user, session)
+                redis.del_session(dbname, user, session)
             except DatabaseOperationalError:
                 if count:
                     continue
@@ -74,8 +74,8 @@ def logout(dbname, user, session):
 
 
 def check(dbname, user, session):
-    return redis.has_session(user, session) and user
+    return redis.has_session(dbname, user, session) and user
 
 
 def reset(dbname, user, session):
-    return redis.set_session(user, session)
+    return redis.set_session(dbname, user, session)

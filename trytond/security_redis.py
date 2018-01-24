@@ -24,23 +24,27 @@ def get_client():
     return _client
 
 
-def has_session(user, session):
-    last = get_client().get('session:%d:%s' % (user, session))
+def key(dbname, user, session):
+    return 'session:%s:%d:%s' % (dbname, user, session)
+
+
+def has_session(dbname, user, session):
+    last = get_client().get(key(dbname, user, session))
     if not last:
         return False
     last = int(last)
     now = int(time.time())
     timeout = config.getint('session', 'timeout')
     if (now - last > timeout):
-        del_session(user, session)
+        del_session(dbname, user, session)
         return False
     else:
         return True
 
 
-def set_session(user, session):
-    get_client().set('session:%d:%s' % (user, session), int(time.time()))
+def set_session(dbname, user, session):
+    get_client().set(key(dbname, user, session), int(time.time()))
 
 
-def del_session(user, session):
-    get_client().delete('session:%d:%s' % (user, session))
+def del_session(dbname, user, session):
+    get_client().delete(key(dbname, user, session))
