@@ -61,6 +61,7 @@ class BaseCache(object):
 
     @staticmethod
     def clean(dbname):
+        return
         with Transaction().new_transaction() as transaction,\
                 transaction.connection.cursor() as cursor:
             table = Table('ir_cache')
@@ -77,6 +78,7 @@ class BaseCache(object):
 
     @staticmethod
     def resets(dbname):
+        return
         table = Table('ir_cache')
         with Transaction().new_transaction() as transaction,\
                 transaction.connection.cursor() as cursor:

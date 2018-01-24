@@ -1,10 +1,16 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
+import logging
+
 from trytond.pool import Pool
 from trytond.config import config
 from trytond.transaction import Transaction
 from trytond import backend
 from trytond.exceptions import LoginException
+
+import security_redis as redis
+
+logger = logging.getLogger(__name__)
 
 
 def _get_pool(dbname):
@@ -39,6 +45,7 @@ def login(dbname, loginname, parameters, cache=True, language=None):
         with Transaction().start(dbname, user_id):
             Session = pool.get('ir.session')
             session, = Session.create([{}])
+            redis.set_session(user_id, session.key)
             return user_id, session.key
     return
 
@@ -58,6 +65,7 @@ def logout(dbname, user, session):
                 session, = sessions
                 name = session.create_uid.login
                 Session.delete(sessions)
+                redis.del_session(user, session)
             except DatabaseOperationalError:
                 if count:
                     continue
@@ -66,19 +74,8 @@ def logout(dbname, user, session):
 
 
 def check(dbname, user, session):
-    DatabaseOperationalError = backend.get('DatabaseOperationalError')
-    for count in range(config.getint('database', 'retry'), -1, -1):
-        with Transaction().start(dbname, user) as transaction:
-            pool = _get_pool(dbname)
-            Session = pool.get('ir.session')
-            try:
-                if not Session.check(user, session):
-                    return
-                else:
-                    return user
-            except DatabaseOperationalError:
-                if count:
-                    continue
-                raise
-            finally:
-                transaction.commit()
+    return redis.has_session(user, session) and user
+
+
+def reset(dbname, user, session):
+    return redis.set_session(user, session)
