@@ -265,8 +265,8 @@ def parse_query(sql):
         return 'delete', r.group(1)
     r = seq_pattern.search(sql)
     if r:
-        return 'seq', None
-    return 'other', None
+        return 'seq', 'x'
+    return 'other', 'x'
 
 
 def analyze_before(cursor):
