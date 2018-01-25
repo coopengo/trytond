@@ -61,6 +61,8 @@ class BaseCache(object):
 
     @staticmethod
     def clean(dbname):
+        # bypass cache sync mechanism (no need on redis, no effect on test)
+        # fix on master: no patch on cache + memoize for ir/ui/view.py
         return
         with Transaction().new_transaction() as transaction,\
                 transaction.connection.cursor() as cursor:
@@ -78,6 +80,8 @@ class BaseCache(object):
 
     @staticmethod
     def resets(dbname):
+        # bypass cache sync mechanism (no need on redis, no effect on test)
+        # fix on master: no patch on cache + memoize for ir/ui/view.py
         return
         table = Table('ir_cache')
         with Transaction().new_transaction() as transaction,\
