@@ -1116,7 +1116,9 @@ class ModelSQL(ModelStorage):
                         exception, {}, transaction=transaction)
                 raise
 
-        Translation.delete_ids(cls.__name__, 'model', ids)
+        translated = [f for f in cls._fields if getattr(f, 'translate', False)]
+        if translated:
+            Translation.delete_ids(cls.__name__, 'model', ids)
 
         cls._insert_history(ids, deleted=True)
 
