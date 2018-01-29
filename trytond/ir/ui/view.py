@@ -9,11 +9,10 @@ from lxml import etree
 from trytond.model import ModelView, ModelSQL, fields
 from trytond import backend
 from trytond.pyson import Eval, Bool, PYSONDecoder, If
-from trytond.tools import file_open
+from trytond.tools import file_open, memoize
 from trytond.transaction import Transaction
 from trytond.wizard import Wizard, StateView, Button
 from trytond.pool import Pool
-from trytond.cache import MemoryCache
 from trytond.rpc import RPC
 
 __all__ = [
@@ -64,8 +63,6 @@ class View(ModelSQL, ModelView):
     domain = fields.Char('Domain', states={
             'invisible': ~Eval('inherit'),
             }, depends=['inherit'])
-    # AKE : Force usage of MemoryCache for non serializable data
-    _get_rng_cache = MemoryCache('ir_ui_view.get_rng')
 
     @classmethod
     def __setup__(cls):
@@ -114,18 +111,15 @@ class View(ModelSQL, ModelView):
         pass
 
     @classmethod
+    @memoize(10)
     def get_rng(cls, type_):
-        key = (cls.__name__, type_)
-        rng = cls._get_rng_cache.get(key, None)
-        if rng is None:
-            if sys.version_info < (3,):
-                filename = __file__.decode(sys.getfilesystemencoding())
-            else:
-                filename = __file__
-            rng_name = os.path.join(os.path.dirname(filename), type_ + '.rng')
-            with open(rng_name, 'rb') as fp:
-                rng = etree.fromstring(fp.read())
-            cls._get_rng_cache.set(key, rng)
+        if sys.version_info < (3,):
+            filename = __file__.decode(sys.getfilesystemencoding())
+        else:
+            filename = __file__
+        rng_name = os.path.join(os.path.dirname(filename), type_ + '.rng')
+        with open(rng_name, 'rb') as fp:
+            rng = etree.fromstring(fp.read())
         return rng
 
     @property
