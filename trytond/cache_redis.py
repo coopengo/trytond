@@ -59,14 +59,15 @@ class RedisCache(BaseCache):
         namespace = self._namespace()
         self._client.delete(namespace)
 
-    def drop_inst(self, dbname):
-        namespace = self._namespace()
-        self._client.delete(namespace)
+    @staticmethod
+    def clean(dbname):
+        pass
 
-    @classmethod
-    def clean_inst(self, dbname, timestamps):
+    @staticmethod
+    def resets(dbname):
         pass
 
     @classmethod
-    def resets_cls(cls, dbname, cursor, table):
-        pass
+    def drop(cls, dbname):
+        for inst in cls._cache_instance:
+            cls._client.delete(inst._namespace(dbname))

@@ -8,8 +8,8 @@ from sql.functions import CurrentTimestamp
 
 from trytond.config import config
 from trytond.transaction import Transaction
-from trytond.cache_serializer import pack, unpack
 from trytond.tools import resolve
+from trytond.cache_serializer import pack, unpack
 
 __all__ = ['BaseCache', 'Cache', 'LRUDict']
 
@@ -48,42 +48,22 @@ class BaseCache(object):
     def clear(self):
         raise NotImplemented
 
-    def drop_inst(self, dbname):
-        raise NotImplemented
-
-    @staticmethod
-    def drop(dbname):
-        for inst in BaseCache._cache_instance:
-            inst.drop_inst(dbname)
-
-    def clean_inst(self, dbname, timestamps):
-        raise NotImplemented
-
     @staticmethod
     def clean(dbname):
-        with Transaction().new_transaction(_nocache=True) as transaction,\
-                transaction.connection.cursor() as cursor:
-            table = Table('ir_cache')
-            cursor.execute(*table.select(table.timestamp, table.name))
-            timestamps = {}
-            for timestamp, name in cursor.fetchall():
-                timestamps[name] = timestamp
-        for inst in BaseCache._cache_instance:
-            inst.clean_inst(dbname, timestamps)
+        raise NotImplemented
 
-    @classmethod
-    def resets_cls(cls, dbname, cursor, table):
+    @staticmethod
+    def reset(dbname, name):
         raise NotImplemented
 
     @staticmethod
     def resets(dbname):
-        table = Table('ir_cache')
-        with Transaction().new_transaction(_nocache=True) as transaction,\
-                transaction.connection.cursor() as cursor:
-            klasses = [i.__class__ for i in BaseCache._cache_instance]
-            klasses = list(set(klasses))
-            for klass in klasses:
-                klass.resets_cls(dbname, cursor, table)
+        raise NotImplemented
+
+    @classmethod
+    def drop(cls, dbname):
+        raise NotImplemented
+
 
 
 class MemoryCache(BaseCache):
@@ -108,7 +88,7 @@ class MemoryCache(BaseCache):
                 result = cache[key] = cache.pop(key)
                 return result
             # JCA: Properly crash on type error
-            except KeyError:
+            except (KeyError):
                 return default
 
     def set(self, key, value):
@@ -122,29 +102,41 @@ class MemoryCache(BaseCache):
 
     def clear(self):
         dbname = Transaction().database.name
-        with self._resets_lock:
-            self._resets.setdefault(dbname, set())
-            self._resets[dbname].add(self._name)
+        Cache.reset(dbname, self._name)
         with self._lock:
             self._cache[dbname] = LRUDict(self.size_limit)
 
-    def drop_inst(self, dbname):
-        with self._lock:
-            self._cache.pop(dbname, None)
+    @staticmethod
+    def clean(dbname):
+        with Transaction().new_transaction(_nocache=True) as transaction,\
+                transaction.connection.cursor() as cursor:
+            table = Table('ir_cache')
+            cursor.execute(*table.select(table.timestamp, table.name))
+            timestamps = {}
+            for timestamp, name in cursor.fetchall():
+                timestamps[name] = timestamp
+        for inst in Cache._cache_instance:
+            if inst._name in timestamps:
+                with inst._lock:
+                    if (not inst._timestamp
+                            or timestamps[inst._name] > inst._timestamp):
+                        inst._timestamp = timestamps[inst._name]
+                        inst._cache[dbname] = LRUDict(inst.size_limit)
 
-    def clean_inst(self, dbname, timestamps):
-        if self._name in timestamps:
-            with self._lock:
-                if (not self._timestamp
-                        or timestamps[self._name] > self._timestamp):
-                    self._timestamp = timestamps[self._name]
-                    self._cache[dbname] = LRUDict(self.size_limit)
+    @staticmethod
+    def reset(dbname, name):
+        with Cache._resets_lock:
+            Cache._resets.setdefault(dbname, set())
+            Cache._resets[dbname].add(name)
 
-    @classmethod
-    def resets_cls(cls, dbname, cursor, table):
-        with cls._resets_lock:
-            cls._resets.setdefault(dbname, set())
-            for name in cls._resets[dbname]:
+    @staticmethod
+    def resets(dbname):
+        table = Table('ir_cache')
+        with Transaction().new_transaction(_nocache=True) as transaction,\
+                transaction.connection.cursor() as cursor,\
+                Cache._resets_lock:
+            Cache._resets.setdefault(dbname, set())
+            for name in Cache._resets[dbname]:
                 cursor.execute(*table.select(table.name,
                         where=table.name == name))
                 if cursor.fetchone():
@@ -156,7 +148,12 @@ class MemoryCache(BaseCache):
                     cursor.execute(*table.insert(
                             [table.timestamp, table.name],
                             [[CurrentTimestamp(), name]]))
-            cls._resets[dbname].clear()
+            Cache._resets[dbname].clear()
+
+    @classmethod
+    def drop(cls, dbname):
+        for inst in cls._cache_instance:
+            inst._cache.pop(dbname, None)
 
 
 class DefaultCacheValue:
