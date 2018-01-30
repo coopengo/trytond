@@ -28,9 +28,9 @@ from .wrappers import with_pool
 logger = logging.getLogger(__name__)
 
 # JCA: log slow RPC (> log_time_threshold)
-slowness_threshold = config.getfloat('web', 'log_time_threshold', default=-1)
-if slowness_threshold >= 0:
-    slowness_logger = logging.getLogger('slowness')
+slow_threshold = config.getfloat('web', 'log_time_threshold', default=-1)
+if slow_threshold >= 0:
+    slow_logger = logging.getLogger('slowness')
 
 ir_configuration = Table('ir_configuration')
 ir_lang = Table('ir_lang')
@@ -184,11 +184,10 @@ def _dispatch(request, pool, *args, **kwargs):
     logger.info(log_message, *log_args)
 
     # JCA: log slow RPC
-    if slowness_threshold >= 0:
-        log_message = '%s.%s (%s s)'
-        log_args = (obj, method)
-        log_start = time.time()
-        slowness_logger.info(log_message, *log_args)
+    if slow_threshold >= 0:
+        slow_msg = '%s.%s (%s s)'
+        slow_args = (obj, method)
+        slow_start = time.time()
 
     user = request.user_id
 
@@ -239,10 +238,9 @@ def _dispatch(request, pool, *args, **kwargs):
                 logger.error(log_message, *log_args, exc_info=True)
 
                 # JCA: log slow RPC
-                if slowness_threshold >= 0:
-                    log_end = time.time()
-                    log_args += (str(log_end - log_start),)
-                    log_exception(slowness_logger.error, log_message, *log_args)
+                if slow_threshold >= 0:
+                    slow_args += (str(time.time() - slow_start),)
+                    log_exception(slow_logger.error, slow_msg, *slow_args)
 
                 raise
             except (ConcurrencyException, UserError, UserWarning,
@@ -250,20 +248,18 @@ def _dispatch(request, pool, *args, **kwargs):
                 logger.debug(log_message, *log_args, exc_info=True)
 
                 # JCA: log slow RPC
-                if slowness_threshold >= 0:
-                    log_end = time.time()
-                    log_args += (str(log_end - log_start),)
-                    log_exception(slowness_logger.debug, log_message, *log_args)
+                if slow_threshold >= 0:
+                    slow_args += (str(time.time - slow_start),)
+                    log_exception(slow_logger.debug, slow_msg, *slow_args)
 
                 raise
             except Exception:
                 logger.error(log_message, *log_args, exc_info=True)
 
                 # JCA: log slow RPC
-                if slowness_threshold >= 0:
-                    log_end = time.time()
-                    log_args += (str(log_end - log_start),)
-                    log_exception(slowness_logger.error, log_message, *log_args)
+                if slow_threshold >= 0:
+                    slow_args += (str(time.time() - slow_start),)
+                    log_exception(slow_logger.error, slow_msg, *slow_args)
 
                 raise
             # Need to commit to unlock SQLite database
@@ -275,13 +271,13 @@ def _dispatch(request, pool, *args, **kwargs):
         logger.debug('Result: %s', result)
 
         # JCA: log slow RPC
-        if slowness_threshold >= 0:
-            log_end = time.time()
-            log_args += (str(log_end - log_start),)
-            if log_end - log_start > slowness_threshold:
-                slowness_logger.info(log_message, *log_args)
+        if slow_threshold >= 0:
+            slow_diff = time.time() - slow_start
+            slow_args += (str(slow_diff),)
+            if slow_diff > slow_threshold:
+                slow_logger.info(slow_msg, *slow_args)
             else:
-                slowness_logger.debug(log_message, *log_args)
+                slow_logger.debug(slow_msg, *slow_args)
 
         # AKE: perf analyzer hooks
         try:
