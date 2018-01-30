@@ -82,3 +82,14 @@ def check(dbname, user, session):
                 raise
             finally:
                 transaction.commit()
+
+
+def reset(dbname, session):
+    DatabaseOperationalError = backend.get('DatabaseOperationalError')
+    try:
+        with Transaction().start(dbname, 0):
+            pool = _get_pool(dbname)
+            Session = pool.get('ir.session')
+            Session.reset(session)
+    except DatabaseOperationalError:
+        pass

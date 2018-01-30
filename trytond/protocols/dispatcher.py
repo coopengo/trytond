@@ -26,8 +26,11 @@ from trytond.sentry import sentry_wrap
 from .wrappers import with_pool
 
 logger = logging.getLogger(__name__)
-# JCA : enable performance log mode to ease slow calls detection
-log_threshold = config.getfloat('web', 'log_time_threshold', default=-1)
+
+# JCA: log slow RPC (> log_time_threshold)
+slowness_threshold = config.getfloat('web', 'log_time_threshold', default=-1)
+if slowness_threshold >= 0:
+    slowness_logger = logging.getLogger('slowness')
 
 ir_configuration = Table('ir_configuration')
 ir_lang = Table('ir_lang')
@@ -35,6 +38,7 @@ ir_module = Table('ir_module')
 res_user = Table('res_user')
 
 
+# JCA: log slow RPC
 def log_exception(method, *args, **kwargs):
     kwargs['exc_info'] = False
     method(*args, **kwargs)
@@ -151,10 +155,17 @@ def help_method(request, pool):
     return pydoc.getdoc(getattr(obj, method))
 
 
-@sentry_wrap  # hide tech exceptions and send then to sentry
+@sentry_wrap  # AKE: hide tech exceptions and send then to sentry
 @app.auth_required
 @with_pool
 def _dispatch(request, pool, *args, **kwargs):
+
+    # AKE: perf analyzer hooks
+    try:
+        PerfLog().on_enter()
+    except Exception:
+        perf_logger.exception('on_enter failed')
+
     DatabaseOperationalError = backend.get('DatabaseOperationalError')
 
     obj, method = get_object_method(request, pool)
@@ -164,45 +175,52 @@ def _dispatch(request, pool, *args, **kwargs):
         raise UserError('Calling method %s on %s is not allowed'
             % (method, obj))
 
-    # JCA : If log_threshold is != -1, we only log the times for calls that
-    # exceed the configured value
-    if log_threshold == -1:
-        log_message = '%s.%s(*%s, **%s) from %s@%s/%s'
-        username = request.authorization.username
-        if isinstance(username, bytes):
-            username = username.decode('utf-8')
-        log_args = (obj, method, args, kwargs,
-            username, request.remote_addr, request.path)
-        logger.info(log_message, *log_args)
-    else:
+    log_message = '%s.%s(*%s, **%s) from %s@%s/%s'
+    username = request.authorization.username
+    if isinstance(username, bytes):
+        username = username.decode('utf-8')
+    log_args = (
+        obj, method, args, kwargs, username, request.remote_addr, request.path)
+    logger.info(log_message, *log_args)
+
+    # JCA: log slow RPC
+    if slowness_threshold >= 0:
         log_message = '%s.%s (%s s)'
         log_args = (obj, method)
         log_start = time.time()
+        slowness_logger.info(log_message, *log_args)
 
     user = request.user_id
+
+    # AKE: add session to transaction context
     session = None
     if request.authorization.type == 'session':
         session = request.authorization.get('session')
 
+    # AKE: perf analyzer hooks
+    try:
+        PerfLog().on_execute(user, session, request.rpc_method, args, kwargs)
+    except Exception:
+        perf_logger.exception('on_execute failed')
+
     for count in range(config.getint('database', 'retry'), -1, -1):
+        # AKE: add session to transaction context
         with Transaction().start(pool.database_name, user,
                 readonly=rpc.readonly,
                 context={'session': session}) as transaction:
             try:
-                PerfLog().on_enter(user, session,
-                    request.rpc_method, args, kwargs)
-            except:
-                perf_logger.exception('on_enter failed')
-            try:
                 c_args, c_kwargs, transaction.context, transaction.timestamp \
                     = rpc.convert(obj, *args, **kwargs)
                 meth = getattr(obj, method)
+
+                # AKE: perf analyzer hooks
                 try:
                     wrapped_meth = profile(meth)
-                except:
+                except Exception:
                     perf_logger.exception('profile failed')
                 else:
                     meth = wrapped_meth
+
                 if (rpc.instantiate is None
                         or not is_instance_method(obj, method)):
                     result = rpc.result(meth(*c_args, **c_kwargs))
@@ -218,44 +236,57 @@ def _dispatch(request, pool, *args, **kwargs):
                 if count and not rpc.readonly:
                     transaction.rollback()
                     continue
-                if log_threshold != -1:
+                logger.error(log_message, *log_args, exc_info=True)
+
+                # JCA: log slow RPC
+                if slowness_threshold >= 0:
                     log_end = time.time()
                     log_args += (str(log_end - log_start),)
-                log_exception(logger.error, log_message, *log_args)
+                    log_exception(slowness_logger.error, log_message, *log_args)
+
                 raise
             except (ConcurrencyException, UserError, UserWarning,
                     LoginException):
-                if log_threshold != -1:
+                logger.debug(log_message, *log_args, exc_info=True)
+
+                # JCA: log slow RPC
+                if slowness_threshold >= 0:
                     log_end = time.time()
                     log_args += (str(log_end - log_start),)
-                log_exception(logger.debug, log_message, *log_args)
+                    log_exception(slowness_logger.debug, log_message, *log_args)
+
                 raise
             except Exception:
-                if log_threshold != -1:
+                logger.error(log_message, *log_args, exc_info=True)
+
+                # JCA: log slow RPC
+                if slowness_threshold >= 0:
                     log_end = time.time()
                     log_args += (str(log_end - log_start),)
-                log_exception(logger.error, log_message, *log_args)
+                    log_exception(slowness_logger.error, log_message, *log_args)
+
                 raise
             # Need to commit to unlock SQLite database
             transaction.commit()
         if request.authorization.type == 'session':
-            try:
-                with Transaction().start(pool.database_name, 0) as transaction:
-                    Session = pool.get('ir.session')
-                    Session.reset(request.authorization.get('session'))
-            except DatabaseOperationalError:
-                log_exception(logger.debug, 'Reset session failed')
-        if log_threshold == -1:
-            logger.debug('Result: %s', result)
-        else:
+            # AKE: moved all session ops to security script
+            security.reset(
+                pool.database_name, request.authorization.get('session'))
+        logger.debug('Result: %s', result)
+
+        # JCA: log slow RPC
+        if slowness_threshold >= 0:
             log_end = time.time()
             log_args += (str(log_end - log_start),)
-            if log_end - log_start > log_threshold:
-                logger.info(log_message, *log_args)
+            if log_end - log_start > slowness_threshold:
+                slowness_logger.info(log_message, *log_args)
             else:
-                logger.debug(log_message, *log_args)
+                slowness_logger.debug(log_message, *log_args)
+
+        # AKE: perf analyzer hooks
         try:
             PerfLog().on_leave(result)
-        except:
+        except Exception:
             perf_logger.exception('on_leave failed')
+
         return result
