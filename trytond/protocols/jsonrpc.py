@@ -9,6 +9,7 @@ from werkzeug.wrappers import Response, Headers
 from werkzeug.utils import cached_property
 from werkzeug.exceptions import BadRequest, InternalServerError
 
+# AKE: log RPC method (uwsgi and header)
 try:
     import uwsgi
 except ImportError:
@@ -161,11 +162,13 @@ class JSONProtocol:
             if isinstance(data, Exception):
                 return InternalServerError(data)
             response = data
-        # add RPC Method in HTTP headers (better logging)
+
+        # AKE: log RPC method (uwsgi and header)
         if uwsgi:
             uwsgi.set_logvar('rpc', parsed_data['method'])
         headers = Headers()
         headers.add('RPC-Method', parsed_data['method'])
+
         return Response(json.dumps(
                 response, cls=JSONEncoder, separators=(',', ':')),
             content_type='application/json', headers=headers)

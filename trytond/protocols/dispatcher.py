@@ -155,7 +155,8 @@ def help_method(request, pool):
     return pydoc.getdoc(getattr(obj, method))
 
 
-@sentry_wrap  # AKE: hide tech exceptions and send then to sentry
+# AKE: hide tech exceptions and send them to sentry
+@sentry_wrap
 @app.auth_required
 @with_pool
 def _dispatch(request, pool, *args, **kwargs):
