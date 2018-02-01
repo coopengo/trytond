@@ -24,7 +24,7 @@ def config_session_redis():
 
 # AKE: manage session on redis
 def config_session_exclusive():
-    return config.getboolean('session', 'exclusive', default=False)
+    return config.getboolean('session', 'exclusive', default=True)
 
 
 def login(dbname, loginname, parameters, cache=True, language=None):
