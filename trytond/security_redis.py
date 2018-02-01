@@ -27,14 +27,23 @@ def key(dbname, user, session):
     return 'session:%s:%d:%s' % (dbname, user, session)
 
 
+def set_session(dbname, user, session, login):
+    k = key(dbname, user, session)
+    ttl = config.getint('session', 'timeout')
+    return get_client().setex(k, ttl, login)
+
+
+def hit_session(dbname, user, session):
+    k = key(dbname, user, session)
+    ttl = config.getint('session', 'timeout')
+    return get_client().expire(k, ttl)
+
+
 def get_session(dbname, user, session):
-    return get_client().get(key(dbname, user, session)) and True or False
-
-
-def set_session(dbname, user, session):
-    timeout = config.getint('session', 'timeout')
-    get_client().setex(key(dbname, user, session), timeout, '0')
+    k = key(dbname, user, session)
+    return get_client().get(k)
 
 
 def del_session(dbname, user, session):
-    get_client().delete(key(dbname, user, session))
+    k = key(dbname, user, session)
+    return get_client().delete(k)
