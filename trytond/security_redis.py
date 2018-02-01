@@ -53,12 +53,9 @@ def del_session(dbname, user, session):
 
 
 def count_sessions(dbname, user):
-    res = 0
     c = get_client()
     ks = key(dbname, user, '*')
-    for k in c.scan_iter(ks):
-        res += 1
-    return res
+    return len(list(c.scan_iter(ks)))
 
 
 def del_sessions(dbname, user):
