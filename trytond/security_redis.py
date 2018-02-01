@@ -1,3 +1,4 @@
+# AKE: manage session on redis
 from threading import Lock
 import redis
 from urlparse import urlparse

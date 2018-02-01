@@ -258,6 +258,7 @@ class User(ModelSQL, ModelView):
 
     @staticmethod
     def get_sessions(users, name):
+        # AKE: manage session on redis
         if security.config_session_redis():
             dbname = Pool().database_name
             return dict((u.id, security.redis.count_sessions(dbname, u.id))

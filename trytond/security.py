@@ -111,6 +111,7 @@ def check(dbname, user, session):
 
 
 def reset(dbname, user, session):
+    # AKE: manage session on redis
     if config_session_redis():
         return redis.hit_session(dbname, user, session)
     DatabaseOperationalError = backend.get('DatabaseOperationalError')
