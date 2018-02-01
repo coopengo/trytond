@@ -22,6 +22,11 @@ def config_session_redis():
     return config.get('session', 'redis', default=None)
 
 
+# AKE: manage session on redis
+def config_session_exclusive():
+    return config.getboolean('session', 'exclusive', default=False)
+
+
 def login(dbname, loginname, parameters, cache=True, language=None):
     DatabaseOperationalError = backend.get('DatabaseOperationalError')
     context = {'language': language}
@@ -48,6 +53,8 @@ def login(dbname, loginname, parameters, cache=True, language=None):
             session, = Session.create([{}])
             # AKE: manage session on redis
             if config_session_redis():
+                if config_session_exclusive():
+                    redis.del_sessions(dbname, user_id)
                 redis.set_session(dbname, user_id, session.key, loginname)
             return user_id, session.key
     return

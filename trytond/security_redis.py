@@ -47,3 +47,19 @@ def get_session(dbname, user, session):
 def del_session(dbname, user, session):
     k = key(dbname, user, session)
     return get_client().delete(k)
+
+
+def count_sessions(dbname, user):
+    res = 0
+    c = get_client()
+    ks = key(dbname, user, '*')
+    for k in c.scan_iter(ks):
+        res += 1
+    return res
+
+
+def del_sessions(dbname, user):
+    c = get_client()
+    ks = key(dbname, user, '*')
+    for k in c.scan_iter(ks):
+        c.delete(k)
