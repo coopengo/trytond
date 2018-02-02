@@ -98,10 +98,10 @@ def get_broker():
     return config.get('perf', 'broker', default=None)
 
 
-def check_user(login):
+def check_user(user):
     users = config.get('perf', 'users', default='')
-    users = [u.strip() for u in users.split(',') if len(u) > 0]
-    return login in users
+    users = [int(u.strip()) for u in users.split(',') if len(u) > 0]
+    return user in users
 
 
 def check_profile(method):
@@ -187,16 +187,19 @@ class PerfLog(object):
     def _q_key(self):
         return 'q:%s' % self.session
 
-    def on_enter(self, user, session, method, args, kwargs):
+    def on_enter(self):
         if self.broker is not None:
-            if check_user(user.login):
-                self.dt = time.time()
+            self.dt = time.time()
+
+    def on_execute(self, user, session, method, args, kwargs):
+        if self.broker is not None:
+            if check_user(user):
                 dts = datetime.fromtimestamp(self.dt).strftime(
                     '%Y-%m-%d@%H:%M:%S.%f')
                 # session
                 self.session = session
                 sess_key = self._sess_key()
-                self.broker.hsetnx(sess_key, 'user', user.login)
+                self.broker.hsetnx(sess_key, 'user', user)
                 id = self.broker.hincrby(sess_key, 'nb', 1)
                 self.broker.hsetnx(sess_key, 'first', dts)
                 self.broker.hset(sess_key, 'last', dts)
@@ -266,8 +269,8 @@ def parse_query(sql):
         return 'delete', r.group(1)
     r = seq_pattern.search(sql)
     if r:
-        return 'seq', None
-    raise Exception('failed on: %s' % sql)
+        return 'seq', 'x'
+    return 'other', 'x'
 
 
 def analyze_before(cursor):

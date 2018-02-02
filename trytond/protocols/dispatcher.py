@@ -182,6 +182,11 @@ def help_method(request, pool):
 @app.auth_required
 @with_pool
 def _dispatch(request, pool, *args, **kwargs):
+    try:
+        PerfLog().on_enter()
+    except Exception:
+        perf_logger.exception('on_enter failed')
+
     DatabaseOperationalError = backend.get('DatabaseOperationalError')
 
     obj, method = get_object_method(request, pool)
@@ -201,23 +206,23 @@ def _dispatch(request, pool, *args, **kwargs):
     if request.authorization.type == 'session':
         session = request.authorization.get('session')
 
+    try:
+        PerfLog().on_execute(user, session, request.rpc_method, args, kwargs)
+    except Exception:
+        perf_logger.exception('on_execute failed')
+
     for count in range(config.getint('database', 'retry'), -1, -1):
         with Transaction().start(pool.database_name, user,
                 readonly=rpc.readonly,
                 context={'session': session}) as transaction:
             Cache.clean(pool.database_name)
             try:
-                PerfLog().on_enter(pool.get('res.user')(user), session,
-                    request.method, args, kwargs)
-            except:
-                perf_logger.exception('on_enter failed')
-            try:
                 c_args, c_kwargs, transaction.context, transaction.timestamp \
                     = rpc.convert(obj, *args, **kwargs)
                 meth = getattr(obj, method)
                 try:
                     wrapped_meth = profile(meth)
-                except:
+                except Exception:
                     perf_logger.exception('profile failed')
                 else:
                     meth = wrapped_meth
@@ -248,16 +253,12 @@ def _dispatch(request, pool, *args, **kwargs):
             transaction.commit()
             Cache.resets(pool.database_name)
         if request.authorization.type == 'session':
-            try:
-                with Transaction().start(pool.database_name, 0) as transaction:
-                    Session = pool.get('ir.session')
-                    Session.reset(request.authorization.get('session'))
-            except DatabaseOperationalError:
-                logger.debug('Reset session failed', exc_info=True)
+            security.reset(pool.database_name, user,
+                request.authorization.get('session'))
         logger.debug('Result: %s', result)
         try:
             PerfLog().on_leave(result)
-        except:
+        except Exception:
             perf_logger.exception('on_leave failed')
         return result
 
