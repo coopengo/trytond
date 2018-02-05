@@ -5,6 +5,8 @@ import ConfigParser
 import urlparse
 import logging
 
+import six
+
 __all__ = ['config', 'get_hostname', 'get_port', 'split_netloc',
     'parse_listen', 'parse_uri']
 logger = logging.getLogger(__name__)
@@ -89,7 +91,11 @@ class TrytonConfigParser(ConfigParser.RawConfigParser):
             configfile = [configfile]
         if not configfile or not filter(None, configfile):
             return
-        read_files = self.read(configfile)
+        if six.PY2:
+            read_files = self.read(configfile)
+        else:
+            read_files = self.read(configfile, strict=False)
+
         logger.info('using %s as configuration files', ', '.join(read_files))
 
     def get(self, section, option, *args, **kwargs):
