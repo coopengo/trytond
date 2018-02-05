@@ -19,6 +19,8 @@ from sql.conditionals import Coalesce
 from sql.aggregate import Count
 from sql.operators import Concat
 
+import trytond.security as security
+
 try:
     import bcrypt
 except ImportError:
@@ -209,6 +211,11 @@ class User(ModelSQL, ModelView):
 
     @staticmethod
     def get_sessions(users, name):
+        # AKE: manage session on redis
+        if security.config_session_redis():
+            dbname = Pool().database_name
+            return {u.id: security.redis.count_sessions(dbname, u.id)
+                for u in users}
         Session = Pool().get('ir.session')
         now = datetime.datetime.now()
         timeout = datetime.timedelta(

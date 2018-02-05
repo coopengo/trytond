@@ -1,4 +1,6 @@
-import time
+# This file is part of Coog. The COPYRIGHT file at the top level of
+# this repository contains the full copyright notices and license terms.
+# AKE: manage session on redis
 from threading import Lock
 import redis
 from urlparse import urlparse
@@ -13,7 +15,7 @@ def get_client():
     global _client, _client_lock
     with _client_lock:
         if _client is None:
-            redis_uri = config.get('cache', 'uri')
+            redis_uri = config.get('session', 'redis')
             assert redis_uri, 'redis uri not set'
             url = urlparse(redis_uri)
             assert url.scheme == 'redis', 'invalid redis url'
@@ -28,23 +30,36 @@ def key(dbname, user, session):
     return 'session:%s:%d:%s' % (dbname, user, session)
 
 
-def has_session(dbname, user, session):
-    last = get_client().get(key(dbname, user, session))
-    if not last:
-        return False
-    last = int(last)
-    now = int(time.time())
-    timeout = config.getint('session', 'timeout')
-    if (now - last > timeout):
-        del_session(dbname, user, session)
-        return False
-    else:
-        return True
+def set_session(dbname, user, session, login):
+    k = key(dbname, user, session)
+    ttl = config.getint('session', 'timeout')
+    return get_client().setex(k, ttl, login)
 
 
-def set_session(dbname, user, session):
-    get_client().set(key(dbname, user, session), int(time.time()))
+def hit_session(dbname, user, session):
+    k = key(dbname, user, session)
+    ttl = config.getint('session', 'timeout')
+    return get_client().expire(k, ttl)
+
+
+def get_session(dbname, user, session):
+    k = key(dbname, user, session)
+    return get_client().get(k)
 
 
 def del_session(dbname, user, session):
-    get_client().delete(key(dbname, user, session))
+    k = key(dbname, user, session)
+    return get_client().delete(k)
+
+
+def count_sessions(dbname, user):
+    c = get_client()
+    ks = key(dbname, user, '*')
+    return len(list(c.scan_iter(ks)))
+
+
+def del_sessions(dbname, user):
+    c = get_client()
+    ks = key(dbname, user, '*')
+    for k in c.scan_iter(ks):
+        c.delete(k)
