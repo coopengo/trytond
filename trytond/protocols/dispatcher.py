@@ -268,7 +268,7 @@ def _dispatch(request, pool, *args, **kwargs):
         if request.authorization.type == 'session':
             # AKE: moved all session ops to security script
             security.reset(
-                pool.database_name, request.authorization.get('session'))
+                pool.database_name, user, request.authorization.get('session'))
         logger.debug('Result: %s', result)
 
         # JCA: log slow RPC
