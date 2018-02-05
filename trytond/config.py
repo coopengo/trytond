@@ -42,7 +42,10 @@ def parse_uri(uri):
 class TrytonConfigParser(ConfigParser.RawConfigParser):
 
     def __init__(self):
-        ConfigParser.RawConfigParser.__init__(self)
+        if six.PY2:
+            ConfigParser.RawConfigParser.__init__(self)
+        else:
+            ConfigParser.RawConfigParser.__init__(self, strict=False)
         self.add_section('web')
         self.set('web', 'listen', 'localhost:8000')
         # AKE: web apps from env vars
@@ -91,11 +94,7 @@ class TrytonConfigParser(ConfigParser.RawConfigParser):
             configfile = [configfile]
         if not configfile or not filter(None, configfile):
             return
-        if six.PY2:
-            read_files = self.read(configfile)
-        else:
-            read_files = self.read(configfile, strict=False)
-
+        read_files = self.read(configfile)
         logger.info('using %s as configuration files', ', '.join(read_files))
 
     def get(self, section, option, *args, **kwargs):
