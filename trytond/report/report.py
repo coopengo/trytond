@@ -32,6 +32,8 @@ from trytond.rpc import RPC
 from trytond.exceptions import UserError
 from trytond.tools import get_parent_language
 
+import requests
+
 MIMETYPES = {
     'odt': 'application/vnd.oasis.opendocument.text',
     'odp': 'application/vnd.oasis.opendocument.presentation',
@@ -282,7 +284,7 @@ class Report(URLMixin, PoolBase):
         return data
 
     @classmethod
-    def convert(cls, report, data):
+    def convert_unoconv(cls, report, data):
         "converts the report data to another mimetype if necessary"
         input_format = report.template_extension
         output_format = report.extension or report.template_extension
@@ -311,6 +313,34 @@ class Report(URLMixin, PoolBase):
             return oext, stdoutdata
         finally:
             os.remove(path)
+
+    @classmethod
+    def convert_api(cls, report, data):
+        "converts the report data to another mimetype if necessary"
+        input_format = report.template_extension
+        output_format = report.extension or report.template_extension
+
+        if output_format in MIMETYPES:
+            return output_format, data
+
+        oext = FORMAT2EXT.get(output_format, output_format)
+        url_tpl = config.get('report', 'api')
+        url = url_tpl.format(oext=oext)
+        files = {'file': ('doc.' + input_format, data)}
+        r = requests.post(url, files=files)
+        if r.status_code < 300:
+            return oext, r.content
+        else:
+            raise Exception(r)
+
+    @classmethod
+    def convert(cls, report, data):
+        if config.get('report', 'api', default=None):
+            return cls.convert_api(report, data)
+        elif config.get('report', 'unoconv', default=None):
+            return cls.convert_unoconv(report, data)
+        else:
+            raise NotImplementedError
 
     @classmethod
     def format_date(cls, value, lang):
