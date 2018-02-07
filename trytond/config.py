@@ -5,6 +5,8 @@ import ConfigParser
 import urlparse
 import logging
 
+import six
+
 __all__ = ['config', 'get_hostname', 'get_port', 'split_netloc',
     'parse_listen', 'parse_uri']
 logger = logging.getLogger(__name__)
@@ -40,7 +42,10 @@ def parse_uri(uri):
 class TrytonConfigParser(ConfigParser.RawConfigParser):
 
     def __init__(self):
-        ConfigParser.RawConfigParser.__init__(self)
+        if six.PY2:
+            ConfigParser.RawConfigParser.__init__(self)
+        else:
+            ConfigParser.RawConfigParser.__init__(self, strict=False)
         self.add_section('web')
         self.set('web', 'listen', 'localhost:8000')
         # AKE: web apps from env vars
