@@ -284,8 +284,19 @@ class Report(URLMixin, PoolBase):
         return data
 
     @classmethod
-    def convert_unoconv(cls, report, data):
+    def convert(cls, report, data):
         "converts the report data to another mimetype if necessary"
+        # AKE: support printing via external api
+        if config.get('report', 'api', default=None):
+            return cls.convert_api(report, data)
+        elif config.get('report', 'unoconv', default=None):
+            return cls.convert_unoconv(report, data)
+        else:
+            raise NotImplementedError
+
+    @classmethod
+    def convert_unoconv(cls, report, data):
+        # AKE: support printing via external api
         input_format = report.template_extension
         output_format = report.extension or report.template_extension
 
@@ -316,7 +327,7 @@ class Report(URLMixin, PoolBase):
 
     @classmethod
     def convert_api(cls, report, data):
-        "converts the report data to another mimetype if necessary"
+        # AKE: support printing via external api
         input_format = report.template_extension
         output_format = report.extension or report.template_extension
 
@@ -332,15 +343,6 @@ class Report(URLMixin, PoolBase):
             return oext, r.content
         else:
             raise Exception(r)
-
-    @classmethod
-    def convert(cls, report, data):
-        if config.get('report', 'api', default=None):
-            return cls.convert_api(report, data)
-        elif config.get('report', 'unoconv', default=None):
-            return cls.convert_unoconv(report, data)
-        else:
-            raise NotImplementedError
 
     @classmethod
     def format_date(cls, value, lang):
