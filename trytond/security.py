@@ -69,7 +69,6 @@ def logout(dbname, user, session):
         session, = sessions
         name = session.create_uid.login
         Session.delete(sessions)
-        redis.del_session(dbname, user, session)
     return name
 
 
