@@ -1074,8 +1074,9 @@ class ModelData(ModelSQL, ModelView):
 
     @classmethod
     def create(cls, *args):
-        super(ModelData, cls).create(*args)
+        created = super(ModelData, cls).create(*args)
         cls._has_model_cache.clear()
+        return created
 
     @classmethod
     def write(cls, data, values, *args):
