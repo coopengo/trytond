@@ -207,7 +207,7 @@ def _dispatch(request, pool, *args, **kwargs):
         session = request.authorization.get('session')
 
     try:
-        PerfLog().on_execute(user, session, request.rpc_method, args, kwargs)
+        PerfLog().on_execute(user, session, request.method, args, kwargs)
     except Exception:
         perf_logger.exception('on_execute failed')
 

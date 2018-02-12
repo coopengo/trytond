@@ -895,15 +895,17 @@ class ModelData(ModelSQL, ModelView):
 
     @classmethod
     def write(cls, data, values, *args):
-        super(ModelData, cls).write(data, values, *args)
+        res = super(ModelData, cls).write(data, values, *args)
         # Restart the cache for get_id
         cls._get_id_cache.clear()
         cls._has_model_cache.clear()
+        return res
 
     @classmethod
     def delete(cls, records):
-        super(ModelData, cls).delete(records)
+        res = super(ModelData, cls).delete(records)
         cls._has_model_cache.clear()
+        return res
 
     @classmethod
     def has_model(cls, model):
