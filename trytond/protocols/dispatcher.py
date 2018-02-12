@@ -250,7 +250,7 @@ def _dispatch(request, pool, *args, **kwargs):
 
                 # JCA: log slow RPC
                 if slow_threshold >= 0:
-                    slow_args += (str(time.time - slow_start),)
+                    slow_args += (str(time.time() - slow_start),)
                     log_exception(slow_logger.debug, slow_msg, *slow_args)
 
                 raise
