@@ -49,7 +49,20 @@ class Request(_Request):
         authorization = super(Request, self).authorization
         if authorization is None:
             header = self.environ.get('HTTP_AUTHORIZATION')
-            return parse_authorization_header(header)
+            auth = parse_authorization_header(header)
+            if auth and auth.type == 'token':
+                database_name = self.view_args.get('database_name')
+                if not database_name:
+                    return None
+                user_id, party_id = security.check_token(
+                    database_name, auth.get('token'))
+                return Authorization('token', {
+                        'token': auth.get('token'),
+                        'user_id': user_id,
+                        'party_id': party_id
+                    })
+            else:
+                return auth
         return authorization
 
     @cached_property
@@ -63,6 +76,8 @@ class Request(_Request):
         if auth.type == 'session':
             user_id = security.check(
                 database_name, auth.get('userid'), auth.get('session'))
+        elif auth.type == 'token':
+            user_id = auth.get('user_id')
         else:
             user_id = security.login(
                 database_name, auth.username, auth, cache=False)
@@ -90,6 +105,8 @@ def parse_authorization_header(value):
                 'userid': userid,
                 'session': bytes_to_wsgi(session),
                 })
+    elif auth_type == b'token':
+        return Authorization('token', {'token': auth_info})
 
 
 def set_max_request_size(size):

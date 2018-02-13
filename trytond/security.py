@@ -120,6 +120,20 @@ def check(dbname, user, session):
                 transaction.commit()
 
 
+def check_token(dbname, token):
+    DatabaseOperationalError = backend.get('DatabaseOperationalError')
+    for count in range(config.getint('database', 'retry'), -1, -1):
+        with Transaction().start(dbname, 0, readonly=True):
+            pool = _get_pool(dbname)
+            Token = pool.get('api.token')
+            try:
+                return Token.check(token)
+            except DatabaseOperationalError:
+                if count:
+                    continue
+                raise
+
+
 def reset(dbname, user, session):
     # AKE: manage session on redis
     if config_session_redis():
