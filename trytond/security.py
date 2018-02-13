@@ -27,6 +27,11 @@ def config_session_exclusive():
     return config.getboolean('session', 'exclusive', default=True)
 
 
+# AKE: manage session on redis
+def config_session_audit():
+    return config.getboolean('session', 'audit', default=True)
+
+
 def login(dbname, loginname, parameters, cache=True, language=None):
     DatabaseOperationalError = backend.get('DatabaseOperationalError')
     context = {'language': language}
@@ -91,7 +96,12 @@ def logout(dbname, user, session):
 def check(dbname, user, session):
     # AKE: manage session on redis
     if config_session_redis():
-        return redis.get_session(dbname, user, session) and user
+        ttl = redis.hit_session(dbname, user, session)
+        if ttl is not None:
+            if config_session_audit():
+                redis.time_user(dbname, user, ttl)
+            return user
+        return
     DatabaseOperationalError = backend.get('DatabaseOperationalError')
     for count in range(config.getint('database', 'retry'), -1, -1):
         with Transaction().start(dbname, user) as transaction:
@@ -113,7 +123,10 @@ def check(dbname, user, session):
 def reset(dbname, user, session):
     # AKE: manage session on redis
     if config_session_redis():
-        return redis.hit_session(dbname, user, session)
+        ttl = redis.hit_session(dbname, user, session)
+        if ttl is not None and config_session_audit():
+            redis.time_user(dbname, user, ttl)
+        return
     DatabaseOperationalError = backend.get('DatabaseOperationalError')
     try:
         with Transaction().start(dbname, 0):
