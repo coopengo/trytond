@@ -104,6 +104,19 @@ def check(dbname, user, session, context=None):
         return user
 
 
+def check_token(dbname, token):
+    for count in range(config.getint('database', 'retry'), -1, -1):
+        with Transaction().start(dbname, 0, readonly=True):
+            pool = _get_pool(dbname)
+            Token = pool.get('api.token')
+            try:
+                return Token.check(token)
+            except backend.DatabaseOperationalError:
+                if count:
+                    continue
+                raise
+
+
 def check_timeout(dbname, user, session, context=None):
     for count in range(config.getint('database', 'retry'), -1, -1):
         with Transaction().start(dbname, user, context=context) as transaction:
