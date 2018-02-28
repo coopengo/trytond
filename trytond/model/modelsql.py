@@ -1003,6 +1003,7 @@ class ModelSQL(ModelStorage):
 
         cls.__check_timestamp(ids)
 
+        has_translation = False
         tree_ids = {}
         for fname, field in cls._fields.iteritems():
             if (isinstance(field, fields.Many2One)
@@ -1013,6 +1014,9 @@ class ModelSQL(ModelStorage):
                     where = reduce_ids(field.sql_column(table), sub_ids)
                     cursor.execute(*table.select(table.id, where=where))
                     tree_ids[fname] += [x[0] for x in cursor.fetchall()]
+            if (getattr(field, 'translate', False)
+                    and not hasattr(field, 'set')):
+                has_translation = True
 
         foreign_keys_tocheck = []
         foreign_keys_toupdate = []
@@ -1116,7 +1120,8 @@ class ModelSQL(ModelStorage):
                         exception, {}, transaction=transaction)
                 raise
 
-        Translation.delete_ids(cls.__name__, 'model', ids)
+        if has_translation:
+            Translation.delete_ids(cls.__name__, 'model', ids)
 
         cls._insert_history(ids, deleted=True)
 
