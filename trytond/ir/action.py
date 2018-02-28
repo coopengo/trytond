@@ -105,6 +105,7 @@ class ActionKeyword(ModelSQL, ModelView):
             ('form_print', 'Print form'),
             ('form_action', 'Action form'),
             ('form_relate', 'Form relate'),
+            ('form_toolbar', 'Form Toolbar'),
             ('graph_open', 'Open Graph'),
             ], string='Keyword', required=True)
     model = fields.Reference('Model', selection='models_get')
