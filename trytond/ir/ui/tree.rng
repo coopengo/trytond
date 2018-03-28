@@ -128,7 +128,7 @@
   </define>
   <define name="attlist.field" combine="interleave">
     <optional>
-      <attribute name="high_light_sum" a:defaultValue="0"/>
+      <attribute name="highlight_sum" a:defaultValue="0"/>
     </optional>
   </define>
   <define name="attlist.field" combine="interleave">
