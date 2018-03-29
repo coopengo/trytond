@@ -381,7 +381,8 @@ class User(ModelSQL, ModelView):
         Config = pool.get('ir.configuration')
         ConfigItem = pool.get('ir.module.config_wizard.item')
 
-        res = {}
+        party = Transaction().context.get('party', None)
+        res = {'token': {'user': user.id, 'party': party}}
         if context_only:
             fields = cls._context_fields
         else:
