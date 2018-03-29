@@ -382,6 +382,10 @@ class User(ModelSQL, ModelView):
         ConfigItem = pool.get('ir.module.config_wizard.item')
 
         res = {}
+        # AKE: add token information to get_preferences RPC
+        token = Transaction().context.get('token', None)
+        if token is not None:
+            res['token'] = token
         if context_only:
             fields = cls._context_fields
         else:

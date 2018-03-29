@@ -195,10 +195,14 @@ def _dispatch(request, pool, *args, **kwargs):
     # AKE: add session to transaction context
     if request.authorization.type == 'session':
         session = request.authorization.get('session')
-        party = None
+        token = None
     elif request.authorization.type == 'token':
-        session = request.authorization.get('token')
-        party = request.authorization.get('party_id')
+        session = None
+        token = {
+            'key': request.authorization.get('token'),
+            'user': user,
+            'party': request.authorization.get('party_id'),
+            }
 
     # AKE: perf analyzer hooks
     try:
@@ -212,7 +216,7 @@ def _dispatch(request, pool, *args, **kwargs):
                 readonly=rpc.readonly,
                 context={
                     'session': session,
-                    'party': party
+                    'token': token,
                     }) as transaction:
             try:
                 c_args, c_kwargs, transaction.context, transaction.timestamp \
