@@ -460,6 +460,10 @@ class User(avatar_mixin(100, 'login'), DeactivableMixin, ModelSQL, ModelView):
         Lang = pool.get('ir.lang')
 
         res = {}
+        # AKE: add token information to get_preferences RPC
+        token = Transaction().context.get('token', None)
+        if token is not None:
+            res['token'] = token
         if context_only:
             fields = cls._context_fields
         else:
