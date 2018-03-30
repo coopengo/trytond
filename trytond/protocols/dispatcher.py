@@ -211,16 +211,16 @@ def _dispatch(request, pool, *args, **kwargs):
         perf_logger.exception('on_execute failed')
 
     for count in range(config.getint('database', 'retry'), -1, -1):
-        # AKE: add session to transaction context
         with Transaction().start(pool.database_name, user,
-                readonly=rpc.readonly,
-                context={
-                    'session': session,
-                    'token': token,
-                    }) as transaction:
+                readonly=rpc.readonly) as transaction:
             try:
                 c_args, c_kwargs, transaction.context, transaction.timestamp \
                     = rpc.convert(obj, *args, **kwargs)
+                # AKE: add session to transaction context
+                transaction.context.update({
+                        'session': session,
+                        'token': token,
+                        })
                 meth = getattr(obj, method)
 
                 # AKE: perf analyzer hooks
