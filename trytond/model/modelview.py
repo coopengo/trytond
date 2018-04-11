@@ -198,6 +198,14 @@ class ModelView(Model):
                 setattr(field, attribute,
                     getattr(field, attribute)
                     | getattr(other_field, attribute))
+                # JMO : work around BUG#8723
+                func = getattr(cls, attribute + '_' + field_name, None)
+                if func:
+                    if not hasattr(func, 'depends'):
+                        setattr(func, 'depends', set())
+                    deps = getattr(func, 'depends')
+                    deps |= getattr(other_field, attribute, set())
+
 
     @classmethod
     def fields_view_get(cls, view_id=None, view_type='form'):
