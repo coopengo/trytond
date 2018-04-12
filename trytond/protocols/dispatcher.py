@@ -193,11 +193,10 @@ def _dispatch(request, pool, *args, **kwargs):
     user = request.user_id
 
     # AKE: add session to transaction context
+    token, session = None, None
     if request.authorization.type == 'session':
         session = request.authorization.get('session')
-        token = None
     elif request.authorization.type == 'token':
-        session = None
         token = {
             'key': request.authorization.get('token'),
             'user': user,
