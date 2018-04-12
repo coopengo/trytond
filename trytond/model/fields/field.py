@@ -101,7 +101,9 @@ def depends(*fields, **kwargs):
 
         @wraps(func)
         def wrapper(self, *args, **kwargs):
-            for field in fields:
+            # JMO : work around BUG#8723
+            method_depends = getattr(func, 'depends', set())
+            for field in (set(fields) | method_depends):
                 _set_value(self, field)
             return func(self, *args, **kwargs)
         return wrapper
