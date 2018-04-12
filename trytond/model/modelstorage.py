@@ -1079,8 +1079,8 @@ class ModelStorage(Model):
                             or any(d is None for d in digits)):
                         return
                     if isinstance(value, Decimal):
-                        if (value.quantize(Decimal(str(10.0 ** -digits[1])))
-                                != value):
+                        exp = Decimal('.'.join(['0', '0' * digits[1]]))
+                        if value.quantize(exp) != value:
                             raise_user_error(value)
                     elif backend.name() != 'mysql':
                         if not (round(value, digits[1]) == float(value)):
