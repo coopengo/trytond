@@ -1170,6 +1170,7 @@ class PrintModelGraphStart(ModelView):
     level = fields.Integer('Level', required=True)
     filter = fields.Text('Filter', help="Entering a Python "
             "Regular Expression will exclude matching models from the graph.")
+    # JCA : Add ignore function option
     ignore_function = fields.Boolean('Ignore function fields')
 
     @staticmethod
@@ -1274,6 +1275,7 @@ class ModelGraph(Report):
                         'create_date', 'write_date', 'id'):
                     continue
                 field_desc = ModelClass._fields[field.name]
+                # JCA : Add ignore function option
                 if ignore_function and isinstance(field_desc, fields.Function):
                     continue
                 label += '+ ' + field.name + ': ' + field.ttype
@@ -1289,6 +1291,7 @@ class ModelGraph(Report):
                 if field.name in ('create_uid', 'write_uid'):
                     continue
                 field_desc = ModelClass._fields[field.name]
+                # JCA : Add ignore function option
                 if ignore_function and isinstance(field_desc, fields.Function):
                     continue
                 if field.relation:
