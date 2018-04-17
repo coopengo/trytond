@@ -1170,8 +1170,7 @@ class PrintModelGraphStart(ModelView):
     level = fields.Integer('Level', required=True)
     filter = fields.Text('Filter', help="Entering a Python "
             "Regular Expression will exclude matching models from the graph.")
-    # JCA : Add ignore function option
-    ignore_function = fields.Boolean('Ignore Function fields')
+    ignore_function = fields.Boolean('Ignore function fields')
 
     @staticmethod
     def default_level():
@@ -1231,12 +1230,14 @@ class ModelGraph(Report):
         graph = pydot.Dot(fontsize="8")
         graph.set('center', '1')
         graph.set('ratio', 'auto')
-        cls.fill_graph(models, graph, level=data['level'], filter=filter)
+        cls.fill_graph(models, graph, level=data['level'], filter=filter,
+            ignore_function=data['ignore_function'])
         data = graph.create(prog='dot', format='png')
         return ('png', fields.Binary.cast(data), False, action_report.name)
 
     @classmethod
-    def fill_graph(cls, models, graph, level=1, filter=None):
+    def fill_graph(cls, models, graph, level=1, filter=None,
+            ignore_function=False):
         '''
         Fills a pydot graph with a models structure.
         '''
@@ -1259,7 +1260,7 @@ class ModelGraph(Report):
                 sub_models = Model.browse(model_ids)
                 if set(sub_models) != set(models):
                     cls.fill_graph(sub_models, graph, level=level - 1,
-                            filter=filter)
+                            filter=filter, ignore_function=ignore_function)
 
         for model in models:
             if filter and re.search(filter, model.model):
@@ -1273,9 +1274,7 @@ class ModelGraph(Report):
                         'create_date', 'write_date', 'id'):
                     continue
                 field_desc = ModelClass._fields[field.name]
-                # JCA : Add ignore function option
-                if (isinstance(field_desc, fields.Function)
-                        and not isinstance(field_desc, fields.Property)):
+                if ignore_function and isinstance(field_desc, fields.Function):
                     continue
                 label += '+ ' + field.name + ': ' + field.ttype
                 if field.relation:
@@ -1290,9 +1289,7 @@ class ModelGraph(Report):
                 if field.name in ('create_uid', 'write_uid'):
                     continue
                 field_desc = ModelClass._fields[field.name]
-                # JCA : Add ignore function option
-                if (isinstance(field_desc, fields.Function)
-                        and not isinstance(field_desc, fields.Property)):
+                if ignore_function and isinstance(field_desc, fields.Function):
                     continue
                 if field.relation:
                     node_name = '"%s"' % field.relation
