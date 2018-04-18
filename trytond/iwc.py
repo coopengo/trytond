@@ -91,4 +91,6 @@ def stop():
         return
     logger.info('init_pool: %s stopping', get_worker_id())
     listener.stop()
+    del listener
     del broker
+    del no_redis
