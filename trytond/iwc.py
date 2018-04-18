@@ -7,10 +7,11 @@ from urlparse import urlparse
 import logging
 import redis
 from trytond.pool import Pool
-from trytond.transaction import Transaction
 from trytond.config import config
 
 logger = logging.getLogger(__name__)
+
+no_redis = False
 broker = None
 listener = None
 
@@ -38,55 +39,56 @@ class Listener(threading.Thread):
         self.pubsub.unsubscribe()
 
 
-def init_pool_cb(data):
+def get_worker_id():
+    return '%s-%s' % (os.environ.get('HOSTNAME', 'localhost'), os.getpid())
+
+
+def on_init_pool(data):
     data = json.loads(data)
-    pid = data['pid']
+    origin = data['origin']
     dbname = data['dbname']
-    mypid = os.getpid()
-    logger.info('init_pool(%s): %s <= %s', dbname, mypid, pid)
-    if pid != mypid:
+    me = get_worker_id()
+    if me != origin:
+        logger.info('init_pool(%s): %s <= %s', dbname, me, origin)
         Pool.stop(dbname)
         Pool(dbname).init()
 
 
-def broadcast_init_pool():
-    if is_started():
-        pid = os.getpid()
-        dbname = Transaction().database.name
-        broker.publish('init_pool', json.dumps({'pid': pid, 'dbname': dbname}))
-        logger.info('init pool(%s): %s =>>>', dbname, pid)
-
-
-def is_started():
-    global listener
-    return listener is not None and listener.started
+def broadcast_init_pool(dbname):
+    global broker
+    if broker is not None:
+        me = get_worker_id()
+        broker.publish('init_pool', json.dumps({
+                    'origin': me,
+                    'dbname': dbname
+                    }))
+        logger.info('init_pool(%s): %s =>>>', dbname, me)
 
 
 def start():
-    if os.environ.get('WSGI_LOG_FILE'):
-        global broker
-        global listener
-        logger.info('init_pool: start on %s', os.getpid())
-        if broker:
-            logger.warning('init_pool: already started on %s', os.getpid())
-            return
-        redis_url = config.get('cache', 'uri')
-        if redis_url:
-            url = urlparse(redis_url)
-            assert url.scheme == 'redis', 'invalid redis url'
-            host = url.hostname
-            port = url.port
-            db = url.path.strip('/')
-            broker = redis.StrictRedis(host=host, port=port, db=db)
-            listener = Listener(broker, {'init_pool': init_pool_cb})
-            listener.start()
+    global no_redis, broker, listener
+    if no_redis is True or listener is not None:
+        return
+    redis_url = config.get('cache', 'uri')
+    if redis_url:
+        logger.info('init_pool: %s starting', get_worker_id())
+        url = urlparse(redis_url)
+        assert url.scheme == 'redis', 'invalid redis url'
+        host = url.hostname
+        port = url.port
+        db = url.path.strip('/')
+        broker = redis.StrictRedis(host=host, port=port, db=db)
+        listener = Listener(broker, {'init_pool': on_init_pool})
+        listener.start()
+    else:
+        logger.info('init_pool: %s no redis config to start', get_worker_id())
+        no_redis = True
 
 
 def stop():
-    logger.info('init_pool: stop on %s', os.getpid())
-    global listener
-    if listener is not None:
-        listener.stop()
-    global broker
-    if broker is not None:
-        del broker
+    global no_redis, broker, listener
+    if no_redis is True or listener is None:
+        return
+    logger.info('init_pool: %s stopping', get_worker_id())
+    listener.stop()
+    del broker
