@@ -104,9 +104,6 @@ class Pool(object):
                 classes.clear()
             cls._init_hooks = {}
             register_classes()
-            # AKE: inter-workers communication (start listener)
-            from trytond import iwc
-            iwc.start()
             cls._started = True
 
     @classmethod
@@ -151,9 +148,14 @@ class Pool(object):
         Set update to proceed to update
         lang is a list of language code to be updated
         '''
+        # AKE: inter-workers communication
+        from trytond import iwc
         with self._lock:
+            # AKE: inter-workers communication
+            iwc.start()
             if not self._started:
                 self.start()
+
         with self._locks[self.database_name]:
             # Don't reset pool if already init and not to update
             if not update and self._pool.get(self.database_name):
@@ -168,6 +170,9 @@ class Pool(object):
                     lang=lang, installdeps=installdeps)
             if restart:
                 self.init()
+            # AKE: inter-workers communication
+            if update:
+                iwc.broadcast_init_pool(self.database_name)
 
     def post_init(self, update):
         for hook in self._post_init_calls[self.database_name]:
