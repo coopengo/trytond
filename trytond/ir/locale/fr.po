@@ -1668,6 +1668,10 @@ msgctxt "field:ir.model.print_model_graph.start,id:"
 msgid "ID"
 msgstr "ID"
 
+msgctxt "field:ir.model.print_model_graph.start,ignore_function:"
+msgid "Ignore function fields"
+msgstr "Ignorer les champs fonctions"
+
 msgctxt "field:ir.model.print_model_graph.start,level:"
 msgid "Level"
 msgstr "Niveau"
