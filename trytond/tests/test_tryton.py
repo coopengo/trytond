@@ -594,19 +594,7 @@ def drop_db(name=DB_NAME):
         with Transaction().start(
                 None, 0, close=True, autocommit=True, _nocache=True) \
                 as transaction:
-            # PJA: fix concurrent access when dropping database
-            attempt = 0
-            max_attempts = 10
-            while True:
-                attempt += 1
-                try:
-                    database.drop(transaction.connection, name)
-                    break
-                except:
-                    if attempt > max_attempts:
-                        raise
-                    else:
-                        time.sleep(3)
+            database.drop(transaction.connection, name)
             Pool.stop(name)
             Cache.drop(name)
 
