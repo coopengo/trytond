@@ -11,6 +11,7 @@ from trytond.config import config
 
 logger = logging.getLogger(__name__)
 
+iwc_on = os.environ.get('COOG_IWC', None) == '1'
 no_redis = False
 broker = None
 listener = None
@@ -66,8 +67,8 @@ def broadcast_init_pool(dbname):
 
 
 def start():
-    global no_redis, broker, listener
-    if no_redis is True or listener is not None:
+    global iwc_on, no_redis, broker, listener
+    if iwc_on is False or no_redis is True or listener is not None:
         return
     redis_url = config.get('cache', 'uri')
     if redis_url:
@@ -86,8 +87,8 @@ def start():
 
 
 def stop():
-    global no_redis, broker, listener
-    if no_redis is True or listener is None:
+    global iwc_on, no_redis, broker, listener
+    if iwc_on is False or no_redis is True or listener is None:
         return
     logger.info('init_pool: %s stopping', get_worker_id())
     listener.stop()
