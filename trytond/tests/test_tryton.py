@@ -46,11 +46,14 @@ DB_CACHE = os.environ.get('DB_CACHE')
 Pool.test = True
 
 
-def activate_module(name):
+# JCA : Allow to force filename in case it is too long
+def activate_module(name, cache_file_name=None):
     '''
     Activate module for the tested database
     '''
-    if not db_exist(DB_NAME) and restore_db_cache(name):
+    if cache_file_name is None:
+        cache_file_name = name
+    if not db_exist(DB_NAME) and restore_db_cache(cache_file_name):
         return
     create_db()
     with Transaction().start(DB_NAME, 1, close=True) as transaction:
@@ -78,7 +81,7 @@ def activate_module(name):
             ActivateUpgrade(instance_id).transition_upgrade()
             ActivateUpgrade.delete(instance_id)
             transaction.commit()
-    backup_db_cache(name)
+    backup_db_cache(cache_file_name)
 
 
 def restore_db_cache(name):
@@ -208,11 +211,12 @@ def with_transaction(user=1, context=None):
 class ModuleTestCase(unittest.TestCase):
     'Trytond Test Case'
     module = None
+    cache_file_name = None
 
     @classmethod
     def setUpClass(cls):
         drop_db()
-        activate_module(cls.module)
+        activate_module(cls.module, cls.cache_file_name)
         super(ModuleTestCase, cls).setUpClass()
 
     @classmethod

@@ -7,10 +7,11 @@ from .test_tryton import restore_db_cache, backup_db_cache, drop_db, create_db
 __all__ = ['activate_modules', 'set_user']
 
 
-def activate_modules(modules):
+# JCA : Allow to force filename in case it is too long
+def activate_modules(modules, cache_file_name=None):
     if isinstance(modules, basestring):
         modules = [modules]
-    cache_name = '-'.join(modules)
+    cache_name = cache_file_name or '-'.join(modules)
     # JCA : restore_db_cache fails if the database already exists
     drop_db()
     if restore_db_cache(cache_name):
