@@ -181,6 +181,7 @@ def _pg_dump(cache_file):
         cache_name, _ = os.path.splitext(os.path.basename(cache_file))
         # Ensure any connection is left open
         backend.get('Database')(DB_NAME).close()
+        time.sleep(31)
         with Transaction().start(
                 None, 0, close=True, autocommit=True, _nocache=True) \
                 as transaction:
