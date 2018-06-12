@@ -132,6 +132,8 @@ def is_module_to_install(module, update):
 
 
 def load_module_graph(graph, pool, update=None, lang=None):
+    from trytond.ir.lang import get_parent_language
+
     if lang is None:
         lang = [config.get('database', 'language')]
     if update is None:
@@ -144,20 +146,21 @@ def load_module_graph(graph, pool, update=None, lang=None):
     for code in list(lang):
         while code:
             lang.add(code)
-            code = tools.get_parent_language(code)
+            code = get_parent_language(code)
 
     with Transaction().connection.cursor() as cursor:
         modules = [x.name for x in graph]
         cursor.execute(*ir_module.select(ir_module.name, ir_module.state,
                 where=ir_module.name.in_(modules)))
         module2state = dict(cursor.fetchall())
+        modules = set(modules)
 
         for node in graph:
             module = node.name
             if module not in MODULES:
                 continue
             logger.info(module)
-            classes = pool.fill(module)
+            classes = pool.fill(module, modules)
             if update:
                 pool.setup(classes)
                 pool.post_init(module)
@@ -180,9 +183,9 @@ def load_module_graph(graph, pool, update=None, lang=None):
                     if hasattr(model, '_history'):
                         models_to_update_history.add(model.__name__)
 
-                # Instanciate a new parser for the module:
-                tryton_parser = convert.TrytondXmlHandler(pool=pool,
-                    module=module, module_state=package_state)
+                # Instanciate a new parser for the package:
+                tryton_parser = convert.TrytondXmlHandler(
+                    pool, module, package_state, modules)
 
                 for filename in node.info.get('xml', []):
                     filename = filename.replace('/', os.sep)
@@ -231,6 +234,8 @@ def load_module_graph(graph, pool, update=None, lang=None):
         if not update:
             pool.setup()
         pool.post_init(None)
+
+        pool.setup_mixin(modules)
 
         for model_name in models_to_update_history:
             model = pool.get(model_name)

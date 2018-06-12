@@ -10,8 +10,8 @@ from sql.conditionals import Case
 from collections import defaultdict
 from itertools import groupby
 
-from ..model import (ModelView, ModelSQL, Workflow, fields, Unique,
-    EvalEnvironment)
+from ..model import (ModelView, ModelSQL, Workflow, DeactivableMixin, fields,
+    Unique, EvalEnvironment)
 from ..report import Report
 from ..wizard import Wizard, StateView, StateAction, Button
 from ..transaction import Transaction
@@ -276,6 +276,23 @@ class ModelField(ModelSQL, ModelView):
     @staticmethod
     def default_field_description():
         return 'No description available'
+
+    def get_rec_name(self, name):
+        if self.field_description:
+            return '%s (%s)' % (self.field_description, self.name)
+        else:
+            return self.name
+
+    @classmethod
+    def search_rec_name(cls, name, clause):
+        if clause[1].startswith('!') or clause[1].startswith('not '):
+            bool_op = 'AND'
+        else:
+            bool_op = 'OR'
+        return [bool_op,
+            ('field_description',) + tuple(clause[1:]),
+            ('name',) + tuple(clause[1:]),
+            ]
 
     @classmethod
     def read(cls, ids, fields_names=None):
@@ -708,6 +725,10 @@ class ModelButton(ModelSQL, ModelView):
     "Model Button"
     __name__ = 'ir.model.button'
     name = fields.Char('Name', required=True, readonly=True)
+    string = fields.Char("Label", translate=True)
+    help = fields.Text("Help", translate=True)
+    confirm = fields.Text("Confirm", translate=True,
+        help="Text to ask user confirmation when clicking the button.")
     model = fields.Many2One('ir.model', 'Model', required=True, readonly=True,
         ondelete='CASCADE', select=True)
     groups = fields.Many2Many('ir.model.button-res.group', 'button', 'group',
@@ -732,6 +753,8 @@ class ModelButton(ModelSQL, ModelView):
             ],
         depends=['model', 'id'])
     _reset_cache = Cache('ir.model.button.reset')
+    _view_attributes_cache = Cache(
+        'ir.model.button.view_attributes', context=False)
 
     @classmethod
     def __setup__(cls):
@@ -750,6 +773,7 @@ class ModelButton(ModelSQL, ModelView):
         cls._groups_cache.clear()
         cls._rules_cache.clear()
         cls._reset_cache.clear()
+        cls._view_attributes_cache.clear()
         return result
 
     @classmethod
@@ -759,6 +783,7 @@ class ModelButton(ModelSQL, ModelView):
         cls._groups_cache.clear()
         cls._rules_cache.clear()
         cls._reset_cache.clear()
+        cls._view_attributes_cache.clear()
 
     @classmethod
     def delete(cls, buttons):
@@ -767,6 +792,7 @@ class ModelButton(ModelSQL, ModelView):
         cls._groups_cache.clear()
         cls._rules_cache.clear()
         cls._reset_cache.clear()
+        cls._view_attributes_cache.clear()
 
     @classmethod
     def copy(cls, buttons, default=None):
@@ -837,6 +863,29 @@ class ModelButton(ModelSQL, ModelView):
             reset = [b.name for b in button.reset]
         cls._reset_cache.set(key, reset)
         return reset
+
+    @classmethod
+    def get_view_attributes(cls, model, name):
+        "Return the view attributes of the named button of the model"
+        key = (model, name, Transaction().language)
+        attributes = cls._view_attributes_cache.get(key)
+        if attributes is not None:
+            return attributes
+        buttons = cls.search([
+                ('model.model', '=', model),
+                ('name', '=', name),
+                ])
+        if not buttons:
+            attributes = {}
+        else:
+            button, = buttons
+            attributes = {
+                'string': button.string,
+                'help': button.help,
+                'confirm': button.confirm,
+                }
+        cls._view_attributes_cache.set(key, attributes)
+        return attributes
 
 
 class ModelButtonRule(ModelSQL, ModelView):
@@ -920,13 +969,12 @@ class ModelButtonRule(ModelSQL, ModelView):
         ModelButton._rules_cache.clear()
 
 
-class ModelButtonClick(ModelSQL, ModelView):
+class ModelButtonClick(DeactivableMixin, ModelSQL, ModelView):
     "Model Button Click"
     __name__ = 'ir.model.button.click'
     button = fields.Many2One(
         'ir.model.button', "Button", required=True, ondelete='CASCADE')
     record_id = fields.Integer("Record ID", required=True)
-    active = fields.Boolean("Active")
 
     @classmethod
     def __setup__(cls):
@@ -934,10 +982,6 @@ class ModelButtonClick(ModelSQL, ModelView):
         cls.__rpc__.update({
                 'get_click': RPC(),
                 })
-
-    @classmethod
-    def default_active(cls):
-        return True
 
     @classmethod
     def register(cls, model, name, records):
@@ -1035,6 +1079,7 @@ class ModelData(ModelSQL, ModelView):
         cls._buttons.update({
                 'sync': {
                     'invisible': ~Eval('out_of_sync'),
+                    'depends': ['out_of_sync'],
                     },
                 })
 
@@ -1053,6 +1098,12 @@ class ModelData(ModelSQL, ModelView):
             cursor.execute(*model_data.delete(
                     where=model_data.inherit == True))
             table.drop_column('inherit', True)
+
+        # Migration from 4.6: register buttons on ir module
+        cursor.execute(*model_data.update(
+                [model_data.module], ['ir'],
+                where=((model_data.module == 'res')
+                    & (model_data.fs_id == 'model_data_sync_button'))))
 
     @staticmethod
     def default_noupdate():
@@ -1074,9 +1125,9 @@ class ModelData(ModelSQL, ModelView):
 
     @classmethod
     def create(cls, *args):
-        created = super(ModelData, cls).create(*args)
+        records = super(ModelData, cls).create(*args)
         cls._has_model_cache.clear()
-        return created
+        return records
 
     @classmethod
     def write(cls, data, values, *args):

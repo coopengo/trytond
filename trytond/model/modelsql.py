@@ -10,7 +10,7 @@ from sql import (Table, Column, Literal, Desc, Asc, Expression, Null,
     NullsFirst, NullsLast)
 from sql.functions import CurrentTimestamp, Extract
 from sql.conditionals import Coalesce
-from sql.operators import Or, And, Operator
+from sql.operators import Or, And, Operator, Equal
 from sql.aggregate import Count, Max
 
 from trytond.model import ModelStorage, ModelView
@@ -79,6 +79,10 @@ class Unique(Constraint):
     def columns(self):
         return self._columns
 
+    @property
+    def operators(self):
+        return tuple(Equal for c in self._columns)
+
     def __str__(self):
         return 'UNIQUE(%s)' % (', '.join(map(str, self.columns)))
 
@@ -87,6 +91,53 @@ class Unique(Constraint):
         p = []
         for column in self.columns:
             p.extend(column.params)
+        return tuple(p)
+
+
+class Exclude(Constraint):
+    __slots__ = ('_excludes', '_where')
+
+    def __init__(self, table, *excludes, **kwargs):
+        super(Exclude, self).__init__(table)
+        assert all(isinstance(c, Expression) and issubclass(o, Operator)
+            for c, o in excludes), excludes
+        self._excludes = tuple(excludes)
+        where = kwargs.get('where')
+        if where is not None:
+            assert isinstance(where, Expression)
+        self._where = where
+
+    @property
+    def excludes(self):
+        return self._excludes
+
+    @property
+    def columns(self):
+        return tuple(c for c, _ in self._excludes)
+
+    @property
+    def operators(self):
+        return tuple(o for _, o in self._excludes)
+
+    @property
+    def where(self):
+        return self._where
+
+    def __str__(self):
+        exclude = ', '.join('%s WITH %s' % (column, operator._operator)
+            for column, operator in self.excludes)
+        where = ''
+        if self.where:
+            where = ' WHERE ' + str(self.where)
+        return 'EXCLUDE (%s)' % exclude + where
+
+    @property
+    def params(self):
+        p = []
+        for column, operator in self._excludes:
+            p.extend(column.params)
+        if self.where:
+            p.extend(self.where.params)
         return tuple(p)
 
 
@@ -226,8 +277,8 @@ class ModelSQL(ModelStorage):
             history_table = cls.__table_history__()
             cursor.execute(*sql_table.select(sql_table.id, limit=1))
             if cursor.fetchone():
-                cursor.execute(*history_table.select(history_table.id,
-                        limit=1))
+                cursor.execute(
+                    *history_table.select(history_table.id, limit=1))
                 if not cursor.fetchone():
                     columns = [n for n, f in cls._fields.iteritems()
                         if f.sql_type()]
@@ -466,7 +517,7 @@ class ModelSQL(ModelStorage):
                             Coalesce(table.write_date, table.create_date)
                             ).cast(sql_type) > timestamp))
             if where:
-                cursor.execute(*table.select(table.id, where=where))
+                cursor.execute(*table.select(table.id, where=where, limit=1))
                 if cursor.fetchone():
                     raise ConcurrencyException(
                         'Records were modified in the meanwhile')
@@ -593,7 +644,8 @@ class ModelSQL(ModelStorage):
                 Translation.set_ids(name, 'model', Transaction().language,
                     translations.keys(), translations.values())
 
-        for fname, fargs in fields_to_set.iteritems():
+        for fname in sorted(fields_to_set, key=cls.index_set_field):
+            fargs = fields_to_set[fname]
             field = cls._fields[fname]
             field.set(cls, fname, *fargs)
 
@@ -969,7 +1021,8 @@ class ModelSQL(ModelStorage):
             cls._update_mptt(field_names, [ids] * len(field_names), values)
             all_field_names |= set(field_names)
 
-        for fname, fargs in fields_to_set.iteritems():
+        for fname in sorted(fields_to_set, key=cls.index_set_field):
+            fargs = fields_to_set[fname]
             field = cls._fields[fname]
             field.set(cls, fname, *fargs)
 
@@ -1365,7 +1418,8 @@ class ModelSQL(ModelStorage):
                         condition=Column(table, field_name) == parent.id
                         ).select(table.id,
                         where=(Column(parent, field.left) == 0)
-                        & (Column(parent, field.right) == 0)))
+                        & (Column(parent, field.right) == 0),
+                        limit=1))
                 nested_create = cursor.fetchone()
 
                 if not nested_create and len(ids) < 2:
@@ -1463,39 +1517,49 @@ class ModelSQL(ModelStorage):
     def validate(cls, records):
         super(ModelSQL, cls).validate(records)
         transaction = Transaction()
+        database = transaction.database
+        connection = transaction.connection
+        has_constraint = database.has_constraint
+        lock = database.lock
         cursor = transaction.connection.cursor()
-        if transaction.database.has_constraint():
-            return
         # Works only for a single transaction
         ids = map(int, records)
         for _, sql, error in cls._sql_constraints:
+            if has_constraint(sql):
+                continue
             table = sql.table
-            if isinstance(sql, Unique):
-                columns = [Column(table, c.name) for c in sql.columns]
+            if isinstance(sql, (Unique, Exclude)):
+                lock(connection, cls._table)
+                columns = list(sql.columns)
                 columns.insert(0, table.id)
                 in_max = transaction.database.IN_MAX // (len(columns) + 1)
                 for sub_ids in grouped_slice(ids, in_max):
-                    red_sql = reduce_ids(table.id, sub_ids)
+                    where = reduce_ids(table.id, sub_ids)
+                    if isinstance(sql, Exclude) and sql.where:
+                        where &= sql.where
 
-                    cursor.execute(*table.select(*columns, where=red_sql))
+                    cursor.execute(*table.select(*columns, where=where))
 
                     where = Literal(False)
                     for row in cursor.fetchall():
                         clause = table.id != row[0]
-                        for column, value in zip(sql.columns, row[1:]):
+                        for column, operator, value in zip(
+                                sql.columns, sql.operators, row[1:]):
                             if value is None:
                                 # NULL is always unique
                                 clause &= Literal(False)
-                            clause &= Column(table, column.name) == value
+                            clause &= operator(column, value)
                         where |= clause
-                    cursor.execute(*table.select(table.id, where=where))
+                    cursor.execute(
+                        *table.select(table.id, where=where, limit=1))
                     if cursor.fetchone():
                         cls.raise_user_error(error)
             elif isinstance(sql, Check):
                 for sub_ids in grouped_slice(ids):
                     red_sql = reduce_ids(table.id, sub_ids)
                     cursor.execute(*table.select(table.id,
-                            where=~sql.expression & red_sql))
+                            where=~sql.expression & red_sql,
+                            limit=1))
                     if cursor.fetchone():
                         cls.raise_user_error(error)
 

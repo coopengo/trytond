@@ -75,19 +75,33 @@ class SQLiteExtract(Function):
 
 
 def date_trunc(_type, date):
-    if _type == 'second':
+    if not _type:
         return date
-    try:
-        tm_tuple = time.strptime(date, '%Y-%m-%d %H:%M:%S')
-    except Exception:
+    for format_ in [
+            '%Y-%m-%d %H:%M:%S.%f',
+            '%Y-%m-%d %H:%M:%S',
+            '%Y-%m-%d',
+            '%H:%M:%S',
+            ]:
+        try:
+            value = datetime.datetime.strptime(date, format_)
+        except ValueError:
+            continue
+        else:
+            break
+    else:
         return None
-    if _type == 'year':
-        return "%i-01-01 00:00:00" % tm_tuple.tm_year
-    elif _type == 'month':
-        return "%i-%02i-01 00:00:00" % (tm_tuple.tm_year, tm_tuple.tm_mon)
-    elif _type == 'day':
-        return "%i-%02i-%02i 00:00:00" % (tm_tuple.tm_year, tm_tuple.tm_mon,
-                tm_tuple.tm_mday)
+    for attribute, replace in [
+            ('microsecond', 0),
+            ('second', 0),
+            ('minute', 0),
+            ('hour', 0),
+            ('day', 1),
+            ('month', 1)]:
+        if _type.startswith(attribute):
+            break
+        value = value.replace(**{attribute: replace})
+    return str(value)
 
 
 def split_part(text, delimiter, count):
@@ -401,7 +415,7 @@ class Database(DatabaseInterface):
     def lock(self, connection, table):
         pass
 
-    def has_constraint(self):
+    def has_constraint(self, constraint):
         return False
 
     def has_multirow_insert(self):

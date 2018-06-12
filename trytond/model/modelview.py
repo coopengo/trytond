@@ -465,6 +465,9 @@ class ModelView(Model):
         fields_def = cls.__view_look_dom(tree_root, type,
                 fields_width=fields_width)
 
+        if hasattr(cls, 'active'):
+            fields_def.setdefault('active', {'name': 'active'})
+
         if field_children:
             fields_def.setdefault(field_children, {'name': field_children})
             if field_children in cls._fields:
@@ -479,9 +482,6 @@ class ModelView(Model):
                 continue
             for depend in field.depends:
                 fields_def.setdefault(depend, {'name': depend})
-
-        if 'active' in cls._fields:
-            fields_def.setdefault('active', {'name': 'active'})
 
         arch = etree.tostring(
             tree, encoding='utf-8', pretty_print=False).decode('utf-8')
@@ -583,6 +583,11 @@ class ModelView(Model):
             else:
                 states = {}
             groups = set(User.get_groups())
+            button_attr = Button.get_view_attributes(
+                cls.__name__, button_name)
+            for attr, value in button_attr.iteritems():
+                if not element.get(attr):
+                    element.set(attr, value or '')
             button_groups = Button.get_groups(cls.__name__, button_name)
             if ((button_groups and not groups & button_groups)
                     or (not button_groups
@@ -603,6 +608,9 @@ class ModelView(Model):
                 element.set('type', 'class')
             else:
                 element.set('type', 'instance')
+
+            for depend in states.get('depends', []):
+                fields_attrs.setdefault(depend, {})
 
         # translate view
         if Transaction().language != 'en':

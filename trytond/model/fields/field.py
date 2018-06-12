@@ -70,6 +70,13 @@ def size_validate(value):
                 'size must return integer'
 
 
+def search_order_validate(value):
+    if value is not None:
+        assert isinstance(value, (list, PYSON)), 'search_order must be PYSON'
+        if hasattr(value, 'types'):
+            assert value.types() == set([list]), 'search_order must be PYSON'
+
+
 def _set_value(record, field):
     try:
         field, nested = field.split('.', 1)
@@ -157,6 +164,14 @@ def instanciate_values(Target, value):
 
 def on_change_result(record):
     return record._changed_values
+
+
+def with_inactive_records(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        with Transaction().set_context(active_test=False):
+            return func(*args, **kwargs)
+    return wrapper
 
 
 SQL_OPERATORS = {
@@ -304,6 +319,9 @@ class Field(object):
     def sql_column(self, table):
         return Column(table, self.name)
 
+    def _domain_column(self, operator, column):
+        return column
+
     def _domain_value(self, operator, value):
         if isinstance(value, (Select, CombiningQuery)):
             return value
@@ -332,6 +350,7 @@ class Field(object):
             return method(domain, tables)
         Operator = SQL_OPERATORS[operator]
         column = self.sql_column(table)
+        column = self._domain_column(operator, column)
         expression = Operator(column, self._domain_value(operator, value))
         if isinstance(expression, operators.In) and not expression.right:
             expression = Literal(False)
@@ -399,7 +418,7 @@ class FieldTranslate(Field):
                 & (translation.fuzzy == False))
 
     def convert_domain(self, domain, tables, Model):
-        from trytond.tools import get_parent_language
+        from trytond.ir.lang import get_parent_language
         pool = Pool()
         Translation = pool.get('ir.translation')
         IrModel = pool.get('ir.model')
@@ -419,6 +438,7 @@ class FieldTranslate(Field):
             column = Coalesce(NullIf(column, ''), translation.value)
             language = get_parent_language(language)
         column = Coalesce(NullIf(column, ''), self.sql_column(table))
+        column = self._domain_column(operator, column)
         Operator = SQL_OPERATORS[operator]
         assert name == self.name
         where = Operator(column, self._domain_value(operator, value))
@@ -430,7 +450,7 @@ class FieldTranslate(Field):
         return tables[None][0].id.in_(join.select(table.id, where=where))
 
     def convert_order(self, name, tables, Model):
-        from trytond.tools import get_parent_language
+        from trytond.ir.lang import get_parent_language
         pool = Pool()
         Translation = pool.get('ir.translation')
         IrModel = pool.get('ir.model')

@@ -10,7 +10,9 @@ format, explained later, is interpolated with dynamic data and placed into a
 document of the same file format. Tryton's ability to generate documents in
 this way allows documents to be generated for any editor that supports the Open
 Document Format which can be converted to third party formats, such as PDF.
-Extra libraries are required for this, see INSTALL for more information.
+`LibreOffice`_ must be installed on the server host for format conversion.
+
+.. _LibreOffice: https://www.libreoffice.org/
 
 Report Templates
 ================
@@ -150,7 +152,13 @@ for the party of an invoice.
 Creating a simple report template for a model from client
 ---------------------------------------------------------
 
-TODO: Explain the steps necessary to do this.
+Once you have created a report template it has to be uploaded to trytond. This
+can be done by creating a new record in the
+``Administration > UI > Actions > Report`` menu. Just make sure to include the
+template file in the content field.
+
+In order to make the report printable from a model create a "Print form"
+keyword related to the model where the report should be available.
 
 Creating a simple report template for a model in XML
 ----------------------------------------------------

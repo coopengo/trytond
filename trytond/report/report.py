@@ -30,7 +30,8 @@ from trytond.transaction import Transaction
 from trytond.url import URLMixin
 from trytond.rpc import RPC
 from trytond.exceptions import UserError
-from trytond.tools import get_parent_language
+
+logger = logging.getLogger(__name__)
 
 import requests
 
@@ -87,6 +88,7 @@ class TranslateFactory:
         self.cache = {}
 
     def __call__(self, text):
+        from trytond.ir.lang import get_parent_language
         if self.language not in self.cache:
             cache = self.cache[self.language] = {}
             code = self.language
@@ -189,6 +191,7 @@ class Report(URLMixin, PoolBase):
     def _get_records(cls, ids, model, data):
         pool = Pool()
         Model = pool.get(model)
+        context = Transaction().context
 
         class TranslateModel(object):
             _languages = {}
@@ -202,7 +205,8 @@ class Report(URLMixin, PoolBase):
 
             def __getattr__(self, name):
                 if self._language not in TranslateModel._languages:
-                    with Transaction().set_context(language=self._language):
+                    with Transaction().set_context(
+                            context=context, language=self._language):
                         records = Model.browse(ids)
                     id2record = dict((r.id, r) for r in records)
                     TranslateModel._languages[self._language] = id2record
@@ -303,27 +307,33 @@ class Report(URLMixin, PoolBase):
         if output_format in MIMETYPES:
             return output_format, data
 
-        fd, path = tempfile.mkstemp(suffix=(os.extsep + input_format),
-            prefix='trytond_')
+        dtemp = tempfile.mkdtemp(prefix='trytond_')
+        path = os.path.join(
+            dtemp, report.report_name + os.extsep + input_format)
         oext = FORMAT2EXT.get(output_format, output_format)
-        with os.fdopen(fd, 'wb+') as fp:
+        with open(path, 'wb+') as fp:
             fp.write(data)
-        cmd = ['unoconv', '--no-launch', '--connection=%s' % config.get(
-                'report', 'unoconv'), '-f', oext, '--stdout', path]
-        logger = logging.getLogger(__name__)
         try:
-            # JCA : Pipe stderr
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE, close_fds=True)
-            stdoutdata, stderrdata = proc.communicate()
-            # JCA : Use error code rather than wait twice
-            if proc.returncode != 0:
-                logger.info('unoconv.stdout : ' + str(stdoutdata))
-                logger.error('unoconv.stderr : ' + str(stderrdata))
-                raise Exception(stderrdata)
-            return oext, stdoutdata
+            cmd = ['soffice',
+                '--headless', '--nolockcheck', '--nodefault', '--norestore',
+                '--convert-to', oext, '--outdir', dtemp, path]
+            logger = logging.getLogger(__name__)
+            output = os.path.splitext(path)[0] + os.extsep + oext
+            subprocess.check_call(cmd)
+            if os.path.exists(output):
+                with open(output, 'rb') as fp:
+                    return oext, fp.read()
+            else:
+                logger.error(
+                    'fail to convert %s to %s', report.report_name, oext)
+                return input_format, data
         finally:
-            os.remove(path)
+            try:
+                os.remove(path)
+                os.remove(output)
+                os.rmdir(dtemp)
+            except OSError:
+                pass
 
     @classmethod
     def convert_api(cls, report, data):
@@ -345,34 +355,30 @@ class Report(URLMixin, PoolBase):
             raise Exception(r)
 
     @classmethod
-    def format_date(cls, value, lang):
+    def format_date(cls, value, lang=None):
         pool = Pool()
         Lang = pool.get('ir.lang')
-        Config = pool.get('ir.configuration')
-
-        if lang:
-            locale_format = lang.date
-            code = lang.code
-        else:
-            locale_format = Lang.default_date()
-            code = Config.get_language()
-        return Lang.strftime(value, code, locale_format)
+        if lang is None:
+            lang = Lang.get()
+        return lang.strftime(value)
 
     @classmethod
     def format_currency(cls, value, lang, currency, symbol=True,
             grouping=True):
         pool = Pool()
         Lang = pool.get('ir.lang')
-
-        return Lang.currency(lang, value, currency, symbol, grouping)
+        if lang is None:
+            lang = Lang.get()
+        return lang.currency(value, currency, symbol, grouping)
 
     @classmethod
     def format_number(cls, value, lang, digits=2, grouping=True,
             monetary=None):
         pool = Pool()
         Lang = pool.get('ir.lang')
-
-        return Lang.format(lang, '%.' + str(digits) + 'f', value,
+        if lang is None:
+            lang = Lang.get()
+        return lang.format('%.' + str(digits) + 'f', value,
             grouping=grouping, monetary=monetary)
 
 

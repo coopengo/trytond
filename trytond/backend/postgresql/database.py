@@ -29,6 +29,7 @@ from psycopg2 import OperationalError as DatabaseOperationalError
 from psycopg2.extras import register_default_json, register_default_jsonb
 
 from sql import Flavor
+from sql.functions import Function
 
 from trytond.backend.database import DatabaseInterface, SQLType
 from trytond.config import config, parse_uri
@@ -90,6 +91,11 @@ class PerfCursor(cursor):
         return ret
 
 
+class Unaccent(Function):
+    __slots__ = ()
+    _function = 'unaccent'
+
+
 class Database(DatabaseInterface):
 
     _lock = RLock()
@@ -101,6 +107,7 @@ class Database(DatabaseInterface):
     _search_path = None
     _current_user = None
     _has_returning = None
+    _has_unaccent = {}
     flavor = Flavor(ilike=True)
 
     TYPES_MAPPING = {
@@ -289,7 +296,7 @@ class Database(DatabaseInterface):
         cursor = connection.cursor()
         cursor.execute('LOCK "%s" IN EXCLUSIVE MODE NOWAIT' % table)
 
-    def has_constraint(self):
+    def has_constraint(self, constraint):
         return True
 
     def has_multirow_insert(self):
@@ -356,6 +363,22 @@ class Database(DatabaseInterface):
     def has_sequence(cls):
         return True
 
+    def has_unaccent(self):
+        if self.name in self._has_unaccent:
+            return self._has_unaccent[self.name]
+        connection = self.get_connection()
+        unaccent = False
+        try:
+            cursor = connection.cursor()
+            cursor.execute(
+                "SELECT 1 FROM pg_proc WHERE proname=%s",
+                (Unaccent._function,))
+            unaccent = bool(cursor.rowcount)
+        finally:
+            self.put_connection(connection)
+        self._has_unaccent[self.name] = unaccent
+        return unaccent
+
     def sql_type(self, type_):
         if type_ in self.TYPES_MAPPING:
             return self.TYPES_MAPPING[type_]
@@ -367,6 +390,11 @@ class Database(DatabaseInterface):
         if type_ == 'BLOB':
             if value is not None:
                 return Binary(value)
+        return value
+
+    def unaccent(self, value):
+        if self.has_unaccent():
+            return Unaccent(value)
         return value
 
     def sequence_exist(self, connection, name):

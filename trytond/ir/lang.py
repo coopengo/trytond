@@ -10,7 +10,9 @@ from locale import CHAR_MAX
 warnings.resetwarnings()
 from ast import literal_eval
 
-from ..model import ModelView, ModelSQL, fields, Check
+from sql import Table
+
+from ..model import ModelView, ModelSQL, DeactivableMixin, fields, Check
 from ..cache import Cache
 from ..tools import datetime_strftime
 from ..transaction import Transaction
@@ -24,14 +26,14 @@ __all__ = [
     ]
 
 
-class Lang(ModelSQL, ModelView):
+class Lang(DeactivableMixin, ModelSQL, ModelView):
     "Language"
     __name__ = "ir.lang"
     name = fields.Char('Name', required=True, translate=True)
     code = fields.Char('Code', required=True,
         help="RFC 4646 tag: http://tools.ietf.org/html/rfc4646")
     translatable = fields.Boolean('Translatable')
-    active = fields.Boolean('Active')
+    parent = fields.Char("Parent Code", help="Code of the exceptional parent")
     direction = fields.Selection([
             ('ltr', 'Left-to-right'),
             ('rtl', 'Right-to-left'),
@@ -45,7 +47,21 @@ class Lang(ModelSQL, ModelView):
     decimal_point = fields.Char('Decimal Separator', required=True)
     thousands_sep = fields.Char('Thousands Separator')
 
+    # monetary formatting
+    mon_grouping = fields.Char('Grouping', required=True)
+    mon_decimal_point = fields.Char('Decimal Separator', required=True)
+    mon_thousands_sep = fields.Char('Thousands Separator')
+    p_sign_posn = fields.Integer('Positive Sign Position', required=True)
+    n_sign_posn = fields.Integer('Negative Sign Position', required=True)
+    positive_sign = fields.Char('Positive Sign')
+    negative_sign = fields.Char('Negative Sign')
+    p_cs_precedes = fields.Boolean('Positive Currency Symbol Precedes')
+    n_cs_precedes = fields.Boolean('Negative Currency Symbol Precedes')
+    p_sep_by_space = fields.Boolean('Positive Separate by Space')
+    n_sep_by_space = fields.Boolean('Negative Separate by Space')
+
     _lang_cache = Cache('ir.lang')
+    _code_cache = Cache('ir.lang.code', context=False)
 
     @classmethod
     def __setup__(cls):
@@ -98,10 +114,6 @@ class Lang(ModelSQL, ModelView):
         return res
 
     @staticmethod
-    def default_active():
-        return True
-
-    @staticmethod
     def default_translatable():
         return False
 
@@ -126,6 +138,50 @@ class Lang(ModelSQL, ModelView):
         return ','
 
     @classmethod
+    def default_mon_grouping(cls):
+        return '[]'
+
+    @classmethod
+    def default_mon_thousands_sep(cls):
+        return ','
+
+    @classmethod
+    def default_mon_decimal_point(cls):
+        return '.'
+
+    @classmethod
+    def default_p_sign_posn(cls):
+        return 1
+
+    @classmethod
+    def default_n_sign_posn(cls):
+        return 1
+
+    @classmethod
+    def default_negative_sign(cls):
+        return '-'
+
+    @classmethod
+    def default_positive_sign(cls):
+        return ''
+
+    @classmethod
+    def default_p_cs_precedes(cls):
+        return True
+
+    @classmethod
+    def default_n_cs_precedes(cls):
+        return True
+
+    @classmethod
+    def default_p_sep_by_space(cls):
+        return False
+
+    @classmethod
+    def default_n_sep_by_space(cls):
+        return False
+
+    @classmethod
     def validate(cls, languages):
         super(Lang, cls).validate(languages)
         cls.check_grouping(languages)
@@ -138,16 +194,17 @@ class Lang(ModelSQL, ModelView):
         Check if grouping is list of numbers
         '''
         for lang in langs:
-            try:
-                grouping = literal_eval(lang.grouping)
-                for i in grouping:
-                    if not isinstance(i, int):
-                        raise
-            except Exception:
-                cls.raise_user_error('invalid_grouping', {
-                        'grouping': lang.grouping,
-                        'language': lang.rec_name,
-                        })
+            for grouping in [lang.grouping, lang.mon_grouping]:
+                try:
+                    grouping = literal_eval(grouping)
+                    for i in grouping:
+                        if not isinstance(i, int):
+                            raise
+                except Exception:
+                    cls.raise_user_error('invalid_grouping', {
+                            'grouping': grouping,
+                            'language': lang.rec_name,
+                            })
 
     @classmethod
     def check_date(cls, langs):
@@ -219,6 +276,7 @@ class Lang(ModelSQL, ModelView):
         cls._lang_cache.clear()
         languages = super(Lang, cls).create(vlist)
         Translation._get_language_cache.clear()
+        _parents.clear()
         return languages
 
     @classmethod
@@ -227,8 +285,10 @@ class Lang(ModelSQL, ModelView):
         Translation = pool.get('ir.translation')
         # Clear cache
         cls._lang_cache.clear()
+        cls._code_cache.clear()
         super(Lang, cls).write(langs, values, *args)
         Translation._get_language_cache.clear()
+        _parents.clear()
 
     @classmethod
     def delete(cls, langs):
@@ -240,11 +300,28 @@ class Lang(ModelSQL, ModelView):
                 cls.raise_user_error('delete_default')
         # Clear cache
         cls._lang_cache.clear()
+        cls._code_cache.clear()
         super(Lang, cls).delete(langs)
         Translation._get_language_cache.clear()
+        _parents.clear()
 
-    @staticmethod
-    def _group(lang, s, monetary=None):
+    @classmethod
+    def get(cls, code=None):
+        "Return language instance for the code or the transaction language"
+        if code is None:
+            code = Transaction().language
+        lang_id = cls._code_cache.get(code)
+        if not lang_id:
+            with Transaction().set_context(active_test=False):
+                lang, = cls.search([
+                        ('code', '=', code),
+                        ])
+            cls._code_cache.set(code, lang.id)
+        else:
+            lang = cls(lang_id)
+        return lang
+
+    def _group(self, s, monetary=False):
         # Code from _group in locale.py
 
         # Iterate over grouping intervals
@@ -262,11 +339,11 @@ class Lang(ModelSQL, ModelView):
                 last_interval = interval
 
         if monetary:
-            thousands_sep = monetary.mon_thousands_sep
-            grouping = literal_eval(monetary.mon_grouping)
+            thousands_sep = self.mon_thousands_sep
+            grouping = literal_eval(self.mon_grouping)
         else:
-            thousands_sep = lang.thousands_sep
-            grouping = literal_eval(lang.grouping)
+            thousands_sep = self.thousands_sep
+            grouping = literal_eval(self.grouping)
         if not grouping:
             return (s, 0)
         if s[-1] == ' ':
@@ -293,8 +370,7 @@ class Lang(ModelSQL, ModelView):
             len(thousands_sep) * (len(groups) - 1)
         )
 
-    @classmethod
-    def format(cls, lang, percent, value, grouping=False, monetary=None,
+    def format(self, percent, value, grouping=False, monetary=False,
             *additional):
         '''
         Returns the lang-aware substitution of a %? specifier (percent).
@@ -313,13 +389,6 @@ class Lang(ModelSQL, ModelView):
                 amount -= 1
             return s[lpos:rpos + 1]
 
-        if not lang:
-            lang = cls(
-                decimal_point=cls.default_decimal_point(),
-                thousands_sep=cls.default_thousands_sep(),
-                grouping=cls.default_grouping(),
-                )
-
         # this is only for one-percent-specifier strings
         # and this should be checked
         if percent[0] != '%':
@@ -334,34 +403,26 @@ class Lang(ModelSQL, ModelView):
             seps = 0
             parts = formatted.split('.')
             if grouping:
-                parts[0], seps = cls._group(lang, parts[0], monetary=monetary)
+                parts[0], seps = self._group(parts[0], monetary=monetary)
             if monetary:
-                decimal_point = monetary.mon_decimal_point
+                decimal_point = self.mon_decimal_point
             else:
-                decimal_point = lang.decimal_point
+                decimal_point = self.decimal_point
             formatted = decimal_point.join(parts)
             if seps:
                 formatted = _strip_padding(formatted, seps)
         elif percent[-1] in 'diu':
             if grouping:
-                formatted, seps = cls._group(lang, formatted,
-                    monetary=monetary)
+                formatted, seps = self._group(formatted, monetary=monetary)
             if seps:
                 formatted = _strip_padding(formatted, seps)
         return formatted
 
-    @classmethod
-    def currency(cls, lang, val, currency, symbol=True, grouping=False):
+    def currency(self, val, currency, symbol=True, grouping=False):
         """
         Formats val according to the currency settings in lang.
         """
         # Code from currency in locale.py
-        if not lang:
-            lang = cls(
-                decimal_point=cls.default_decimal_point(),
-                thousands_sep=cls.default_thousands_sep(),
-                grouping=cls.default_grouping(),
-                )
 
         # check for illegal values
         digits = currency.digits
@@ -369,26 +430,26 @@ class Lang(ModelSQL, ModelView):
             raise ValueError("Currency formatting is not possible using "
                              "the 'C' locale.")
 
-        s = cls.format(lang, '%%.%if' % digits, abs(val), grouping,
-                monetary=currency)
+        s = self.format(
+            '%%.%if' % digits, abs(val), grouping, monetary=True)
         # '<' and '>' are markers if the sign must be inserted
         # between symbol and value
         s = '<' + s + '>'
 
         if symbol:
             smb = currency.symbol
-            precedes = (val < 0 and currency.n_cs_precedes
-                or currency.p_cs_precedes)
-            separated = (val < 0 and currency.n_sep_by_space
-                or currency.p_sep_by_space)
+            precedes = (val < 0 and self.n_cs_precedes
+                or self.p_cs_precedes)
+            separated = (val < 0 and self.n_sep_by_space
+                or self.p_sep_by_space)
 
             if precedes:
                 s = smb + (separated and ' ' or '') + s
             else:
                 s = s + (separated and ' ' or '') + smb
 
-        sign_pos = val < 0 and currency.n_sign_posn or currency.p_sign_posn
-        sign = val < 0 and currency.negative_sign or currency.positive_sign
+        sign_pos = val < 0 and self.n_sign_posn or self.p_sign_posn
+        sign = val < 0 and self.negative_sign or self.positive_sign
 
         if sign_pos == 0:
             s = '(' + s + ')'
@@ -407,12 +468,13 @@ class Lang(ModelSQL, ModelView):
 
         return s.replace('<', '').replace('>', '')
 
-    @staticmethod
-    def strftime(datetime, code, format):
+    def strftime(self, datetime, format=None):
         '''
         Convert datetime to a string as specified by the format argument.
         '''
-        code = code[:2]
+        if format is None:
+            format = self.date
+        code = self.code[:2]
         if code in TIME_LOCALE:
             for f, i in (('%a', 6), ('%A', 6), ('%b', 1), ('%B', 1)):
                 format = format.replace(f,
@@ -427,3 +489,18 @@ class Lang(ModelSQL, ModelView):
         if sys.version_info < (3,):
             result = result.decode('utf-8')
         return result
+
+
+def get_parent_language(code):
+    if code not in _parents:
+        # Use SQL because it is used by load_module_graph
+        cursor = Transaction().connection.cursor()
+        lang = Table('ir_lang')
+        cursor.execute(*lang.select(lang.code, lang.parent))
+        _parents.update(cursor.fetchall())
+    if _parents.get(code):
+        return _parents[code]
+    for sep in ['@', '_']:
+        if sep in code:
+            return code.rsplit(sep, 1)[0]
+_parents = {}

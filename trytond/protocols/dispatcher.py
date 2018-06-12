@@ -67,16 +67,17 @@ def login(request, database_name, user, parameters, language=None):
     except DatabaseOperationalError:
         logger.error('fail to connect to %s', database_name, exc_info=True)
         abort(404)
+    context = {
+        'language': language,
+        '_request': request.context,
+        }
     try:
         session = security.login(
-            database_name, user, parameters, language=language)
+            database_name, user, parameters, context=context)
         code = 403
     except RateLimitException:
         session = None
         code = 429
-    msg = 'successful login' if session else 'bad login or password'
-    logger.info('%s \'%s\' from %s using %s on database \'%s\'',
-        msg, user, request.remote_addr, request.scheme, database_name)
     if not session:
         abort(code)
     return session
@@ -85,11 +86,9 @@ def login(request, database_name, user, parameters, language=None):
 @app.auth_required
 def logout(request, database_name):
     auth = request.authorization
-    name = security.logout(
-        database_name, auth.get('userid'), auth.get('session'))
-    logger.info('logout \'%s\' from %s using %s on database \'%s\'',
-        name, request.remote_addr, request.scheme, database_name)
-    return True
+    security.logout(
+        database_name, auth.get('userid'), auth.get('session'),
+        context={'_request': request.context})
 
 
 @app.route('/', methods=['POST'])
@@ -121,11 +120,13 @@ def db_exist(request, database_name):
         return False
 
 
-def db_list(*args):
+def db_list(request, *args):
     if not config.getboolean('database', 'list'):
         raise Exception('AccessDenied')
+    context = {'_request': request.context}
     with Transaction().start(
-            None, 0, close=True, _nocache=True) as transaction:
+            None, 0, context=context, close=True, _nocache=True
+            ) as transaction:
         return transaction.database.list()
 
 
@@ -220,6 +221,7 @@ def _dispatch(request, pool, *args, **kwargs):
                         'session': session,
                         'token': token,
                         })
+                transaction.context['_request'] = request.context
                 meth = getattr(obj, method)
 
                 # AKE: perf analyzer hooks
@@ -278,6 +280,14 @@ def _dispatch(request, pool, *args, **kwargs):
             # AKE: moved all session ops to security script
             security.reset(
                 pool.database_name, user, request.authorization.get('session'))
+            context = {'_request': request.context}
+            try:
+                with Transaction().start(
+                        pool.database_name, 0, context=context) as transaction:
+                    Session = pool.get('ir.session')
+                    Session.reset(request.authorization.get('session'))
+            except DatabaseOperationalError:
+                logger.debug('Reset session failed', exc_info=True)
         logger.debug('Result: %s', result)
 
         # JCA: log slow RPC
