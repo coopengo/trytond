@@ -184,6 +184,7 @@ def _pg_dump(cache_file):
         cache_name, _ = os.path.splitext(os.path.basename(cache_file))
         # Ensure any connection is left open
         backend.get('Database')(DB_NAME).close()
+        time.sleep(31)
         with Transaction().start(
                 None, 0, close=True, autocommit=True, _nocache=True) \
                 as transaction:
@@ -698,9 +699,9 @@ def modules_suite(modules=None, doc=True):
         suite_ = all_suite()
     from trytond.modules import create_graph, get_module_list, \
         MODULES_PATH, EGG_MODULES
-    graph = create_graph(get_module_list())[0]
-    for package in graph:
-        module = package.name
+    graph = create_graph(get_module_list())
+    for node in graph:
+        module = node.name
         if modules and module not in modules:
             continue
         test_module = 'trytond.modules.%s.tests' % module
