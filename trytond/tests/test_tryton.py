@@ -22,7 +22,7 @@ from sql import Table
 
 from trytond.pool import Pool, isregisteredby
 from trytond import backend
-from trytond.model import Workflow, ModelSQL, ModelSingleton, fields
+from trytond.model import Workflow, ModelSQL, ModelSingleton, ModelView, fields
 from trytond.model.fields import get_eval_fields, Function
 from trytond.model.fields.selection import TranslatedSelection
 from trytond.model.fields.dict import TranslatedDict
@@ -311,6 +311,33 @@ class ModuleTestCase(unittest.TestCase):
                 assert depends <= set(model._fields), (
                     'Unknown depends %s in "%s"."%s"' % (
                         list(depends - set(model._fields)), mname, fname))
+            if issubclass(model, ModelView):
+                for bname, button in model._buttons.iteritems():
+                    depends = set(button.get('depends', []))
+                    assert depends <= set(model._fields), (
+                        'Unknown depends %s in button "%s"."%s"' % (
+                            list(depends - set(model._fields)), mname, bname))
+
+    @with_transaction()
+    def test_depends_parent(self):
+        "Test depends on _parent_ contains also the parent relation"
+        for mname, model in Pool().iterobject():
+            if not isregisteredby(model, self.module):
+                continue
+            for fname, field in model._fields.iteritems():
+                for attribute in ['depends', 'on_change', 'on_change_with',
+                        'selection_change_with', 'autocomplete']:
+                    depends = getattr(field, attribute, [])
+                    for depend in depends:
+                        prefix = []
+                        for d in depend.split('.'):
+                            if d.startswith('_parent_'):
+                                relation = '.'.join(
+                                    prefix + [d[len('_parent_'):]])
+                                assert relation in depends, (
+                                    'Missing "%s" in "%s"."%s"."%s"' % (
+                                        relation, mname, fname, attribute))
+                            prefix.append(d)
 
     @with_transaction()
     def test_field_methods(self):
@@ -517,20 +544,34 @@ class ModuleTestCase(unittest.TestCase):
             if not action_window.res_model:
                 continue
             Model = pool.get(action_window.res_model)
-            decoder = PYSONDecoder({
-                    'active_id': None,
-                    'active_ids': [],
-                    'active_model': action_window.res_model,
-                    })
-            domain = decoder.decode(action_window.pyson_domain)
-            order = decoder.decode(action_window.pyson_order)
-            context = decoder.decode(action_window.pyson_context)
-            with Transaction().set_context(context):
-                Model.search(domain, order=order, limit=action_window.limit)
-            for action_domain in action_window.act_window_domains:
-                if not action_domain.domain:
-                    continue
-                Model.search(decoder.decode(action_domain.domain))
+            for active_id, active_ids in [
+                    (None, []),
+                    (1, [1]),
+                    (1, [1, 2]),
+                    ]:
+                decoder = PYSONDecoder({
+                        'active_id': active_id,
+                        'active_ids': active_ids,
+                        'active_model': action_window.res_model,
+                        })
+                domain = decoder.decode(action_window.pyson_domain)
+                order = decoder.decode(action_window.pyson_order)
+                context = decoder.decode(action_window.pyson_context)
+                search_value = decoder.decode(action_window.pyson_search_value)
+                if action_window.context_domain:
+                    domain = ['AND', domain,
+                        decoder.decode(action_window.context_domain)]
+                with Transaction().set_context(context):
+                    Model.search(
+                        domain, order=order, limit=action_window.limit)
+                    if search_value:
+                        Model.search(search_value)
+                for action_domain in action_window.act_window_domains:
+                    if not action_domain.domain:
+                        continue
+                    Model.search(decoder.decode(action_domain.domain))
+            if action_window.context_model:
+                pool.get(action_window.context_model)
 
     @with_transaction()
     def test_modelsingleton_inherit_order(self):
@@ -547,6 +588,27 @@ class ModuleTestCase(unittest.TestCase):
             assert singleton_index < sql_index, (
                 "ModelSingleton must appear before ModelSQL in the parent "
                 "classes of '%s'." % mname)
+
+    @with_transaction()
+    def test_buttons_registered(self):
+        'Test all buttons are registered in ir.model.button'
+        pool = Pool()
+        Button = pool.get('ir.model.button')
+        for mname, model in Pool().iterobject():
+            if not isregisteredby(model, self.module):
+                continue
+            if not issubclass(model, ModelView):
+                continue
+            ir_buttons = {b.name for b in Button.search([
+                        ('model.model', '=', model.__name__),
+                        ])}
+            buttons = set(model._buttons)
+            assert ir_buttons >= buttons, (
+                'The buttons "%(buttons)s" of Model "%(model)s" are not '
+                'registered in ir.model.button.' % {
+                    'buttons': list(buttons - ir_buttons),
+                    'model': model.__name__,
+                    })
 
 
 def db_exist(name=DB_NAME):

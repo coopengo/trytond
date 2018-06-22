@@ -73,15 +73,27 @@ class Request(_Request):
         auth = self.authorization
         if not auth:
             return None
+        context = {'_request': self.context}
         if auth.type == 'session':
             user_id = security.check(
-                database_name, auth.get('userid'), auth.get('session'))
+                database_name, auth.get('userid'), auth.get('session'),
+				context=context)
         elif auth.type == 'token':
             user_id = auth.get('user_id')
         else:
             user_id = security.login(
-                database_name, auth.username, auth, cache=False)
+                database_name, auth.username, auth, cache=False,
+                context=context)
         return user_id
+
+    @cached_property
+    def context(self):
+        return {
+            'remote_addr': self.remote_addr,
+            'http_host': self.environ.get('HTTP_HOST'),
+            'scheme': self.scheme,
+            'is_secure': self.is_secure,
+            }
 
 
 def parse_authorization_header(value):
@@ -188,7 +200,7 @@ def user_application(name, json=True):
                     transaction.set_context(_check_access=True):
                 try:
                     response = func(request, *args, **kwargs)
-                except Exception, e:
+                except Exception as e:
                     if isinstance(e, HTTPException):
                         raise
                     logger.error('%s', request, exc_info=True)

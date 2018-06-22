@@ -54,6 +54,13 @@ Defines the root path served by `GET` requests.
 
 Default: Under the `www` directory of user's home running `trytond`.
 
+num_proxies
+~~~~~~~~~~~
+
+The number of proxy servers in front of `trytond`.
+
+Default: 0
+
 database
 --------
 
@@ -255,6 +262,31 @@ attempts over a period of `timeout`.
 
 Default: `5`
 
+max_attempt_ip_network
+~~~~~~~~~~~~~~~~~~~~~~
+
+The maximum authentication attempt from the same network before the server
+answers unconditionally `Too Many Requests` for any other attempts. The
+counting is done on all attempts over a period of `timeout`.
+
+Default: `300`
+
+ip_network_4
+~~~~~~~~~~~~
+
+The network prefix to apply on IPv4 address for counting the authentication
+attempts.
+
+Default: `32`
+
+ip_network_6
+~~~~~~~~~~~~
+
+The network prefix to apply on IPv6 address for counting the authentication
+attempts.
+
+Default: `56`
+
 password
 --------
 
@@ -277,15 +309,12 @@ The ratio of non repeated characters for the user password.
 
 Default: `0.75`
 
-report
-------
+reset_timeout
+~~~~~~~~~~~~~
 
-unoconv
-~~~~~~~
+The time in seconds until the reset password expires.
 
-The parameters for `unoconv`.
-
-Default: `pipe,name=trytond;urp;StarOffice.ComponentContext`
+Default: `86400` (24h)
 
 attachment
 ----------

@@ -90,6 +90,9 @@ class ModelView(unittest.TestCase):
         admin, = Group.search([('name', '=', 'Administration')])
         test = TestModel()
 
+        button = Button(name='test', model=model)
+        button.save()
+
         # Without model/button access
         TestModel.test([test])
 
@@ -105,7 +108,7 @@ class ModelView(unittest.TestCase):
         self.assertRaises(UserError, TestModel.test, [test])
 
         # Without write access but with button access
-        button = Button(name='test', model=model, groups=[admin])
+        button.groups = [admin]
         button.save()
         TestModel.test([test])
 
@@ -310,6 +313,19 @@ class ModelView(unittest.TestCase):
         pages = tree.xpath('//page')
         self.assertEqual(len(pages), 1)
         self.assertEqual(pages[0].attrib['id'], 'non-empty')
+
+    @with_transaction()
+    def test_active_field(self):
+        "Testing active field is set and added to view fields"
+        pool = Pool()
+        Deactivable = pool.get('test.deactivable.modelview')
+        EmptyPage = pool.get('test.modelview.empty_page')
+
+        fields = Deactivable.fields_view_get(view_type='tree')['fields']
+        self.assertIn('active', fields)
+
+        fields = EmptyPage.fields_view_get(view_type='tree')['fields']
+        self.assertNotIn('active', fields)
 
 
 def suite():

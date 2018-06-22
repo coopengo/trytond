@@ -1,3 +1,41 @@
+Version 4.8.1 - 2018-05-21
+* Bug fixes (see mercurial logs for details)
+
+Version 4.8.0 - 2018-04-23
+* Bug fixes (see mercurial logs for details)
+* Add index method to order field set calls
+* Add deactivable mixin
+* Ensure active field is present on tree view
+* Manage depends xml attribute on field tag
+* Add expand attribute on group tag
+* Add depends on Pool.register
+* Add Exclude constraint
+* Allow to perform unaccented searches on Char fields
+* Always raise exception in table handler
+* Simplify API for Session: new, remove, check and reset
+* Ensure that all buttons are registered in ir.model.button
+* Make trytond-admin ask for admin email
+* Add option to set admin email with trytond-admin
+* Add option to reset admin password with trytond-admin
+* Add reset password button
+* Add depends on Button
+* Add ModelData.has_model cache for ModelStorage.check_xml_record
+* Limit authentication attempt per IP network
+* Manage 'X-Forwarded' headers from proxies
+* Add '_request' attribute to Transaction context
+* Delete translations on deletion only when model has translatable field
+* Remove MySQL backend
+* Add keyword attribute to button tag
+* Allow field name on image tag
+* Remove unoconv and call soffice directly
+* Allow to include mixin to pool objects
+* Improve validation of PYSON domain
+* Use JSON canonical form for Dict value
+* Remove rules on user
+* Add monetary formatting to language
+* Add exceptional parent language
+* Add get method on ir.lang
+* Convert format, currency and strftime of ir.lang into instance methods
 * Add width/height attribute to notebook
 * Add expand attribute on group tag
 * Add keyword attribute to button tag

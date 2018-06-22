@@ -268,6 +268,10 @@ Class methods:
     ``on_write`` is set and ``condition`` was false before
     :meth:`~ModelStorage.write` and true after.
 
+.. classmethod:: ModelStorage.index_set_field(name)
+
+    Return the index sort order of the field set calls.
+
 .. classmethod:: ModelStorage.delete(records)
 
     Delete records.
@@ -441,7 +445,7 @@ Class methods:
         No access rights are verified and the records are not validated.
     ..
 
-.. classmethod:: ModelStorage.search(domain[, offset[, limit[, order[, count[, query]]]]])
+.. classmethod:: ModelSQL.search(domain[, offset[, limit[, order[, count[, query]]]]])
 
     Return a list of records that match the :ref:`domain <topics-domain>`.
 
@@ -526,6 +530,37 @@ Instance attributes:
 .. attribute:: Unique.columns
 
     The tuple of SQL Column instances.
+
+.. attribute:: Unique.operators
+
+    The tuple of `Equal` operators.
+
+Exclude
+-------
+
+.. class:: Exclude(table[, (expression, operator), ...[, where]])
+
+It represents an exclude :class:`Constraint` which guarantees that if any two
+rows are compared on the specified expression using the specified operator not
+all of these comparisons will return `TRUE`.
+
+Instance attributes:
+
+.. attribute:: Exclude.excludes
+
+    The tuple of expression and operator.
+
+.. attribute:: Exclude.columns
+
+    The tuple of expressions.
+
+.. attribute:: Exclude.operators
+
+    The tuple of operators.
+
+.. attribute:: Exclude.where
+
+    The clause for which the exclusion applies.
 
 ========
 Workflow
@@ -763,6 +798,22 @@ ValueMixin
 .. class:: ValueMixin
 
 A mixin_ to store the values of :class:`MultiValueMixin`.
+
+================
+DeactivableMixin
+================
+
+.. class:: DeactivableMixin
+
+A mixin_ to add soft deletion to the model.
+
+Class attributes are:
+
+.. attribute:: DictSchemaMixin.active
+
+    The definition of the :class:`trytond.model.fields.Boolean` field to
+    store soft deletion state. False values will be consideres as soft
+    deletion.
 
 .. _mixin: http://en.wikipedia.org/wiki/Mixin
 .. _JSON: http://en.wikipedia.org/wiki/Json

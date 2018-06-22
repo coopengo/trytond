@@ -11,13 +11,20 @@ import datetime
 import logging
 import uuid
 import mmap
+try:
+    import secrets
+except ImportError:
+    secrets = None
+import ipaddress
+from email.header import Header
 from functools import wraps
 from itertools import groupby, ifilter
 from operator import attrgetter
 from ast import literal_eval
 
 from sql import Literal
-from sql.conditionals import Coalesce
+from sql.functions import CurrentTimestamp
+from sql.conditionals import Coalesce, Case
 from sql.aggregate import Count
 from sql.operators import Concat
 
@@ -28,7 +35,8 @@ try:
 except ImportError:
     bcrypt = None
 
-from ..model import ModelView, ModelSQL, Workflow, fields, Unique
+from ..model import (
+    ModelView, ModelSQL, Workflow, DeactivableMixin, fields, Unique)
 from ..wizard import Wizard, StateView, Button, StateTransition
 from ..tools import grouped_slice
 from .. import backend
@@ -36,28 +44,72 @@ from ..transaction import Transaction
 from ..cache import Cache
 from ..pool import Pool
 from ..config import config
-from ..pyson import PYSONEncoder, Eval
+from ..pyson import PYSONEncoder, Eval, Bool
 from ..rpc import RPC
 from ..exceptions import LoginException, RateLimitException
+from trytond.report import Report, get_email
+from trytond.sendmail import sendmail_transactional
+from trytond.url import HOSTNAME
 
 __all__ = [
     'User', 'LoginAttempt', 'UserAction', 'UserGroup', 'Warning_',
-    'UserApplication',
+    'UserApplication', 'EmailResetPassword',
     'UserConfigStart', 'UserConfig',
     ]
 logger = logging.getLogger(__name__)
+_has_password = 'password' in config.get(
+    'session', 'authentications', default='password').split(',')
 
 
-class User(ModelSQL, ModelView):
+def gen_password(length=8):
+    alphabet = string.ascii_letters + string.digits
+    if secrets:
+        choice = secrets.choice
+    else:
+        sysrand = random.SystemRandom()
+        choice = sysrand.choice
+    return ''.join(choice(alphabet) for _ in range(length))
+
+
+def _send_email(from_, users, email_func):
+    if from_ is None:
+        from_ = config.get('email', 'from')
+    for user in users:
+        if not user.email:
+            logger.info("Missing address for '%s' to send email", user.login)
+            continue
+        msg, title = email_func(user)
+        msg['From'] = from_
+        msg['To'] = user.email
+        msg['Subject'] = Header(title, 'utf-8')
+        sendmail_transactional(from_, [user.email], msg)
+
+
+class User(DeactivableMixin, ModelSQL, ModelView):
     "User"
     __name__ = "res.user"
     name = fields.Char('Name', select=True)
     login = fields.Char('Login', required=True)
     password_hash = fields.Char('Password Hash')
-    password = fields.Function(fields.Char('Password'), getter='get_password',
-        setter='set_password')
+    password = fields.Function(fields.Char(
+            "Password",
+            states={
+                'invisible': not _has_password,
+                }),
+        getter='get_password', setter='set_password')
+    password_reset = fields.Char(
+        "Reset Password",
+        states={
+            'invisible': not _has_password,
+            })
+    password_reset_expire = fields.Timestamp(
+        "Reset Password Expire",
+        states={
+            'required': Bool(Eval('password_reset')),
+            'invisible': not _has_password,
+            },
+        depends=['password_reset'])
     signature = fields.Text('Signature')
-    active = fields.Boolean('Active')
     menu = fields.Many2One('ir.action', 'Menu Action',
         domain=[('usage', '=', 'menu')], required=True)
     pyson_menu = fields.Function(fields.Char('PySON Menu'), 'get_pyson_menu')
@@ -65,9 +117,6 @@ class User(ModelSQL, ModelView):
         'Actions', help='Actions that will be run at login')
     groups = fields.Many2Many('res.user-res.group',
        'user', 'group', 'Groups')
-    rule_groups = fields.Many2Many('ir.rule.group-res.user',
-       'user', 'rule_group', 'Rules',
-       domain=[('global_p', '!=', True), ('default_p', '!=', True)])
     applications = fields.One2Many(
         'res.user.application', 'user', "Applications")
     language = fields.Many2One('ir.lang', 'Language',
@@ -98,6 +147,11 @@ class User(ModelSQL, ModelView):
             ('login_key', Unique(table, table.login),
                 'You can not have two users with the same login!')
         ]
+        cls._buttons.update({
+                'reset_password': {
+                    'invisible': ~Eval('email', True) | (not _has_password),
+                    },
+                })
         cls._preferences_fields = [
             'name',
             'password',
@@ -159,7 +213,7 @@ class User(ModelSQL, ModelView):
         table.not_null_action('menu', action='remove')
 
         # Migration from 2.6
-        table.drop_column('login_try', exception=True)
+        table.drop_column('login_try')
 
         # Migration from 3.0
         if table.column_exist('password') and table.column_exist('salt'):
@@ -169,15 +223,11 @@ class User(ModelSQL, ModelView):
             cursor.execute(*sqltable.update(
                 columns=[sqltable.password_hash],
                 values=[password_hash_new]))
-            table.drop_column('password', exception=True)
-            table.drop_column('salt', exception=True)
+            table.drop_column('password')
+            table.drop_column('salt')
 
         # Migration from 4.2: Remove required on name
         table.not_null_action('name', action='remove')
-
-    @staticmethod
-    def default_active():
-        return True
 
     @staticmethod
     def default_menu():
@@ -255,6 +305,34 @@ class User(ModelSQL, ModelView):
                     ]:
                 if test and password.lower() == test.lower():
                     cls.raise_user_error(error)
+
+    @classmethod
+    @ModelView.button
+    def reset_password(cls, users, length=8, from_=None):
+        for user in users:
+            user.password_reset = gen_password(length=length)
+            user.password_reset_expire = (
+                datetime.datetime.now() + datetime.timedelta(
+                    seconds=config.getint('password', 'reset_timeout')))
+            user.password = None
+        cls.save(users)
+        _send_email(from_, users, cls.get_email_reset_password)
+
+    def get_email_reset_password(self):
+        return get_email(
+            'res.user.email_reset_password', self, self.languages)
+
+    @property
+    def languages(self):
+        pool = Pool()
+        Lang = pool.get('ir.lang')
+        if self.language:
+            languages = [self.language]
+        else:
+            languages = Lang.search([
+                    ('code', '=', Transaction().language),
+                    ])
+        return languages
 
     @staticmethod
     def get_sessions(users, name):
@@ -543,8 +621,12 @@ class User(ModelSQL, ModelView):
         cursor = Transaction().connection.cursor()
         table = cls.__table__()
         cursor.execute(*table.select(table.id, table.password_hash,
+                Case(
+                    (table.password_reset_expire > CurrentTimestamp(),
+                        table.password_reset),
+                    else_=None),
                 where=(table.login == login) & (table.active == True)))
-        result = cursor.fetchone() or (None, None)
+        result = cursor.fetchone() or (None, None, None)
         cls._get_login_cache.set(login, result)
         return result
 
@@ -554,6 +636,11 @@ class User(ModelSQL, ModelView):
         Return user id if password matches
         '''
         LoginAttempt = Pool().get('res.user.login.attempt')
+        count_ip = LoginAttempt.count_ip()
+        if count_ip > config.getint(
+                'session', 'max_attempt_ip_network', default=300):
+            # Do not add attempt as the goal is to prevent flooding
+            raise RateLimitException()
         count = LoginAttempt.count(login)
         if count > config.getint('session', 'max_attempt', default=5):
             LoginAttempt.add(login)
@@ -577,10 +664,13 @@ class User(ModelSQL, ModelView):
         if 'password' not in parameters:
             msg = cls.fields_get(['password'])['password']['string']
             raise LoginException('password', msg, type='password')
-        user_id, password_hash = cls._get_login(login)
+        user_id, password_hash, password_reset = cls._get_login(login)
         if user_id and password_hash:
             password = parameters['password']
             if cls.check_password(password, password_hash):
+                return user_id
+        elif user_id and password_reset:
+            if password_reset == parameters['password']:
                 return user_id
 
     @staticmethod
@@ -592,7 +682,7 @@ class User(ModelSQL, ModelView):
         '''Hash given password in the form
         <hash_method>$<password>$<salt>...'''
         if not password:
-            return ''
+            return None
         return getattr(cls, 'hash_' + cls.hash_method())(password)
 
     @classmethod
@@ -604,7 +694,7 @@ class User(ModelSQL, ModelView):
 
     @classmethod
     def hash_sha1(cls, password):
-        salt = ''.join(random.sample(string.ascii_letters + string.digits, 8))
+        salt = gen_password()
         salted_password = password + salt
         if isinstance(salted_password, unicode):
             salted_password = salted_password.encode('utf-8')
@@ -648,6 +738,8 @@ class LoginAttempt(ModelSQL):
     """
     __name__ = 'res.user.login.attempt'
     login = fields.Char('Login', size=512)
+    ip_address = fields.Char("IP Address")
+    ip_network = fields.Char("IP Network")
 
     @classmethod
     def __register__(cls, module_name):
@@ -663,6 +755,21 @@ class LoginAttempt(ModelSQL):
         return (datetime.datetime.now()
             - datetime.timedelta(seconds=config.getint('session', 'timeout')))
 
+    @classmethod
+    def ipaddress(cls):
+        context = Transaction().context
+        ip_address = ''
+        ip_network = ''
+        if context.get('_request') and context['_request'].get('remote_addr'):
+            ip_address = ipaddress.ip_address(
+                unicode(context['_request']['remote_addr']))
+            prefix = config.getint(
+                'session', 'ip_network_%s' % ip_address.version)
+            ip_network = ipaddress.ip_network(
+                unicode(context['_request']['remote_addr']))
+            ip_network = ip_network.supernet(new_prefix=prefix)
+        return ip_address, ip_network
+
     def _login_size(func):
         @wraps(func)
         def wrapper(cls, login, *args, **kwargs):
@@ -676,7 +783,12 @@ class LoginAttempt(ModelSQL):
         table = cls.__table__()
         cursor.execute(*table.delete(where=table.create_date < cls.delay()))
 
-        cls.create([{'login': login}])
+        ip_address, ip_network = cls.ipaddress()
+        cls.create([{
+                    'login': login,
+                    'ip_address': str(ip_address),
+                    'ip_network': str(ip_network),
+                    }])
 
     @classmethod
     @_login_size
@@ -690,8 +802,18 @@ class LoginAttempt(ModelSQL):
     def count(cls, login):
         cursor = Transaction().connection.cursor()
         table = cls.__table__()
-        cursor.execute(*table.select(Count(Literal(1)),
+        cursor.execute(*table.select(Count(Literal('*')),
                 where=(table.login == login)
+                & (table.create_date >= cls.delay())))
+        return cursor.fetchone()[0]
+
+    @classmethod
+    def count_ip(cls):
+        cursor = Transaction().connection.cursor()
+        table = cls.__table__()
+        _, ip_network = cls.ipaddress()
+        cursor.execute(*table.select(Count(Literal('*')),
+                where=(table.ip_network == str(ip_network))
                 & (table.create_date >= cls.delay())))
         return cursor.fetchone()[0]
 
@@ -801,9 +923,11 @@ class UserApplication(Workflow, ModelSQL, ModelView):
         cls._buttons.update({
                 'validate_': {
                     'invisible': Eval('state') != 'requested',
+                    'depends': ['state'],
                     },
                 'cancel': {
                     'invisible': Eval('state') == 'cancelled',
+                    'depends': ['state'],
                     },
                 })
 
@@ -867,6 +991,23 @@ class UserApplication(Workflow, ModelSQL, ModelView):
         User = pool.get('res.user')
         super(UserApplication, cls).delete(applications)
         User._get_preferences_cache.clear()
+
+
+class EmailResetPassword(Report):
+    __name__ = 'res.user.email_reset_password'
+
+    @classmethod
+    def get_context(cls, records, data):
+        pool = Pool()
+        Lang = pool.get('ir.lang')
+        context = super(EmailResetPassword, cls).get_context(records, data)
+        lang = Lang.get()
+        context['hostname'] = HOSTNAME
+        context['database'] = Transaction().database.name
+        context['expire'] = lang.strftime(
+            records[0].password_reset_expire,
+            format=lang.date + ' %H:%M:%S')
+        return context
 
 
 class UserConfigStart(ModelView):

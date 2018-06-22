@@ -129,6 +129,9 @@ List of attributes shared by many form elements:
         * ``pre_validate``: Only for button, it contains a domain to apply
           on the record before calling the button.
 
+        * ``depends``: Only for button, it must return the list of field on
+          which the button depends.
+
     .. _common-attributes-help:
 
     * ``help``: The string that will be displayed when the cursor hovers over
@@ -238,7 +241,8 @@ Display a field of the object with the value of the current record.
       ``tree,form``)
 
     * ``view_ids``: A comma separated list that specifies the view ids used to
-      display the relation.
+      display the relation. For Many2One, the order should always be tree then
+      form.
 
     * ``product``: Only for One2Many fields, a comma separated list of target
       field name used to create records from the cartesian product.
@@ -278,8 +282,8 @@ image
 
 Display an image.
 
-    * ``name``: the name of the image. It must be the name of a record of
-      `ir.ui.icon`.
+    * ``name``: the image name or the field name which contains the image name.
+      The image name must be the name of a record of `ir.ui.icon`.
 
     * ``yexpand``: see in common-attributes-yexpand_.
 
@@ -329,8 +333,6 @@ button
 
 Display a button.
 
-    * ``string``: The string that will be displayed inside the button.
-
     * ``name``: The name of the function that will be called. The function must
       have this syntax:
 
@@ -338,6 +340,16 @@ Display a button.
 
       The function may return an `ir.action` id or one of those client side
       action keywords:
+
+    * ``string``: The string that will be displayed inside the button.
+
+    * ``confirm``: A string that will be shown in order to request
+      confirmation when clicking the button.
+
+    * ``help``: see in common-attributes-help_.
+
+The button should be registered on ``ir.model.button`` where the default value
+of the ``string``, ``confirm`` and ``help`` attributes can be can be defined.
 
 .. _topics-views-client-actions:
 
@@ -363,6 +375,10 @@ Display a button.
     * ``states``: see in common-attributes-states_.
 
     * ``help``: see in common-attributes-help_.
+
+    * ``keyword``: specify where will the button be displayed in the client
+      toolbar. The valid values are the keywords starting with `form_` from
+      topics-actions_ without the `form_` part.
 
 The button can be used to display actions, relates...
 There are different ways to add an toolbar Action. This is the dynamic way.

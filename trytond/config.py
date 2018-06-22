@@ -52,6 +52,7 @@ class TrytonConfigParser(ConfigParser.RawConfigParser):
         self.set('web', 'root', os.environ.get('TRYTOND_WEB_ROOT',
                 os.path.join(os.path.expanduser('~'), 'www')))
         self.set('web', 'bench', os.environ.get('TRYTOND_WEB_BENCH', None))
+        self.set('web', 'num_proxies', 0)
         self.add_section('database')
         self.set('database', 'uri',
             os.environ.get('TRYTOND_DATABASE_URI', 'sqlite://'))
@@ -78,12 +79,13 @@ class TrytonConfigParser(ConfigParser.RawConfigParser):
         self.set('session', 'authentications', 'password')
         self.set('session', 'timeout', 600)
         self.set('session', 'max_attempt', 5)
+        self.set('session', 'max_attempt_ip_network', 300)
+        self.set('session', 'ip_network_4', 32)
+        self.set('session', 'ip_network_6', 56)
         self.add_section('password')
         self.set('password', 'length', 8)
         self.set('password', 'entropy', 0.75)
-        self.add_section('report')
-        self.set('report', 'unoconv',
-            'pipe,name=trytond;urp;StarOffice.ComponentContext')
+        self.set('password', 'reset_timeout', 24 * 60 * 60)
         # AKE: sentry config from env vars
         self.add_section('sentry')
         self.set('sentry', 'dsn', os.environ.get('TRYTOND_SENTRY_DSN', None))

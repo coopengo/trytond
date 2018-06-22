@@ -135,7 +135,7 @@ class DatabaseInterface(object):
         '''
         raise NotImplementedError
 
-    def has_constraint(self):
+    def has_constraint(self, constraint):
         '''
         Return True if database handle constraint.
 
@@ -163,6 +163,14 @@ class DatabaseInterface(object):
     def has_window_functions(self):
         "Return if database supports window functions."
         return False
+
+    def has_unaccent(self):
+        "Return if database supports unaccentuated searches"
+        return False
+
+    def unaccent(self, value):
+        "Return the expression to use for unaccentuated columns"
+        return value
 
     @classmethod
     def has_sequence(cls):

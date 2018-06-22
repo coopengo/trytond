@@ -1,5 +1,7 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
+import logging
+
 from trytond.pool import Pool
 from trytond.config import config
 from trytond.transaction import Transaction
@@ -7,6 +9,8 @@ from trytond import backend
 from trytond.exceptions import LoginException, RateLimitException
 
 import trytond.security_redis as redis
+
+logger = logging.getLogger(__name__)
 
 
 def _get_pool(dbname):
@@ -32,9 +36,13 @@ def config_session_audit():
     return config.getboolean('session', 'audit', default=True)
 
 
-def login(dbname, loginname, parameters, cache=True, language=None):
+def _get_remote_addr(context):
+    if context and '_request' in context:
+        return context['_request'].get('remote_addr')
+
+
+def login(dbname, loginname, parameters, cache=True, context=None):
     DatabaseOperationalError = backend.get('DatabaseOperationalError')
-    context = {'language': language}
     for count in range(config.getint('database', 'retry'), -1, -1):
         with Transaction().start(dbname, 0, context=context) as transaction:
             pool = _get_pool(dbname)
@@ -50,22 +58,29 @@ def login(dbname, loginname, parameters, cache=True, language=None):
                 transaction.commit()
                 raise
         break
+    session = None
     if user_id:
         if not cache:
-            return user_id
-        with Transaction().start(dbname, user_id):
-            Session = pool.get('ir.session')
-            session, = Session.create([{}])
-            # AKE: manage session on redis
-            if config_session_redis():
-                if config_session_exclusive():
-                    redis.del_sessions(dbname, user_id)
-                redis.set_session(dbname, user_id, session.key, loginname)
-            return user_id, session.key
-    return
+            session = user_id
+        else:
+            with Transaction().start(dbname, user_id):
+                Session = pool.get('ir.session')
+                session = user_id, Session.new()
+                # AKE: manage session on redis
+                if config_session_redis():
+                    if config_session_exclusive():
+                        redis.del_sessions(dbname, user_id)
+                    redis.set_session(dbname, user_id, session.key, loginname)
+
+        logger.info("login succeeded for '%s' from '%s' on database '%s'",
+            loginname, _get_remote_addr(context), dbname)
+    else:
+        logger.error("login failed for '%s' from '%s' on database '%s'",
+            loginname, _get_remote_addr(context), dbname)
+    return session
 
 
-def logout(dbname, user, session):
+def logout(dbname, user, session, context=None):
     # AKE: manage session on redis
     if config_session_redis():
         name = redis.get_session(dbname, user, session)
@@ -74,26 +89,20 @@ def logout(dbname, user, session):
         return name
     DatabaseOperationalError = backend.get('DatabaseOperationalError')
     for count in range(config.getint('database', 'retry'), -1, -1):
-        with Transaction().start(dbname, 0):
+        with Transaction().start(dbname, 0, context=context):
             pool = _get_pool(dbname)
             Session = pool.get('ir.session')
             try:
-                sessions = Session.search([
-                        ('key', '=', session),
-                        ])
-                if not sessions:
-                    return
-                session, = sessions
-                name = session.create_uid.login
-                Session.delete(sessions)
+                name = Session.remove(session)
             except DatabaseOperationalError:
                 if count:
                     continue
                 raise
-        return name
+    logger.info("logout for '%s' from '%s' on database '%s'",
+        name, _get_remote_addr(context), dbname)
 
 
-def check(dbname, user, session):
+def check(dbname, user, session, context=None):
     # AKE: manage session on redis
     if config_session_redis():
         ttl = redis.hit_session(dbname, user, session)
@@ -104,20 +113,30 @@ def check(dbname, user, session):
         return
     DatabaseOperationalError = backend.get('DatabaseOperationalError')
     for count in range(config.getint('database', 'retry'), -1, -1):
-        with Transaction().start(dbname, user) as transaction:
+        with Transaction().start(dbname, user, context=context) as transaction:
             pool = _get_pool(dbname)
             Session = pool.get('ir.session')
             try:
-                if not Session.check(user, session):
-                    return
-                else:
-                    return user
+                find = Session.check(user, session)
+                break
             except DatabaseOperationalError:
                 if count:
                     continue
                 raise
             finally:
                 transaction.commit()
+    if find is None:
+        logger.error("session failed for '%s' from '%s' on database '%s'",
+            user, _get_remote_addr(context), dbname)
+        return
+    elif not find:
+        logger.info("session expired for '%s' from '%s' on database '%s'",
+            user, _get_remote_addr(context), dbname)
+        return
+    else:
+        logger.debug("session valid for '%s' from '%s' on database '%s'",
+            user, _get_remote_addr(context), dbname)
+        return user
 
 
 def check_token(dbname, token):

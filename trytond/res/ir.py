@@ -1,6 +1,6 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
-from ..model import ModelSQL, fields
+from ..model import ModelSQL, DeactivableMixin, fields
 from .. import backend
 from ..pool import Pool, PoolMeta
 from ..transaction import Transaction
@@ -8,7 +8,7 @@ from ..transaction import Transaction
 __all__ = [
     'UIMenuGroup', 'ActionGroup', 'ModelFieldGroup', 'ModelButtonGroup',
     'ModelButtonRule', 'ModelButtonClick',
-    'RuleGroupGroup', 'RuleGroupUser', 'Lang', 'SequenceType',
+    'RuleGroupGroup', 'Lang', 'SequenceType',
     'SequenceTypeGroup', 'Sequence', 'SequenceStrict',
     'ModuleConfigWizardItem',
     ]
@@ -135,18 +135,13 @@ class ModelFieldGroup(ModelSQL):
         super(ModelFieldGroup, cls).__register__(module_name)
 
 
-class ModelButtonGroup(ModelSQL):
+class ModelButtonGroup(DeactivableMixin, ModelSQL):
     "Model Button - Group"
     __name__ = 'ir.model.button-res.group'
     button = fields.Many2One('ir.model.button', 'Button',
         ondelete='CASCADE', select=True, required=True)
     group = fields.Many2One('res.group', 'Group', ondelete='CASCADE',
         select=True, required=True)
-    active = fields.Boolean('Active', select=True)
-
-    @staticmethod
-    def default_active():
-        return True
 
     @classmethod
     def create(cls, vlist):
@@ -205,30 +200,6 @@ class RuleGroupGroup(ModelSQL):
         table.column_rename('rule_group_id', 'rule_group')
         table.column_rename('group_id', 'group')
         super(RuleGroupGroup, cls).__register__(module_name)
-
-
-class RuleGroupUser(ModelSQL):
-    "Rule Group - User"
-    __name__ = 'ir.rule.group-res.user'
-    rule_group = fields.Many2One('ir.rule.group', 'Rule Group',
-            ondelete='CASCADE', select=True, required=True)
-    user = fields.Many2One('res.user', 'User', ondelete='CASCADE',
-            select=True, required=True)
-
-    @classmethod
-    def __register__(cls, module_name):
-        TableHandler = backend.get('TableHandler')
-        transaction = Transaction()
-        # Migration from 1.0 table name change
-        TableHandler.table_rename('user_rule_group_rel', cls._table)
-        transaction.database.sequence_rename(transaction.connection,
-            'user_rule_group_rel_id_seq', cls._table + '_id_seq')
-        # Migration from 2.0 rule_group_id and user_id renamed into rule_group
-        # and user
-        table = TableHandler(cls, module_name)
-        table.column_rename('rule_group_id', 'rule_group')
-        table.column_rename('user_id', 'user')
-        super(RuleGroupUser, cls).__register__(module_name)
 
 
 class Lang:

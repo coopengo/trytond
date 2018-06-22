@@ -280,6 +280,15 @@ A single line string field.
     ComboboxEntry in the client.
     The set of field names could be filled by using the decorator :meth:`depends`.
 
+.. attribute:: Char.search_unaccented
+
+    If this attribute is set to True, ``ilike`` searches will be performed on
+    unaccented strings. The default value is True.
+
+.. warning::
+
+    The database backend must supports unaccented search.
+
 Text
 ----
 
@@ -484,7 +493,7 @@ Instance methods:
 Reference
 ---------
 
-.. class:: Reference(string[, selection[, selection_change_with[, \**options]])
+.. class:: Reference(string[, selection[, selection_change_with[, search_order[, search_context[, \**options]]]])
 
 A field that refers to a record of a model. It will be represented in Python by
 a ``str`` instance like this::
@@ -507,6 +516,14 @@ But a ``tuple`` can be used to search or set value.
 
     Same as :attr:`Many2One.datetime_field`
 
+.. attribute:: Reference.search_order
+
+    Same as :attr:`Many2One.search_order`
+
+.. attribute:: Reference.search_context
+
+    Same as :attr:`Many2One.search_context`
+
 Instance methods:
 
 .. method:: Reference.translated([name])
@@ -517,7 +534,7 @@ Instance methods:
 Many2One
 --------
 
-.. class:: Many2One(model_name, string[, left[, right[, ondelete[, datetime_field[, target_search[, \**options]]]]])
+.. class:: Many2One(model_name, string[, left[, right[, ondelete[, datetime_field[, target_search[, search_order[, search_context[, \**options]]]]]]])
 
 A many-to-one relation field.
 
@@ -588,10 +605,23 @@ A many-to-one relation field.
         of records.
     ..
 
+.. attribute:: Many2One.search_order
+
+    A :ref:`PYSON <ref-pyson>` expression defining the default order used to
+    display search results in the clients.
+
+.. attribute:: Many2One.search_context
+
+    A dictionary defining the default context used when searching from the
+    client.
+
+    Beware that ``search_context`` will override the values from the client
+    ``context``.
+
 One2Many
 --------
 
-.. class:: One2Many(model_name, field, string[, add_remove[, order[, datetime_field[, size[, \**options]]]]])
+.. class:: One2Many(model_name, field, string[, add_remove[, order[, datetime_field[, size[, search_order[, search_context[, \**options]]]]]]])
 
 A one-to-many relation field. It requires to have the opposite
 :class:`Many2One` field or a :class:`Reference` field defined on the target
@@ -654,10 +684,18 @@ This field accepts as written value a list of tuples like this:
     An integer or a PYSON expression denoting the maximum number of records
     allowed in the relation.
 
+.. attribute:: One2Many.search_order
+
+    Same as :attr:`Many2One.search_order`
+
+.. attribute:: One2Many.search_context
+
+    Same as :attr:`Many2One.search_context`
+
 Many2Many
 ---------
 
-.. class:: Many2Many(relation_name, origin, target, string[, order[, datetime_field[, size[, \**options]]]])
+.. class:: Many2Many(relation_name, origin, target, string[, order[, datetime_field[, size[, search_order[, search_context[, \**options]]]]]])
 
 A many-to-many relation field. It requires to have the opposite origin
 :class:`Many2One` field or a:class:`Reference` field defined on the relation
@@ -717,6 +755,14 @@ Instance methods:
 .. method:: Many2Many.get_target()
 
     Return the target :class:`~trytond.model.Model`.
+
+.. attribute:: Many2Many.search_order
+
+    Same as :attr:`Many2One.search_order`
+
+.. attribute:: Many2Many.search_context
+
+    Same as :attr:`Many2One.search_context`
 
 One2One
 -------
