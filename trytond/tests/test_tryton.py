@@ -180,9 +180,15 @@ def _pg_dump(cache_file):
     except OSError:
         cache_name, _ = os.path.splitext(os.path.basename(cache_file))
         # Ensure any connection is left open
-        backend.get('Database')(DB_NAME).close()
+        database = backend.get('Database')(DB_NAME)
+        database.close()
         with Transaction().start(
                 None, 0, close=True, autocommit=True, _nocache=True) \
+                as transaction:
+            database.kill_other_sessions(transaction.connection,
+                DB_NAME)
+        with Transaction().start(
+            None, 0, close=True, autocommit=True, _nocache=True) \
                 as transaction:
             transaction.database.create(
                 transaction.connection, cache_name, DB_NAME)
@@ -600,6 +606,8 @@ def drop_db(name=DB_NAME):
             while True:
                 attempt += 1
                 try:
+                    database.kill_other_sessions(transaction.connection,
+                        name)
                     database.drop(transaction.connection, name)
                     break
                 except:
