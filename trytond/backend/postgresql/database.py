@@ -146,6 +146,11 @@ class Database(DatabaseInterface):
             if uri.password else '')
         return '%s %s %s %s %s' % (host, port, name, user, password)
 
+    def _kill_session_query(self, database_name):
+        return 'SELECT pg_terminate_backend(pg_stat_activity.pid) ' \
+            'FROM pg_stat_activity WHERE pg_stat_activity.datname = \'%s\'' \
+            ' AND pid <> pg_backend_pid();' % database_name
+
     def connect(self):
         return self
 
