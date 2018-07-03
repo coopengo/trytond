@@ -161,11 +161,12 @@ def _pg_restore(cache_file):
         return not subprocess.call(cmd, env=env)
     except OSError:
         cache_name, _ = os.path.splitext(os.path.basename(cache_file))
+        database = backend.get('Database')(cache_name)
         with Transaction().start(
                 None, 0, close=True, autocommit=True, _nocache=True) \
                 as transaction:
             database.kill_other_sessions(transaction.connection,
-                DB_NAME)
+                cache_name)
             transaction.database.drop(transaction.connection, DB_NAME)
             transaction.database.create(
                 transaction.connection, DB_NAME, cache_name)
@@ -602,21 +603,9 @@ def drop_db(name=DB_NAME):
         with Transaction().start(
                 None, 0, close=True, autocommit=True, _nocache=True) \
                 as transaction:
-            # PJA: fix concurrent access when dropping database
-            attempt = 0
-            max_attempts = 10
-            while True:
-                attempt += 1
-                try:
-                    database.kill_other_sessions(transaction.connection,
-                        name)
-                    database.drop(transaction.connection, name)
-                    break
-                except:
-                    if attempt > max_attempts:
-                        raise
-                    else:
-                        time.sleep(3)
+            database.kill_other_sessions(transaction.connection,
+                name)
+            database.drop(transaction.connection, name)
             Pool.stop(name)
             Cache.drop(name)
 
