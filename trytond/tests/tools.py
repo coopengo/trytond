@@ -2,7 +2,7 @@
 # this repository contains the full copyright notices and license terms.
 from proteus import config as pconfig, Model, Wizard
 
-from .test_tryton import restore_db_cache, backup_db_cache, drop_db, create_db
+from .test_tryton import restore_db_cache, backup_db_cache, drop_create
 
 __all__ = ['activate_modules', 'set_user']
 
@@ -12,11 +12,9 @@ def activate_modules(modules, cache_file_name=None):
     if isinstance(modules, basestring):
         modules = [modules]
     cache_name = cache_file_name or '-'.join(modules)
-    # JCA : restore_db_cache fails if the database already exists
-    drop_db()
     if restore_db_cache(cache_name):
         return _get_config()
-    create_db()
+    drop_create()
     cfg = _get_config()
     Module = Model.get('ir.module')
     records = Module.find([
