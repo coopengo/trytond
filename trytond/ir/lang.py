@@ -31,6 +31,7 @@ class Lang(ModelSQL, ModelView):
     code = fields.Char('Code', required=True,
         help="RFC 4646 tag: http://tools.ietf.org/html/rfc4646")
     translatable = fields.Boolean('Translatable')
+    parent = fields.Char("Parent Code", help="Code of the exceptional parent")
     active = fields.Boolean('Active')
     direction = fields.Selection([
             ('ltr', 'Left-to-right'),
