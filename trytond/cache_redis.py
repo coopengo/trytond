@@ -13,6 +13,7 @@ from trytond.cache_serializer import pack, unpack
 class RedisCache(BaseCache):
     _client = None
     _client_check_lock = Lock()
+    _ttl = config.getint('cache', 'ttl') or 60*60*12
 
     @classmethod
     def ensure_client(cls):
@@ -30,6 +31,7 @@ class RedisCache(BaseCache):
     def __init__(self, name, size_limit=1024, context=True):
         super(RedisCache, self).__init__(name, size_limit, context)
         self.ensure_client()
+        self.expire = False
 
     def _namespace(self, dbname=None):
         if dbname is None:
@@ -43,21 +45,24 @@ class RedisCache(BaseCache):
     def get(self, key, default=None):
         namespace = self._namespace()
         key = self._key(key)
-        result = self._client.hget(namespace, key)
+        result = self._client.get('%s:%s' % (namespace, key))
         if result is None:
             return default
         else:
             return unpack(result)
 
-    def set(self, key, value):
+    def set(self, key, value, ttl=None):
+        if ttl:
+            assert isinstance(ttl, int)
         namespace = self._namespace()
         key = self._key(key)
         value = pack(value)
-        self._client.hset(namespace, key, value)
+        self._client.setex(name='%s:%s' % (namespace, key), value=value, time=ttl or self._ttl)
 
     def clear(self):
         namespace = self._namespace()
-        self._client.delete(namespace)
+        for key in self._client.scan_iter(match='%s:*' % (namespace)):
+            self._client.delete(key)
 
     @staticmethod
     def clean(dbname):
