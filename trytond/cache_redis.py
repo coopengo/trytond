@@ -31,7 +31,6 @@ class RedisCache(BaseCache):
     def __init__(self, name, size_limit=1024, context=True):
         super(RedisCache, self).__init__(name, size_limit, context)
         self.ensure_client()
-        self.expire = False
 
     def _namespace(self, dbname=None):
         if dbname is None:
