@@ -365,8 +365,7 @@ def load_modules(
         else:
             for module in modules_to_migrate:
                 if modules_to_migrate[module][0] == 'to_drop':
-                    logger.warning('%s is about to be uninstalled, press Ctrl +'
-                        ' + C to prevent this' % (module))
+                    logger.warning('%s is about to be uninstalled' % (module))
 
         def rename(cursor, table_name, old_name, new_name, var_name):
             table = Table(table_name)
