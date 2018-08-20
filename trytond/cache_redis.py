@@ -13,7 +13,7 @@ from trytond.cache_serializer import pack, unpack
 class RedisCache(BaseCache):
     _client = None
     _client_check_lock = Lock()
-    _ttl = config.getint('cache', 'ttl') or 60*60*12
+    _ttl = config.getint('cache', 'redis_ttl') or 60 * 60 * 12
 
     @classmethod
     def ensure_client(cls):
