@@ -360,8 +360,7 @@ def load_modules(
                         ' COOG_AUTO_UNINSTALL environnement variable' % module)
                     dropped = True
             if dropped:
-                raise EnvironmentError('COOG_AUTO_UNINSTALL environnement'
-                    ' variable should be initialized')
+                sys.exit(1)
         else:
             for module in modules_to_migrate:
                 if modules_to_migrate[module][0] == 'to_drop':
