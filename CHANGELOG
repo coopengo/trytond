@@ -1,4 +1,5 @@
 * BUG#9523 Add ttl on redis cache, default 12 hours, configurable on config and on code
+* BUG#9502 Don't auto_uninstall modules
 
 Version 4.8.1 - 2018-05-21
 * Bug fixes (see mercurial logs for details)
