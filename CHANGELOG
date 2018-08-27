@@ -1,5 +1,6 @@
 * Add resources method to ModelStorage
 * BUG#9502 Don't auto_uninstall modules
+* Allow to set any default configuration value from environment
 
 Version 4.6.3 - 2018-03-01
 * Bug fixes (see mercurial logs for details)
