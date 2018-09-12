@@ -41,7 +41,7 @@ class TrytondWSGI(object):
         if request.user_id:
             return wrapped(*args, **kwargs)
         else:
-            abort(httplib.UNAUTHORIZED)
+            abort(httplib.FORBIDDEN)
 
     def check_request_size(self, request, size=None):
         if request.method not in {'POST', 'PUT', 'PATCH'}:
