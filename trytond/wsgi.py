@@ -41,6 +41,8 @@ class TrytondWSGI(object):
         if request.user_id:
             return wrapped(*args, **kwargs)
         else:
+            # ABDC: Here we change the code from UNAUTHORIZED because it 
+            # is not properly handled by the client and causes a crash.
             abort(httplib.FORBIDDEN)
 
     def check_request_size(self, request, size=None):
