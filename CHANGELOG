@@ -1,3 +1,4 @@
+* FEA#9926 Add method on config to load all section options and rpc it on session
 * BUG#9523 Add ttl on redis cache, default 12 hours, configurable on config and on code
 * BUG#9502 Don't auto_uninstall modules
 

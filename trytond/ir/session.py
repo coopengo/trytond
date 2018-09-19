@@ -14,6 +14,7 @@ except ImportError:
 
 from trytond.model import ModelSQL, fields
 from trytond.config import config
+from trytond.rpc import RPC
 from .. import backend
 
 __all__ = [
@@ -31,7 +32,7 @@ class Session(ModelSQL):
     @classmethod
     def __setup__(cls):
         super(Session, cls).__setup__()
-        cls.__rpc__ = {}
+        cls.__rpc__ = { 'get_config': RPC(unique=False) }
 
     @classmethod
     def __register__(cls, module_name):
@@ -113,6 +114,11 @@ class Session(ModelSQL):
             # default methods are called only once
             values.setdefault('key', cls.default_key())
         return super(Session, cls).create(vlist)
+
+    @classmethod
+    def get_config(cls, section):
+        print section
+        return config.getsectionoptions(section)
 
 
 class SessionWizard(ModelSQL):
