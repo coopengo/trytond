@@ -27,7 +27,7 @@ class Session(ModelSQL):
     _rec_name = 'key'
 
     key = fields.Char('Key', required=True, select=True)
-    
+
     @classmethod
     def __setup__(cls):
         super(Session, cls).__setup__()
