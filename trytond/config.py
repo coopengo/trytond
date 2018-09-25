@@ -134,4 +134,11 @@ class TrytonConfigParser(ConfigParser.RawConfigParser):
                 AttributeError):
             return default
 
+    def getsectionoptions(self, section):
+        try:
+            options = ConfigParser.RawConfigParser.options(self, section)
+            return { option:self.get(section, option) for option in options }
+        except (ConfigParser.NoSectionError):
+            return None
+
 config = TrytonConfigParser()
