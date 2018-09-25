@@ -13,7 +13,6 @@ except ImportError:
         return binascii.hexlify(os.urandom(nbytes)).decode('ascii')
 
 from trytond.model import ModelSQL, fields
-from trytond.rpc import RPC
 from .. import backend
 
 __all__ = [
