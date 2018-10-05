@@ -368,9 +368,31 @@ def load_modules(
 
         def rename(cursor, table_name, old_name, new_name, var_name):
             table = Table(table_name)
-            cursor.execute(*table.update([getattr(table, var_name)],
+            fields = None
+            # If the view already exists in destination module
+            if table_name == 'ir_model_data':
+                fields = ['fs_id', 'model']
+            if table_name == 'ir_ui_view':
+                fields = ['model', 'name']
+            if fields:
+                query = ('DELETE from %(table)s where '
+                    '(%(fields)s) in ('
+                        'SELECT %(fields)s FROM %(table)s WHERE '
+                        '"module" IN (\'%(old_name)s\', \'%(new_name)s\') '
+                        'GROUP BY %(fields)s '
+                        'HAVING COUNT("module") > 1) '
+                    'and "module" = \'%(old_name)s\';' % {
+                        'table': table_name,
+                        'old_name': old_name,
+                        'new_name': new_name,
+                        'fields': (', '.join('"' + f + '"' for f in fields))})
+                print query
+                cursor.execute(query)
+
+            query = table.update([getattr(table, var_name)],
                     [new_name],
-                    where=(getattr(table, var_name) == old_name)))
+                    where=(getattr(table, var_name) == old_name))
+            cursor.execute(*query)
 
         def delete(cursor, table_name, old_name, var_name):
             table = Table(table_name)
