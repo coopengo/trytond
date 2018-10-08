@@ -386,7 +386,6 @@ def load_modules(
                         'old_name': old_name,
                         'new_name': new_name,
                         'fields': (', '.join('"' + f + '"' for f in fields))})
-                print query
                 cursor.execute(query)
 
             query = table.update([getattr(table, var_name)],
