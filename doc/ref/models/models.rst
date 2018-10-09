@@ -285,6 +285,7 @@ Class methods:
 
     Duplicate the records. ``default`` is a dictionary of default value for the
     created records.
+    New records are returned following the input order.
 
 .. classmethod:: ModelStorage.search(domain[, offset[, limit[, order[, count]]]])
 
@@ -410,6 +411,10 @@ Class methods:
 .. classmethod:: ModelSQL.__table__()
 
     Return a SQL Table instance for the Model.
+
+.. classmethod:: ModelSQL.__table_history__()
+
+    Return a SQL Table instance for the history of Model.
 
 .. classmethod:: ModelSQL.table_query()
 

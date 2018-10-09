@@ -239,6 +239,7 @@ def load_module_graph(graph, pool, update=None, lang=None):
 
         pool.setup_mixin(modules)
 
+
         for model_name in models_to_update_history:
             model = pool.get(model_name)
             if model._history:

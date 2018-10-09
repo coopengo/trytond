@@ -3,6 +3,7 @@
 import datetime
 import logging
 import os
+import logging
 import subprocess
 import tempfile
 import warnings
@@ -24,7 +25,6 @@ try:
 except ImportError:
     Manifest, MANIFEST = None, None
 from genshi.filters import Translator
-from trytond.config import config
 from trytond.pool import Pool, PoolBase
 from trytond.transaction import Transaction
 from trytond.url import URLMixin
@@ -397,6 +397,7 @@ def get_email(report, record, languages):
             report_name = report
         Report_ = pool.get(report_name, type='report')
     converter = None
+    title = None
     msg = MIMEMultipart('alternative')
     msg.add_header('Content-Language', ', '.join(l.code for l in languages))
     for language in languages:

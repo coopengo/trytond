@@ -96,6 +96,11 @@ class Unaccent(Function):
     _function = 'unaccent'
 
 
+class Unaccent(Function):
+    __slots__ = ()
+    _function = 'unaccent'
+
+
 class Database(DatabaseInterface):
 
     _lock = RLock()

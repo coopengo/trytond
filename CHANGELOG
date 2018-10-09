@@ -1,3 +1,12 @@
+Version 4.8.4 - 2018-08-20
+* Bug fixes (see mercurial logs for details)
+
+Version 4.8.3 - 2018-08-03
+* Bug fixes (see mercurial logs for details)
+
+Version 4.8.2 - 2018-07-05
+* Bug fixes (see mercurial logs for details)
+
 * BUG#9523 Add ttl on redis cache, default 12 hours, configurable on config and on code
 * BUG#9502 Don't auto_uninstall modules
 
@@ -39,9 +48,6 @@ Version 4.8.0 - 2018-04-23
 * Add exceptional parent language
 * Add get method on ir.lang
 * Convert format, currency and strftime of ir.lang into instance methods
-* Add width/height attribute to notebook
-* Add expand attribute on group tag
-* Add keyword attribute to button tag
 
 Version 4.6.3 - 2018-03-01
 * Bug fixes (see mercurial logs for details)

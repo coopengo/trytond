@@ -77,7 +77,7 @@ class Request(_Request):
         if auth.type == 'session':
             user_id = security.check(
                 database_name, auth.get('userid'), auth.get('session'),
-				context=context)
+                context=context)
         elif auth.type == 'token':
             user_id = auth.get('user_id')
         else:
@@ -191,7 +191,7 @@ def user_application(name, json=True):
             if auth_type != b'bearer':
                 abort(403)
 
-            application = UserApplication.check(auth_info, name)
+            application = UserApplication.check(bytes_to_wsgi(auth_info), name)
             if not application:
                 abort(403)
             transaction = Transaction()
