@@ -27,6 +27,7 @@ except ImportError:
 from genshi.filters import Translator
 from trytond.pool import Pool, PoolBase
 from trytond.transaction import Transaction
+from trytond.config import config
 from trytond.url import URLMixin
 from trytond.rpc import RPC
 from trytond.exceptions import UserError
