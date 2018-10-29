@@ -22,7 +22,7 @@ class _AttributeManager(object):
         return Transaction()
 
     def __exit__(self, type, value, traceback):
-        for name, value in self.kwargs.iteritems():
+        for name, value in self.kwargs.items():
             setattr(Transaction(), name, value)
 
 
@@ -228,7 +228,7 @@ class Transaction(object):
     def rollback(self):
         for sub_transaction in self._sub_transactions:
             sub_transaction.rollback()
-        for cache in self.cache.itervalues():
+        for cache in self.cache.values():
             cache.clear()
         for datamanager in self._datamanagers:
             datamanager.tpc_abort(self)

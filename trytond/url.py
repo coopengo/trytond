@@ -2,7 +2,7 @@
 # this repository contains the full copyright notices and license terms.
 
 import encodings.idna
-import urllib
+import urllib.request, urllib.parse, urllib.error
 import socket
 
 from trytond.config import config
@@ -36,7 +36,7 @@ class URLAccessor(object):
         url_part['name'] = cls.__name__
         url_part['database'] = Transaction().database.name
 
-        local_part = urllib.quote('%(database)s/%(type)s/%(name)s' % url_part)
+        local_part = urllib.parse.quote('%(database)s/%(type)s/%(name)s' % url_part)
         if isinstance(inst, Model) and inst.id:
             local_part += '/%d' % inst.id
         return 'tryton://%s/%s' % (HOSTNAME, local_part)

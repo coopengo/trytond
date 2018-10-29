@@ -1,8 +1,8 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
 import os
-import ConfigParser
-import urlparse
+import configparser
+import urllib.parse
 import logging
 
 import six
@@ -36,16 +36,16 @@ def parse_listen(value):
 
 
 def parse_uri(uri):
-    return urlparse.urlparse(uri)
+    return urllib.parse.urlparse(uri)
 
 
-class TrytonConfigParser(ConfigParser.RawConfigParser):
+class TrytonConfigParser(configparser.RawConfigParser):
 
     def __init__(self):
         if six.PY2:
-            ConfigParser.RawConfigParser.__init__(self)
+            configparser.RawConfigParser.__init__(self)
         else:
-            ConfigParser.RawConfigParser.__init__(self, strict=False)
+            configparser.RawConfigParser.__init__(self, strict=False)
         self.add_section('web')
         self.set('web', 'listen', 'localhost:8000')
         # AKE: web apps from env vars
@@ -92,9 +92,9 @@ class TrytonConfigParser(ConfigParser.RawConfigParser):
         self.update_etc()
 
     def update_etc(self, configfile=os.environ.get('TRYTOND_CONFIG')):
-        if isinstance(configfile, basestring):
+        if isinstance(configfile, str):
             configfile = [configfile]
-        if not configfile or not filter(None, configfile):
+        if not configfile or not [_f for _f in configfile if _f]:
             return
         read_files = self.read(configfile)
         logger.info('using %s as configuration files', ', '.join(read_files))
@@ -102,35 +102,35 @@ class TrytonConfigParser(ConfigParser.RawConfigParser):
     def get(self, section, option, *args, **kwargs):
         default = kwargs.pop('default', None)
         try:
-            return ConfigParser.RawConfigParser.get(self, section, option,
+            return configparser.RawConfigParser.get(self, section, option,
                 *args, **kwargs)
-        except (ConfigParser.NoOptionError, ConfigParser.NoSectionError):
+        except (configparser.NoOptionError, configparser.NoSectionError):
             return default
 
     def getint(self, section, option, *args, **kwargs):
         default = kwargs.pop('default', None)
         try:
-            return ConfigParser.RawConfigParser.getint(self, section, option,
+            return configparser.RawConfigParser.getint(self, section, option,
                 *args, **kwargs)
-        except (ConfigParser.NoOptionError, ConfigParser.NoSectionError,
+        except (configparser.NoOptionError, configparser.NoSectionError,
                 TypeError):
             return default
 
     def getfloat(self, section, option, *args, **kwargs):
         default = kwargs.pop('default', None)
         try:
-            return ConfigParser.RawConfigParser.getfloat(self, section, option,
+            return configparser.RawConfigParser.getfloat(self, section, option,
                 *args, **kwargs)
-        except (ConfigParser.NoOptionError, ConfigParser.NoSectionError,
+        except (configparser.NoOptionError, configparser.NoSectionError,
                 TypeError):
             return default
 
     def getboolean(self, section, option, *args, **kwargs):
         default = kwargs.pop('default', None)
         try:
-            return ConfigParser.RawConfigParser.getboolean(
+            return configparser.RawConfigParser.getboolean(
                 self, section, option, *args, **kwargs)
-        except (ConfigParser.NoOptionError, ConfigParser.NoSectionError,
+        except (configparser.NoOptionError, configparser.NoSectionError,
                 AttributeError):
             return default
 

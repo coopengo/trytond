@@ -52,8 +52,8 @@ class Char(FieldTranslate):
         if value is None:
             return None
         elif isinstance(value, str) and sys.version_info < (3,):
-            return unicode(value, 'utf-8')
-        assert isinstance(value, unicode)
+            return str(value, 'utf-8')
+        assert isinstance(value, str)
         return value
 
     @property

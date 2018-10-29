@@ -67,7 +67,7 @@ class Model(WarningErrorMixin, URLMixin, PoolBase):
 
         # Set _defaults
         cls._defaults = {}
-        fields_names = cls._fields.keys()
+        fields_names = list(cls._fields.keys())
         for field_name in fields_names:
             default_method = getattr(cls, 'default_%s' % field_name, False)
             if isinstance(default_method, collections.Callable):
@@ -79,7 +79,7 @@ class Model(WarningErrorMixin, URLMixin, PoolBase):
                 % (cls.__name__, k,)
 
         # Set name to fields
-        for name, field in cls._fields.iteritems():
+        for name, field in cls._fields.items():
             if field.name is None:
                 field.name = name
             else:
@@ -149,7 +149,7 @@ class Model(WarningErrorMixin, URLMixin, PoolBase):
                         value[field_name]).rec_name
 
         if not with_rec_name:
-            for field in value.keys():
+            for field in list(value.keys()):
                 if field.endswith('.rec_name'):
                     del value[field]
         return value
@@ -168,7 +168,7 @@ class Model(WarningErrorMixin, URLMixin, PoolBase):
         # Add translation to cache
         language = Transaction().language
         trans_args = []
-        for field in (x for x in cls._fields.keys()
+        for field in (x for x in list(cls._fields.keys())
                 if ((not fields_names) or x in fields_names)):
             trans_args.append((cls.__name__ + ',' + field, 'field', language,
                 None))
@@ -190,7 +190,7 @@ class Model(WarningErrorMixin, URLMixin, PoolBase):
         encoder = PYSONEncoder()
 
         accesses = FieldAccess.get_access([cls.__name__])[cls.__name__]
-        for field in (x for x in cls._fields.keys()
+        for field in (x for x in list(cls._fields.keys())
                 if ((not fields_names) or x in fields_names)):
             res[field] = {
                 'type': cls._fields[field]._type,
@@ -307,7 +307,7 @@ class Model(WarningErrorMixin, URLMixin, PoolBase):
             if res[field]['type'] == 'many2one':
                 target = cls._fields[field].get_target()
                 relation_fields = []
-                for target_name, target_field in target._fields.iteritems():
+                for target_name, target_field in target._fields.items():
                     if (target_field._type == 'one2many'
                             and target_field.model_name == cls.__name__
                             and target_field.field == field):
@@ -337,7 +337,7 @@ class Model(WarningErrorMixin, URLMixin, PoolBase):
                 if attr in res[field]:
                     res[field][attr] = encoder.encode(res[field][attr])
 
-        for i in res.keys():
+        for i in list(res.keys()):
             # filter out fields which aren't in the fields_names list
             if fields_names:
                 if i not in fields_names:
@@ -357,7 +357,7 @@ class Model(WarningErrorMixin, URLMixin, PoolBase):
         if kwargs:
             self._values = {}
             parent_values = {}
-            for name, value in kwargs.iteritems():
+            for name, value in kwargs.items():
                 if not name.startswith('_parent_'):
                     setattr(self, name, value)
                 else:
@@ -375,7 +375,7 @@ class Model(WarningErrorMixin, URLMixin, PoolBase):
                 else:
                     setattr(record, parent_name, {field: value})
 
-            for name, value in parent_values.iteritems():
+            for name, value in parent_values.items():
                 set_parent_value(self, name, value)
             self._init_values = self._values.copy()
         else:
@@ -399,7 +399,7 @@ class Model(WarningErrorMixin, URLMixin, PoolBase):
         return '%s,%s' % (self.__name__, self.id)
 
     def __unicode__(self):
-        return u'%s,%s' % (self.__name__, self.id)
+        return '%s,%s' % (self.__name__, self.id)
 
     def __repr__(self):
         if self.id is None or self.id < 0:
@@ -426,7 +426,7 @@ class Model(WarningErrorMixin, URLMixin, PoolBase):
     def __hash__(self):
         return hash((self.__name__, self.id))
 
-    def __nonzero__(self):
+    def __bool__(self):
         return True
 
     @property
@@ -442,7 +442,7 @@ class Model(WarningErrorMixin, URLMixin, PoolBase):
         # JCA : preload rec names if in called from _changed_values
         add_rec_names = ServerContext().get('_default_rec_names', False)
         if self._values:
-            for fname, value in self._values.iteritems():
+            for fname, value in self._values.items():
                 field = self._fields[fname]
                 rec_name = None
                 if field._type in ('many2one', 'one2one', 'reference'):

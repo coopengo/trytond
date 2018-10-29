@@ -2,9 +2,9 @@
 # this repository contains the full copyright notices and license terms.
 import logging
 import smtplib
-import urllib
+import urllib.request, urllib.parse, urllib.error
 from email.message import Message
-from urlparse import parse_qs
+from urllib.parse import parse_qs
 
 from .config import config, parse_uri
 from .transaction import Transaction
@@ -48,7 +48,7 @@ def get_smtp_server(uri=None):
     extra = {}
     if uri.query:
         cast = {'timeout': int}
-        for key, value in parse_qs(uri.query, strict_parsing=True).iteritems():
+        for key, value in parse_qs(uri.query, strict_parsing=True).items():
             extra[key] = cast.get(key, lambda a: a)(value[0])
     if uri.scheme.startswith('smtps'):
         server = smtplib.SMTP_SSL(uri.hostname, uri.port, **extra)
@@ -60,8 +60,8 @@ def get_smtp_server(uri=None):
 
     if uri.username and uri.password:
         server.login(
-            urllib.unquote_plus(uri.username),
-            urllib.unquote_plus(uri.password))
+            urllib.parse.unquote_plus(uri.username),
+            urllib.parse.unquote_plus(uri.password))
     return server
 
 

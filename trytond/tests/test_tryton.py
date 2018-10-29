@@ -12,6 +12,7 @@ from itertools import chain
 import operator
 from functools import wraps
 import inspect
+from functools import reduce
 try:
     import pkg_resources
 except ImportError:
@@ -300,7 +301,7 @@ class ModuleTestCase(unittest.TestCase):
         for mname, model in Pool().iterobject():
             if not isregisteredby(model, self.module):
                 continue
-            for fname, field in model._fields.iteritems():
+            for fname, field in model._fields.items():
                 fields = set()
                 fields |= get_eval_fields(field.domain)
                 if hasattr(field, 'digits'):
@@ -320,7 +321,7 @@ class ModuleTestCase(unittest.TestCase):
                     'Unknown depends %s in "%s"."%s"' % (
                         list(depends - set(model._fields)), mname, fname))
             if issubclass(model, ModelView):
-                for bname, button in model._buttons.iteritems():
+                for bname, button in model._buttons.items():
                     depends = set(button.get('depends', []))
                     assert depends <= set(model._fields), (
                         'Unknown depends %s in button "%s"."%s"' % (
@@ -332,7 +333,7 @@ class ModuleTestCase(unittest.TestCase):
         for mname, model in Pool().iterobject():
             if not isregisteredby(model, self.module):
                 continue
-            for fname, field in model._fields.iteritems():
+            for fname, field in model._fields.items():
                 for attribute in ['depends', 'on_change', 'on_change_with',
                         'selection_change_with', 'autocomplete']:
                     depends = getattr(field, attribute, [])
@@ -484,7 +485,7 @@ class ModuleTestCase(unittest.TestCase):
                     'wizard': wizard_name,
                     })
             wizard_instance = wizard(session_id)
-            for state_name, state in wizard_instance.states.iteritems():
+            for state_name, state in wizard_instance.states.items():
                 if isinstance(state, StateView):
                     # Don't test defaults as they may depend on context
                     state.get_view(wizard_instance, state_name)
@@ -498,7 +499,7 @@ class ModuleTestCase(unittest.TestCase):
         for mname, model in Pool().iterobject():
             if not isregisteredby(model, self.module):
                 continue
-            for field_name, field in model._fields.iteritems():
+            for field_name, field in model._fields.items():
                 selection = getattr(field, 'selection', None)
                 if selection is None:
                     continue
@@ -524,7 +525,7 @@ class ModuleTestCase(unittest.TestCase):
         for mname, model in Pool().iterobject():
             if not isregisteredby(model, self.module):
                 continue
-            for field_name, field in model._fields.iteritems():
+            for field_name, field in model._fields.items():
                 if not isinstance(field, Function):
                     continue
                 for func_name in [field.getter, field.setter, field.searcher]:
@@ -698,7 +699,7 @@ class TestSuite(unittest.TestSuite):
             try:
                 exist = db_exist()
                 break
-            except DatabaseOperationalError, err:
+            except DatabaseOperationalError as err:
                 # Retry on connection error
                 sys.stderr.write(str(err))
                 time.sleep(1)

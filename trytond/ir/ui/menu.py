@@ -144,7 +144,7 @@ class UIMenu(DeactivableMixin, sequence_ordered(), ModelSQL, ModelView):
 
     @classmethod
     def search_rec_name(cls, name, clause):
-        if isinstance(clause[2], basestring):
+        if isinstance(clause[2], str):
             values = clause[2].split(SEPARATOR.strip())
             values.reverse()
             domain = []
@@ -207,7 +207,7 @@ class UIMenu(DeactivableMixin, sequence_ordered(), ModelSQL, ModelView):
             action2keyword = {k.action.id: k for k in action_keywords}
             with Transaction().set_context(active_test=False):
                 factions = Action.search([
-                        ('action', 'in', action2keyword.keys()),
+                        ('action', 'in', list(action2keyword.keys())),
                         ])
             for action in factions:
                 model = action2keyword[action.id].model
@@ -231,7 +231,7 @@ class UIMenu(DeactivableMixin, sequence_ordered(), ModelSQL, ModelView):
                 ActionKeyword.delete(action_keywords)
         if not value:
             return
-        if isinstance(value, basestring):
+        if isinstance(value, str):
             action_type, action_id = value.split(',')
         else:
             action_type, action_id = value

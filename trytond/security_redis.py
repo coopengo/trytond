@@ -4,7 +4,7 @@
 import time
 from threading import Lock
 import redis
-from urlparse import urlparse
+from urllib.parse import urlparse
 
 from trytond.config import config
 

@@ -5,7 +5,7 @@ import datetime
 from xml import sax
 import logging
 import re
-from itertools import izip
+
 from collections import defaultdict
 from decimal import Decimal
 
@@ -346,7 +346,7 @@ class Fs2bdAccessor:
         if fs_id not in self.fs2db[module]:
             self.fs2db[module][fs_id] = {}
         fs2db_val = self.fs2db[module][fs_id]
-        for key, val in values.items():
+        for key, val in list(values.items()):
             fs2db_val[key] = val
 
     def reset_browsercord(self, module, model_name, ids=None):
@@ -355,13 +355,13 @@ class Fs2bdAccessor:
         self.browserecord[module].setdefault(model_name, {})
         Model = self.pool.get(model_name)
         if not ids:
-            ids = self.browserecord[module][model_name].keys()
+            ids = list(self.browserecord[module][model_name].keys())
         models = Model.browse(ids)
         for model in models:
             if model.id in self.browserecord[module][model_name]:
-                for cache in Transaction().cache.values():
-                    for cache in (cache, cache.get('_language_cache',
-                                {}).values()):
+                for cache in list(Transaction().cache.values()):
+                    for cache in (cache, list(cache.get('_language_cache',
+                                {}).values())):
                         if (model_name in cache
                                 and model.id in cache[model_name]):
                             cache[model_name][model.id] = {}
@@ -383,7 +383,7 @@ class Fs2bdAccessor:
             record_ids[rec.model].append(rec.db_id)
 
         self.browserecord[module] = {}
-        for model_name in record_ids.keys():
+        for model_name in list(record_ids.keys()):
             try:
                 Model = self.pool.get(model_name)
             except KeyError:
@@ -395,7 +395,7 @@ class Fs2bdAccessor:
                         ('id', 'in', list(sub_record_ids)),
                         ], order=[('id', 'ASC')])
                 with Transaction().set_context(language='en'):
-                    models = Model.browse(map(int, records))
+                    models = Model.browse(list(map(int, records)))
                 for model in models:
                     self.browserecord[module][model_name][model.id] = model
         self.fetched_modules.append(module)
@@ -491,10 +491,10 @@ class TrytondXmlHandler(sax.handler.ContentHandler):
     def endElement(self, name):
 
         if name == 'data' and self.grouped:
-            for model, values in self.grouped_creations.iteritems():
-                self.create_records(model, values.values(), values.keys())
+            for model, values in self.grouped_creations.items():
+                self.create_records(model, list(values.values()), list(values.keys()))
             self.grouped_creations.clear()
-            for key, actions in self.grouped_write.iteritems():
+            for key, actions in self.grouped_write.items():
                 module, model = key
                 self.write_records(module, model, *actions)
             self.grouped_write.clear()
@@ -702,7 +702,7 @@ class TrytondXmlHandler(sax.handler.ContentHandler):
             records = Model.create(vlist)
 
         mdata_values = []
-        for record, values, fs_id in izip(records, vlist, fs_ids):
+        for record, values, fs_id in zip(records, vlist, fs_ids):
             for key in values:
                 values[key] = self._clean_value(key, record)
 
@@ -718,7 +718,7 @@ class TrytondXmlHandler(sax.handler.ContentHandler):
 
         models_data = self.ModelData.create(mdata_values)
 
-        for record, values, fs_id, mdata in izip(
+        for record, values, fs_id, mdata in zip(
                 records, vlist, fs_ids, models_data):
             self.fs2db.set(self.module, fs_id, {
                     'db_id': record.id,

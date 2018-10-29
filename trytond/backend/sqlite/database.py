@@ -38,13 +38,13 @@ class SQLiteExtract(Function):
         if date is None:
             return None
         if len(date) == 10:
-            year, month, day = map(int, date.split('-'))
+            year, month, day = list(map(int, date.split('-')))
             date = datetime.date(year, month, day)
         else:
             datepart, timepart = date.split(" ")
-            year, month, day = map(int, datepart.split("-"))
+            year, month, day = list(map(int, datepart.split("-")))
             timepart_full = timepart.split(".")
-            hours, minutes, seconds = map(int, timepart_full[0].split(":"))
+            hours, minutes, seconds = list(map(int, timepart_full[0].split(":")))
             if len(timepart_full) == 2:
                 microseconds = int(timepart_full[1])
             else:
@@ -171,7 +171,7 @@ class SQLiteTrim(Trim):
             }[self.position]
 
         def format(arg):
-            if isinstance(arg, basestring):
+            if isinstance(arg, str):
                 return param
             else:
                 return str(arg)
@@ -189,7 +189,7 @@ def sign(value):
 
 
 def greatest(*args):
-    args = filter(lambda a: a is not None, args)
+    args = [a for a in args if a is not None]
     if args:
         return max(args)
     else:
@@ -197,7 +197,7 @@ def greatest(*args):
 
 
 def least(*args):
-    args = filter(lambda a: a is not None, args)
+    args = [a for a in args if a is not None]
     if args:
         return min(args)
     else:
@@ -447,8 +447,8 @@ def adapt_datetime(val):
     return val.replace(tzinfo=None).isoformat(" ")
 sqlite.register_adapter(datetime.datetime, adapt_datetime)
 sqlite.register_adapter(datetime.time, lambda val: val.isoformat())
-sqlite.register_converter('TIME', lambda val: datetime.time(*map(int,
-            val.decode('utf-8').split(':'))))
+sqlite.register_converter('TIME', lambda val: datetime.time(*list(map(int,
+            val.decode('utf-8').split(':')))))
 sqlite.register_adapter(datetime.timedelta, lambda val: val.total_seconds())
 
 

@@ -177,7 +177,7 @@ class View(ModelSQL, ModelView):
                     try:
                         value = PYSONDecoder().decode(element.get(attr))
                         validates.get(attr, lambda a: True)(value)
-                    except Exception, e:
+                    except Exception as e:
                         error_log = '%s: <%s %s="%s"/>' % (
                             e, element.get('id') or element.get('name'), attr,
                             element.get(attr))
@@ -302,12 +302,12 @@ class ViewTreeWidth(ModelSQL, ModelView):
         records = cls.search([
             ('user', '=', Transaction().user),
             ('model', '=', model),
-            ('field', 'in', fields.keys()),
+            ('field', 'in', list(fields.keys())),
             ])
         cls.delete(records)
 
         to_create = []
-        for field in fields.keys():
+        for field in list(fields.keys()):
             to_create.append({
                     'model': model,
                     'field': field,

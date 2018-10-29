@@ -16,7 +16,7 @@ class MPTTTestCase(unittest.TestCase):
     def setUpClass(cls):
         activate_module('tests')
 
-    def check_tree(self, parent_id=None, left=-1, right=sys.maxint):
+    def check_tree(self, parent_id=None, left=-1, right=sys.maxsize):
         pool = Pool()
         Mptt = pool.get('test.mptt')
 
@@ -43,7 +43,7 @@ class MPTTTestCase(unittest.TestCase):
                 (child, child.left, next_left)
             next_left = child.right
         childs.reverse()
-        previous_right = sys.maxint
+        previous_right = sys.maxsize
         for child in childs:
             assert child.right < previous_right, \
                 '%s: right %d >= previous right %d' \

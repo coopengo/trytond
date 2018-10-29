@@ -27,14 +27,14 @@ class FileStoreTestCase(unittest.TestCase):
         "Test set"
         result = filestore.set(self.data(), prefix='test')
         self.assertTrue(result)
-        self.assertIsInstance(result, basestring)
+        self.assertIsInstance(result, str)
 
     def test_setmany(self):
         "Test setmany"
         result = filestore.setmany([self.data(), self.data()], prefix='test')
         self.assertIsInstance(result, list)
         self.assertEqual(len(result), 2)
-        self.assertIsInstance(result[0], basestring)
+        self.assertIsInstance(result[0], str)
 
     def test_get(self):
         "Test get"

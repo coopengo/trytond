@@ -149,13 +149,13 @@ class ModelView(Model):
                     if parent_value:
                         methods[attr][name] |= parent_value
 
-        for name, method in callables.iteritems():
+        for name, method in callables.items():
             get_callable_attributes(name, method)
 
         def setup_field(field_name, field, attribute):
             if attribute == 'selection_change_with':
                 if isinstance(
-                        getattr(field, 'selection', None), basestring):
+                        getattr(field, 'selection', None), str):
                     function_name = field.selection
                 else:
                     return
@@ -186,7 +186,7 @@ class ModelView(Model):
                 # Decorate on_change to always return self
                 setattr(cls, function_name, on_change(function))
 
-        for name, field in fields_.iteritems():
+        for name, field in fields_.items():
             for attribute in [
                     'on_change',
                     'on_change_with',
@@ -200,7 +200,7 @@ class ModelView(Model):
         super(ModelView, cls).__post_setup__()
 
         # Update __rpc__
-        for field_name, field in cls._fields.iteritems():
+        for field_name, field in cls._fields.items():
             field.set_rpc(cls)
 
         for button in cls._buttons:
@@ -245,7 +245,7 @@ class ModelView(Model):
                     ],
                 ]
             views = View.search(domain)
-            views = filter(lambda v: v.rng_type == view_type, views)
+            views = [v for v in views if v.rng_type == view_type]
             if views:
                 view = views[0]
         if view:
@@ -348,7 +348,7 @@ class ModelView(Model):
             child_field = result['field_childs']
             result['children_definitions'] = defs = {}
             model = cls
-            requisite_fields = result['fields'].keys()
+            requisite_fields = list(result['fields'].keys())
             requisite_fields.remove(child_field)
             while model and model.__name__ not in defs:
                 fields_to_get = [rfield for rfield in requisite_fields
@@ -416,19 +416,19 @@ class ModelView(Model):
 
         # Find field without read access
         fread_accesses = FieldAccess.check(cls.__name__,
-                cls._fields.keys(), 'read', access=True)
+                list(cls._fields.keys()), 'read', access=True)
         fields_to_remove = set(
-            x for x, y in fread_accesses.items() if not y)
+            x for x, y in list(fread_accesses.items()) if not y)
 
         # Find relation field without read access
-        for name, field in cls._fields.iteritems():
+        for name, field in cls._fields.items():
             if not ModelAccess.check_relation(cls.__name__, name, mode='read'):
                 fields_to_remove.add(name)
 
         checked = set()
         while checked < fields_to_remove:
             to_check = fields_to_remove - checked
-            for name, field in cls._fields.items():
+            for name, field in list(cls._fields.items()):
                 for field_to_remove in to_check:
                     if field_to_remove in field.depends:
                         fields_to_remove.add(name)
@@ -479,7 +479,7 @@ class ModelView(Model):
                 if hasattr(field, 'field'):
                     fields_def.setdefault(field.field, {'name': field.field})
 
-        for field_name in fields_def.keys():
+        for field_name in list(fields_def.keys()):
             if field_name in cls._fields:
                 field = cls._fields[field_name]
             else:
@@ -593,7 +593,7 @@ class ModelView(Model):
             groups = set(User.get_groups())
             button_attr = Button.get_view_attributes(
                 cls.__name__, button_name)
-            for attr, value in button_attr.iteritems():
+            for attr, value in button_attr.items():
                 if not element.get(attr):
                     element.set(attr, value or '')
             button_groups = Button.get_groups(cls.__name__, button_name)
@@ -677,10 +677,8 @@ class ModelView(Model):
                     if button_rules:
                         clicks = ButtonClick.register(
                             cls.__name__, func.__name__, records)
-                        records = filter(
-                            lambda r: all(br.test(r, clicks.get(r.id, []))
-                                for br in button_rules),
-                            records)
+                        records = [r for r in records if all(br.test(r, clicks.get(r.id, []))
+                                for br in button_rules)]
                 # Reset click after filtering in case the button also has rules
                 names = Button.get_reset(cls.__name__, func.__name__)
                 if names:
@@ -751,7 +749,7 @@ class ModelView(Model):
         init_values = self._init_values or {}
         if not self._values:
             return changed
-        for fname, value in self._values.iteritems():
+        for fname, value in self._values.items():
             field = self._fields[fname]
             # Always test key presence in case value is None
             if (fname in init_values

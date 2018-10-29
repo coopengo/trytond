@@ -15,8 +15,8 @@ class Date(Field):
     def sql_format(self, value):
         if value is None:
             return None
-        if isinstance(value, basestring):
-            year, month, day = map(int, value.split("-", 2))
+        if isinstance(value, str):
+            year, month, day = list(map(int, value.split("-", 2)))
             return datetime.date(year, month, day)
 
         if (not isinstance(value, datetime.date)
@@ -55,10 +55,10 @@ class DateTime(Field):
     def sql_format(self, value):
         if not value:
             return None
-        if isinstance(value, basestring):
+        if isinstance(value, str):
             datepart, timepart = value.split(" ")
-            year, month, day = map(int, datepart.split("-", 2))
-            hours, minutes, seconds = map(int, timepart.split(":"))
+            year, month, day = list(map(int, datepart.split("-", 2)))
+            hours, minutes, seconds = list(map(int, timepart.split(":")))
             return datetime.datetime(year, month, day, hours, minutes, seconds)
         if not isinstance(value, datetime.datetime):
             raise ValueError("invalid type '%s' for %s"
@@ -76,11 +76,11 @@ class Timestamp(Field):
     def sql_format(self, value):
         if value is None:
             return None
-        if isinstance(value, basestring):
+        if isinstance(value, str):
             datepart, timepart = value.split(" ")
-            year, month, day = map(int, datepart.split("-", 2))
+            year, month, day = list(map(int, datepart.split("-", 2)))
             timepart_full = timepart.split(".", 1)
-            hours, minutes, seconds = map(int, timepart_full[0].split(":"))
+            hours, minutes, seconds = list(map(int, timepart_full[0].split(":")))
             if len(timepart_full) == 2:
                 microseconds = int(timepart_full[1])
             else:
@@ -103,8 +103,8 @@ class Time(DateTime):
     def sql_format(self, value):
         if value is None:
             return None
-        if isinstance(value, basestring):
-            hours, minutes, seconds = map(int, value.split(":"))
+        if isinstance(value, str):
+            hours, minutes, seconds = list(map(int, value.split(":")))
             return datetime.time(hours, minutes, seconds)
         if not isinstance(value, datetime.time):
             raise ValueError("invalid type '%s' for %s"

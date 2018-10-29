@@ -3,7 +3,7 @@
 import os
 import threading
 import json
-from urlparse import urlparse
+from urllib.parse import urlparse
 import logging
 import redis
 from trytond.pool import Pool
@@ -23,7 +23,7 @@ class Listener(threading.Thread):
         self.channels = channels
         self.redis = r
         self.pubsub = self.redis.pubsub()
-        self.pubsub.subscribe(channels.keys())
+        self.pubsub.subscribe(list(channels.keys()))
         self.started = False
 
     def run(self):
@@ -32,7 +32,7 @@ class Listener(threading.Thread):
             channel = item['channel']
             data = item['data']
             fn = self.channels.get(channel, None)
-            if fn and type(data) not in (int, long):
+            if fn and type(data) not in (int, int):
                 fn(data)
         self.started = False
 

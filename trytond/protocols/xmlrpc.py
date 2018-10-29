@@ -1,6 +1,6 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
-import xmlrpclib as client
+import xmlrpc.client as client
 import datetime
 import logging
 
@@ -68,8 +68,8 @@ if bytes == str:
 
 def dump_struct(self, value, write, escape=client.escape):
     converted_value = {}
-    for k, v in value.items():
-        if type(k) in (int, long):
+    for k, v in list(value.items()):
+        if type(k) in (int, int):
             k = str(int(k))
         elif type(k) == float:
             k = repr(k)
