@@ -13,6 +13,7 @@ from trytond.cache_serializer import pack, unpack
 class RedisCache(BaseCache):
     _client = None
     _client_check_lock = Lock()
+    #PKUNK 9502 Redis ttl
     _ttl = config.getint('cache', 'redis_ttl') or 60 * 60 * 12
 
     @classmethod
@@ -44,22 +45,26 @@ class RedisCache(BaseCache):
     def get(self, key, default=None):
         namespace = self._namespace()
         key = self._key(key)
+        #PKUNK 9502 normal get 
         result = self._client.get('%s:%s' % (namespace, key))
         if result is None:
             return default
         else:
             return unpack(result)
 
+    #PKUNK 9502 add ttl on set
     def set(self, key, value, ttl=None):
         if ttl:
             assert isinstance(ttl, int)
         namespace = self._namespace()
         key = self._key(key)
         value = pack(value)
+        #PKUNK 9502 change method hset to setex
         self._client.setex(name='%s:%s' % (namespace, key), value=value, time=ttl or self._ttl)
 
     def clear(self):
         namespace = self._namespace()
+        #PKUNK 9502 Add loop to clean all key
         for key in self._client.scan_iter(match='%s:*' % (namespace)):
             self._client.delete(key)
 
