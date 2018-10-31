@@ -5,6 +5,7 @@ import logging
 import os
 import urllib.request, urllib.parse, urllib.error
 import json
+from datetime import datetime
 from decimal import Decimal
 from threading import RLock
 
@@ -45,6 +46,9 @@ __all__ = ['Database', 'DatabaseIntegrityError', 'DatabaseOperationalError']
 logger = logging.getLogger(__name__)
 
 os.environ['PGTZ'] = os.environ.get('TZ', '')
+_timeout = config.getint('database', 'timeout')
+_minconn = config.getint('database', 'minconn', default=1)
+_maxconn = config.getint('database', 'maxconn', default=64)
 
 
 def unescape_quote(s):
@@ -101,14 +105,21 @@ class Unaccent(Function):
     _function = 'unaccent'
 
 
+class AdvisoryLock(Function):
+    _function = 'pg_advisory_xact_lock'
+
+
+class TryAdvisoryLock(Function):
+    _function = 'pg_try_advisory_xact_lock'
+
+
 class Database(DatabaseInterface):
 
     _lock = RLock()
     _databases = {}
     _connpool = None
-    _list_cache = None
-    _list_cache_timestamp = None
-    _version_cache = {}
+    _list_cache = {}
+    _list_cache_timestamp = {}
     _search_path = None
     _current_user = None
     _has_returning = None
@@ -126,19 +137,30 @@ class Database(DatabaseInterface):
 
     def __new__(cls, name='template1'):
         with cls._lock:
+            now = datetime.now()
+            for database in list(cls._databases.values()):
+                if ((now - database._last_use).total_seconds() > _timeout
+                        and database.name != name
+                        and not database._connpool._used):
+                    database.close()
             if name in cls._databases:
-                return cls._databases[name]
-            inst = DatabaseInterface.__new__(cls, name=name)
-
-            logger.info('connect to "%s"', name)
-            minconn = config.getint('database', 'minconn', default=1)
-            maxconn = config.getint('database', 'maxconn', default=64)
-            inst._connpool = ThreadedConnectionPool(
-                minconn, maxconn, cls.dsn(name),
-                cursor_factory=PerfCursor)
-
-            cls._databases[name] = inst
+                inst = cls._databases[name]
+            else:
+                if name == 'template1':
+                    minconn = 0
+                else:
+                    minconn = _minconn
+                inst = DatabaseInterface.__new__(cls, name=name)
+                logger.info('connect to "%s"', name)
+                inst._connpool = ThreadedConnectionPool(
+                    minconn, _maxconn, cls.dsn(name),
+                    cursor_factory=LoggingCursor)
+                cls._databases[name] = inst
+            inst._last_use = datetime.now()
             return inst
+
+    def __init__(self, name='template1'):
+        super(Database, self).__init__(name)
 
     @classmethod
     def dsn(cls, name):
@@ -185,6 +207,7 @@ class Database(DatabaseInterface):
 
     def close(self):
         with self._lock:
+            logger.info('disconnect from "%s"', self.name)
             self._connpool.closeall()
             self._databases.pop(self.name)
 
@@ -194,28 +217,25 @@ class Database(DatabaseInterface):
         cursor.execute('CREATE DATABASE "' + database_name + '" '
             'TEMPLATE "' + template + '" ENCODING \'unicode\'')
         connection.commit()
-        cls._list_cache = None
+        cls._list_cache.clear()
 
     def drop(self, connection, database_name):
         cursor = connection.cursor()
         cursor.execute('DROP DATABASE "' + database_name + '"')
-        self.__class__._list_cache = None
+        self.__class__._list_cache.clear()
 
     def get_version(self, connection):
-        if self.name not in self._version_cache:
-            cursor = connection.cursor()
-            cursor.execute('SHOW server_version_num')
-            version, = cursor.fetchone()
-            major, rest = divmod(int(version), 10000)
-            minor, patch = divmod(rest, 100)
-            self._version_cache[self.name] = (major, minor, patch)
-        return self._version_cache[self.name]
+        version = connection.server_version
+        major, rest = divmod(int(version), 10000)
+        minor, patch = divmod(rest, 100)
+        return (major, minor, patch)
 
-    def list(self):
+    def list(self, hostname=None):
         now = time.time()
         timeout = config.getint('session', 'timeout')
-        res = self.__class__._list_cache
-        if res and abs(self.__class__._list_cache_timestamp - now) < timeout:
+        res = self.__class__._list_cache.get(hostname)
+        timestamp = self.__class__._list_cache_timestamp.get(hostname, now)
+        if res and abs(timestamp - now) < timeout:
             return res
 
         connection = self.get_connection()
@@ -227,15 +247,15 @@ class Database(DatabaseInterface):
             for db_name, in cursor:
                 try:
                     with connect(self.dsn(db_name)) as conn:
-                        if self._test(conn):
+                        if self._test(conn, hostname=hostname):
                             res.append(db_name)
                 except Exception:
                     continue
         finally:
             self.put_connection(connection)
 
-        self.__class__._list_cache = res
-        self.__class__._list_cache_timestamp = now
+        self.__class__._list_cache[hostname] = res
+        self.__class__._list_cache_timestamp[hostname] = now
         return res
 
     def init(self):
@@ -271,22 +291,33 @@ class Database(DatabaseInterface):
         finally:
             self.put_connection(connection)
 
-    def test(self):
+    def test(self, hostname=None):
         connection = self.get_connection()
-        is_tryton_database = self._test(connection)
-        self.put_connection(connection)
+        try:
+            is_tryton_database = self._test(connection, hostname=hostname)
+        except Exception:
+            is_tryton_database = False
+        finally:
+            self.put_connection(connection)
         return is_tryton_database
 
     @classmethod
-    def _test(cls, connection):
+    def _test(cls, connection, hostname=None):
         cursor = connection.cursor()
-        cursor.execute('SELECT 1 FROM information_schema.tables '
-            'WHERE table_name IN %s',
-            (('ir_model', 'ir_model_field', 'ir_ui_view', 'ir_ui_menu',
-                    'res_user', 'res_group', 'ir_module',
-                    'ir_module_dependency', 'ir_translation',
-                    'ir_lang'),))
-        return len(cursor.fetchall()) != 0
+        tables = ('ir_model', 'ir_model_field', 'ir_ui_view', 'ir_ui_menu',
+            'res_user', 'res_group', 'ir_module', 'ir_module_dependency',
+            'ir_translation', 'ir_lang', 'ir_configuration')
+        cursor.execute('SELECT table_name FROM information_schema.tables '
+            'WHERE table_name IN %s', (tables,))
+        if len(cursor.fetchall()) != len(tables):
+            return False
+        if hostname:
+            cursor.execute(
+                'SELECT hostname FROM ir_configuration')
+            hostnames = {h for h, in cursor.fetchall() if h}
+            if hostnames and hostname not in hostnames:
+                return False
+        return True
 
     def nextid(self, connection, table):
         cursor = connection.cursor()
@@ -305,6 +336,12 @@ class Database(DatabaseInterface):
     def lock(self, connection, table):
         cursor = connection.cursor()
         cursor.execute('LOCK "%s" IN EXCLUSIVE MODE NOWAIT' % table)
+
+    def lock_id(self, id, timeout=None):
+        if not timeout:
+            return TryAdvisoryLock(id)
+        else:
+            return AdvisoryLock(id)
 
     def has_constraint(self, constraint):
         return True
@@ -476,6 +513,10 @@ class Database(DatabaseInterface):
                        'END '
                 'FROM "%s"' % name)
         return cursor.fetchone()[0]
+
+    def has_channel(self):
+        return True
+
 
 register_type(UNICODE)
 if PYDATE:

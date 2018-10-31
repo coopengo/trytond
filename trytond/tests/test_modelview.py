@@ -2,7 +2,8 @@
 # this repository contains the full copyright notices and license terms.
 
 import unittest
-from mock import patch
+from unittest.mock import patch
+
 from lxml import etree
 
 from trytond.tests.test_tryton import activate_module, with_transaction
@@ -326,6 +327,66 @@ class ModelView(unittest.TestCase):
 
         fields = EmptyPage.fields_view_get(view_type='tree')['fields']
         self.assertNotIn('active', fields)
+
+    @with_transaction(context={'_check_access': True})
+    def test_circular_depends_removed(self):
+        "Testing circular depends are removed when user has no access"
+        pool = Pool()
+        CircularDepends = pool.get('test.modelview.circular_depends')
+        Field = pool.get('ir.model.field')
+        FieldAccess = pool.get('ir.model.field.access')
+
+        foo_field, = Field.search([
+                ('model.model', '=', 'test.modelview.circular_depends'),
+                ('name', '=', 'foo'),
+                ])
+        FieldAccess.create([{
+            'field': foo_field.id,
+            'group': None,
+            'perm_read': False,
+            }])
+
+        fields = CircularDepends.fields_view_get(view_type='form')['fields']
+
+        self.assertEqual(fields, {})
+
+    @with_transaction(context={'_check_access': True})
+    def test_button_depends_access(self):
+        "Testing buttons are not removed when dependant fields are accesible"
+        pool = Pool()
+        Button = pool.get('test.modelview.button_depends')
+
+        arch = Button.fields_view_get(view_type='form')['arch']
+        parser = etree.XMLParser()
+        tree = etree.fromstring(arch, parser=parser)
+        buttons = tree.xpath('//button')
+
+        self.assertEqual(len(buttons), 1)
+
+    @with_transaction(context={'_check_access': True})
+    def test_button_depends_no_access(self):
+        "Testing buttons are removed when dependant fields are not accesible"
+        pool = Pool()
+        Button = pool.get('test.modelview.button_depends')
+        Field = pool.get('ir.model.field')
+        FieldAccess = pool.get('ir.model.field.access')
+
+        field, = Field.search([
+                ('model.model', '=', Button.__name__),
+                ('name', '=', 'value'),
+                ])
+        FieldAccess.create([{
+            'field': field.id,
+            'group': None,
+            'perm_read': False,
+            }])
+
+        arch = Button.fields_view_get(view_type='form')['arch']
+        parser = etree.XMLParser()
+        tree = etree.fromstring(arch, parser=parser)
+        buttons = tree.xpath('//button')
+
+        self.assertEqual(len(buttons), 0)
 
 
 def suite():

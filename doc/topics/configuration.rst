@@ -20,6 +20,9 @@ For more information see ConfigParser_.
 
 .. _ConfigParser: http://docs.python.org/2/library/configparser.html
 
+The default value of any option can be changed using environment variables
+with names using this syntax: `TRYTOND_<SECTION>__<NAME>`.
+
 Sections
 ========
 
@@ -172,6 +175,24 @@ The number of field to load with an `eager` :attr:`Field.loading`.
 
 Default: `100`
 
+clean_timeout
+~~~~~~~~~~~~~
+
+The minimum number of seconds between two cleanings of the cache.
+
+Default: `300`
+
+queue
+-----
+
+worker
+~~~~~~
+
+Activate asynchronous processing of the tasks. Otherwise they are performed at
+the end of the requests.
+
+Default: `False`
+
 table
 -----
 
@@ -246,12 +267,19 @@ The methods are tested following the order of the list.
 
 Default: `password`
 
+max_age
+~~~~~~~
+
+The time in seconds that a session stay valid.
+
+Default: `2592000` (30 days)
+
 timeout
 ~~~~~~~
 
-The time in seconds until a session expires.
+The time in seconds without activity before the session is no more fresh.
 
-Default: `600`
+Default: `300` (5 minutes)
 
 max_attempt
 ~~~~~~~~~~~
@@ -316,6 +344,15 @@ The time in seconds until the reset password expires.
 
 Default: `86400` (24h)
 
+passlib
+-------
+
+The path to the `INI file to load as CryptContext
+<https://passlib.readthedocs.io/en/stable/narr/context-tutorial.html#loading-saving-a-cryptcontext>`_.
+If not path is set, Tryton will use the schemes `bcrypt` or `pbkdf2_sha512`.
+
+Default: `None`
+
 attachment
 ----------
 
@@ -334,6 +371,39 @@ store_prefix
 The prefix to use with the `FileStore`.
 
 Default: `None`
+
+bus
+---
+
+allow_subscribe
+~~~~~~~~~~~~~~~
+
+A boolean value to allow clients to subscribe to bus channels.
+
+Default: `False`
+
+long_polling_timeout
+~~~~~~~~~~~~~~~~~~~~
+
+The time in seconds to keep the connection to the client opened when using long
+polling for bus messages
+
+Default: `300`
+
+cache_timeout
+~~~~~~~~~~~~~
+
+The number of seconds a message should be kept by the queue before being
+discarded.
+
+Default: `300`
+
+select_timeout
+~~~~~~~~~~~~~~
+
+The timeout duration of the select call when listening on a channel.
+
+Default: `5`
 
 .. _JSON-RPC: http://en.wikipedia.org/wiki/JSON-RPC
 .. _XML-RPC: http://en.wikipedia.org/wiki/XML-RPC

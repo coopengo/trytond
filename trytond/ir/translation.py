@@ -1,15 +1,14 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
-import polib
+import os
 import xml.dom.minidom
 from difflib import SequenceMatcher
-import os
 from hashlib import md5
-from lxml import etree
-
 from io import BytesIO
+from lxml import etree
 import logging
 
+import polib
 from sql import Column, Null, Literal
 from sql.functions import Substring, Position
 from sql.conditionals import Case
@@ -24,7 +23,6 @@ from ..model import ModelView, ModelSQL, fields, Unique
 from ..wizard import Wizard, StateView, StateTransition, StateAction, \
     Button
 from ..tools import file_open, reduce_ids, grouped_slice, cursor_dict
-from .. import backend
 from ..pyson import PYSONEncoder, Eval
 from ..transaction import Transaction
 from ..pool import Pool
@@ -101,40 +99,12 @@ class Translation(ModelSQL, ModelView):
 
     @classmethod
     def __register__(cls, module_name):
-        TableHandler = backend.get('TableHandler')
         transaction = Transaction()
         cursor = transaction.connection.cursor()
         ir_translation = cls.__table__()
-        table = TableHandler(cls, module_name)
-        # Migration from 1.8: new field src_md5
-        src_md5_exist = table.column_exist('src_md5')
-        if not src_md5_exist:
-            table.add_column('src_md5', cls.src_md5._sql_type)
-        table.drop_constraint('translation_uniq')
-        table.index_action(['lang', 'type', 'name', 'src'], 'remove')
+        table = cls.__table_handler__(module_name)
 
         super(Translation, cls).__register__(module_name)
-
-        # Migration from 1.8: fill new field src_md5
-        if not src_md5_exist:
-            offset = 0
-            limit = transaction.database.IN_MAX
-            translations = True
-            while translations:
-                translations = cls.search([], offset=offset, limit=limit)
-                offset += limit
-                for translation in translations:
-                    src_md5 = cls.get_src_md5(translation.src)
-                    cls.write([translation], {
-                        'src_md5': src_md5,
-                    })
-            table = TableHandler(cls, module_name)
-            table.not_null_action('src_md5', action='add')
-
-        # Migration from 2.2 and 2.8
-        cursor.execute(*ir_translation.update([ir_translation.res_id],
-                [-1], where=(ir_translation.res_id == Null)
-                | (ir_translation.res_id == 0)))
 
         # Migration from 3.8: rename odt type in report
         cursor.execute(*ir_translation.update(
@@ -142,7 +112,7 @@ class Translation(ModelSQL, ModelView):
                 ['report'],
                 where=ir_translation.type == 'odt'))
 
-        table = TableHandler(cls, module_name)
+        table = cls.__table_handler__(module_name)
         table.index_action(['lang', 'type', 'name'], 'add')
 
     @classmethod
@@ -1062,7 +1032,7 @@ class TranslationSet(Wizard):
             reports = Report.browse(context.get('active_ids', []))
         elif context.get('active_model', 'ir.ui.menu') == 'ir.ui.menu':
             with Transaction().set_context(active_test=False):
-                reports = Report.search([])
+                reports = Report.search([('translatable', '=', True)])
         else:
             return
 
@@ -1307,6 +1277,7 @@ class TranslationClean(Wizard):
         with Transaction().set_context(active_test=False):
             if not Report.search([
                         ('report_name', '=', translation.name),
+                        ('translatable', '=', True),
                         ]):
                 return True
 

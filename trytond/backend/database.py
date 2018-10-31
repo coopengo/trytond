@@ -79,7 +79,7 @@ class DatabaseInterface(object):
         '''
         raise NotImplementedError
 
-    def list(self):
+    def list(self, hostname=None):
         '''
         Get the list of database
 
@@ -93,7 +93,7 @@ class DatabaseInterface(object):
         '''
         raise NotImplementedError
 
-    def test(self):
+    def test(self, hostname=None):
         '''
         Test if it is a Tryton database.
         '''
@@ -143,6 +143,10 @@ class DatabaseInterface(object):
         :param connection: a connection on the database
         :param table: the table name
         '''
+        raise NotImplementedError
+
+    def lock_id(self, id, timeout=None):
+        """Return SQL function to lock resource"""
         raise NotImplementedError
 
     def has_constraint(self, constraint):
@@ -224,6 +228,10 @@ class DatabaseInterface(object):
         if not self.has_sequence():
             return
         raise NotImplementedError
+
+    def has_channel(self):
+        "Return True if database supports LISTEN/NOTIFY channel"
+        return False
 
     def sql_type(self, type_):
         'Return the SQLType tuple corresponding to the SQL type'

@@ -2,12 +2,11 @@
 # this repository contains the full copyright notices and license terms.
 
 import copy
-import collections
 from functools import total_ordering
 
 from trytond.model import fields
 from trytond.error import WarningErrorMixin
-from trytond.pool import Pool, PoolBase
+from trytond.pool import Pool, PoolBase, PoolMeta
 from trytond.pyson import PYSONEncoder
 from trytond.transaction import Transaction
 from trytond.url import URLMixin
@@ -17,8 +16,16 @@ from trytond.server_context import ServerContext
 __all__ = ['Model']
 
 
+class ModelMeta(PoolMeta):
+    @property
+    def __queue__(self):
+        pool = Pool()
+        Queue = pool.get('ir.queue')
+        return Queue.caller(self)
+
+
 @total_ordering
-class Model(WarningErrorMixin, URLMixin, PoolBase):
+class Model(WarningErrorMixin, URLMixin, PoolBase, metaclass=ModelMeta):
     """
     Define a model in Tryton.
     """
@@ -70,7 +77,7 @@ class Model(WarningErrorMixin, URLMixin, PoolBase):
         fields_names = list(cls._fields.keys())
         for field_name in fields_names:
             default_method = getattr(cls, 'default_%s' % field_name, False)
-            if isinstance(default_method, collections.Callable):
+            if callable(default_method):
                 cls._defaults[field_name] = default_method
 
         for k in cls._defaults:
@@ -315,7 +322,7 @@ class Model(WarningErrorMixin, URLMixin, PoolBase):
                 # Set relation_field only if there is no ambiguity
                 if len(relation_fields) == 1:
                     res[field]['relation_field'], = relation_fields
-            if res[field]['type'] in ('datetime', 'time'):
+            if res[field]['type'] in ('datetime', 'time', 'timestamp'):
                 res[field]['format'] = copy.copy(cls._fields[field].format)
             if res[field]['type'] == 'selection':
                 res[field]['context'] = copy.copy(cls._fields[field].context)

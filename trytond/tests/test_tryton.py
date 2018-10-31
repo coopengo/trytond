@@ -1,18 +1,17 @@
 # -*- coding: utf-8 -*-
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
-import os
-import sys
-import unittest
 import doctest
-import re
-import subprocess
-import time
-from itertools import chain
-import operator
-from functools import wraps
 import inspect
+import operator
+import os
+import subprocess
+import sys
+import time
+import unittest
 from functools import reduce
+from functools import wraps
+from itertools import chain
 try:
     import pkg_resources
 except ImportError:
@@ -111,15 +110,10 @@ def backup_db_cache(name):
 
 
 def _db_cache_file(path, name, backend_name):
-    return os.path.join(path, 'test_%s_cache_%s_py%s.dump'
-        % (backend_name, name, sys.version_info.major))
+    return os.path.join(path, 'test_%s_cache_%s.dump' % (backend_name, name))
 
 
 def _sqlite_copy(file_, restore=False):
-    try:
-        import sqlitebck
-    except ImportError:
-        return False
     import sqlite3 as sqlite
 
     with Transaction().start(DB_NAME, 0, _nocache=True) as transaction, \
@@ -130,7 +124,14 @@ def _sqlite_copy(file_, restore=False):
             return False
         if restore:
             conn2, conn1 = conn1, conn2
-        sqlitebck.copy(conn1, conn2)
+        if hasattr(conn1, 'backup'):
+            conn1.backup(conn2)
+        else:
+            try:
+                import sqlitebck
+            except ImportError:
+                return False
+            sqlitebck.copy(conn1, conn2)
     return True
 
 
@@ -678,18 +679,16 @@ def drop_create(name=DB_NAME, lang='en'):
         drop_db(name)
     create_db(name, lang)
 
-doctest_setup = lambda test: drop_create()
-doctest_teardown = lambda test: drop_db()
+
+def doctest_setup(test):
+    return drop_create()
 
 
-class Py23DocChecker(doctest.OutputChecker):
-    def check_output(self, want, got, optionflags):
-        if sys.version_info[0] > 2:
-            want = re.sub("u'(.*?)'", "'\\1'", want)
-            want = re.sub('u"(.*?)"', '"\\1"', want)
-        return doctest.OutputChecker.check_output(self, want, got, optionflags)
+def doctest_teardown(test):
+    return drop_db()
 
-doctest_checker = Py23DocChecker()
+
+doctest_checker = doctest.OutputChecker()
 
 
 class TestSuite(unittest.TestSuite):
@@ -754,21 +753,16 @@ def modules_suite(modules=None, doc=True):
         suite_ = suite()
     else:
         suite_ = all_suite()
-    from trytond.modules import create_graph, get_module_list, \
-        MODULES_PATH, EGG_MODULES
+    from trytond.modules import create_graph, get_module_list, import_module
     graph = create_graph(get_module_list())
     for node in graph:
         module = node.name
         if modules and module not in modules:
             continue
         test_module = 'trytond.modules.%s.tests' % module
-        if os.path.isdir(os.path.join(MODULES_PATH, module)) or \
-                module in EGG_MODULES:
-            try:
-                test_mod = __import__(test_module, fromlist=[''])
-            except ImportError:
-                continue
-        else:
+        try:
+            test_mod = import_module(module, test_module)
+        except ImportError:
             continue
         for test in test_mod.suite():
             if isinstance(test, doctest.DocTestCase) and not doc:

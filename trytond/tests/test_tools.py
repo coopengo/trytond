@@ -122,17 +122,23 @@ class ToolsTestCase(unittest.TestCase):
 
     def test_file_open(self):
         "Test file_open"
-        self.assertTrue(file_open('__init__.py', subdir=None))
-        self.assertTrue(file_open('ir/__init__.py'))
+        with file_open('__init__.py', subdir=None) as fp:
+            self.assertTrue(fp)
+
+        with file_open('ir/__init__.py') as fp:
+            self.assertTrue(fp)
 
         with self.assertRaisesRegex(IOError, "File not found :"):
-            file_open('ir/noexist')
+            with file_open('ir/noexist'):
+                pass
 
         with self.assertRaisesRegex(IOError, "Permission denied:"):
-            file_open('/etc/passwd')
+            with file_open('/etc/passwd'):
+                pass
 
         with self.assertRaisesRegex(IOError, "Permission denied:"):
-            file_open('../../foo')
+            with file_open('../../foo'):
+                pass
 
     def test_file_open_suffix(self):
         "Test file_open from same root name but with a suffix"

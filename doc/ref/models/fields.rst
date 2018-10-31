@@ -180,6 +180,10 @@ Instance methods:
     For the list of supported types by Tryton see 
     :ref:`backend types <topics-backend_types>`.
 
+.. method:: Field.sql_cast(expression)
+
+    Return the SQL expression with cast with the type of the field.
+
 .. method:: Field.sql_column(table)
 
     Return the Column instance based on table.
@@ -645,6 +649,15 @@ This field accepts as written value a list of tuples like this:
     - ``('copy', ids[, {<field name>: value, ...}])``: it will copy the target
       ids to this record. Optional field names and values may be added to
       override some of the fields of the copied records.
+
+.. note::
+
+    :class:`~trytond.pyson.PYSON` statement or :attr:`Field.depends` of target
+    records can access value of the parent record fields by prepending
+    ``_parent_`` to the opposite field name and followed by the dotted
+    notation.
+
+..
 
 :class:`One2Many` has some extra required arguments:
 

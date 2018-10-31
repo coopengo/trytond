@@ -153,7 +153,28 @@ def check_token(dbname, token):
                 raise
 
 
-def reset(dbname, user, session):
+def check_timeout(dbname, user, session, context=None):
+    DatabaseOperationalError = backend.get('DatabaseOperationalError')
+    for count in range(config.getint('database', 'retry'), -1, -1):
+        with Transaction().start(dbname, user, context=context) as transaction:
+            pool = _get_pool(dbname)
+            Session = pool.get('ir.session')
+            try:
+                valid = Session.check_timeout(user, session)
+                break
+            except DatabaseOperationalError:
+                if count:
+                    continue
+                raise
+            finally:
+                transaction.commit()
+    if not valid:
+        logger.info("session timeout for '%s' from '%s' on database '%s'",
+            user, _get_remote_addr(context), dbname)
+    return valid
+
+
+def reset_user_session(dbname, user, session):
     # AKE: manage session on redis
     if config_session_redis():
         ttl = redis.hit_session(dbname, user, session)
@@ -168,3 +189,14 @@ def reset(dbname, user, session):
             Session.reset(session)
     except DatabaseOperationalError:
         pass
+
+
+def reset(dbname, session, context):
+    DatabaseOperationalError = backend.get('DatabaseOperationalError')
+    try:
+        with Transaction().start(dbname, 0, context=context):
+            pool = _get_pool(dbname)
+            Session = pool.get('ir.session')
+            Session.reset(session)
+    except DatabaseOperationalError:
+        logger.debug('Reset session failed', exc_info=True)

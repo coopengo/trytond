@@ -1,7 +1,6 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
 
-
 from functools import wraps
 
 from sql.operators import NotIn
@@ -416,11 +415,6 @@ class ModuleConfigWizardItem(ModelSQL, ModelView):
                 where=(model_data.model ==
                     'ir.module.module.config_wizard.item')))
 
-        table = TableHandler(cls, module_name)
-
-        # Migrate from 2.2 remove name
-        table.drop_column('name')
-
         super(ModuleConfigWizardItem, cls).__register__(module_name)
 
     @staticmethod
@@ -492,7 +486,7 @@ class ModuleConfigWizard(Wizard):
     other = StateView('ir.module.config_wizard.other',
         'ir.module_config_wizard_other_view_form', [
             Button('Cancel', 'end', 'tryton-cancel'),
-            Button('Next', 'action', 'tryton-go-next', default=True),
+            Button('Next', 'action', 'tryton-forward', default=True),
             ])
     action = ConfigStateAction()
     done = StateView('ir.module.config_wizard.done',

@@ -129,7 +129,7 @@ class ModelView(Model):
             attr = getattr(cls, name)
             if isinstance(attr, fields.Field):
                 fields_[name] = attr
-            elif isinstance(attr, collections.Callable):
+            elif callable(attr):
                 callables[name] = attr
 
         methods = {
@@ -172,8 +172,7 @@ class ModelView(Model):
             meth_done = set()
             while meth_names:
                 meth_name = meth_names.pop()
-                assert isinstance(
-                    getattr(cls, meth_name), collections.Callable), \
+                assert callable(getattr(cls, meth_name)), \
                     "%s.%s not callable" % (cls, meth_name)
                 setattr(field, attribute,
                     getattr(field, attribute) | methods['depends'][meth_name])
@@ -418,7 +417,7 @@ class ModelView(Model):
         fread_accesses = FieldAccess.check(cls.__name__,
                 list(cls._fields.keys()), 'read', access=True)
         fields_to_remove = set(
-            x for x, y in list(fread_accesses.items()) if not y)
+            x for x, y in fread_accesses.items() if not y)
 
         # Find relation field without read access
         for name, field in cls._fields.items():
@@ -428,28 +427,39 @@ class ModelView(Model):
         checked = set()
         while checked < fields_to_remove:
             to_check = fields_to_remove - checked
-            for name, field in list(cls._fields.items()):
+            for name, field in cls._fields.items():
                 for field_to_remove in to_check:
                     if field_to_remove in field.depends:
                         fields_to_remove.add(name)
             checked |= to_check
 
-        # Remove field without read access
-        for field in fields_to_remove:
-            xpath = ('//field[@name="%(field)s"] | //label[@name="%(field)s"]'
-                ' | //page[@name="%(field)s"] | //group[@name="%(field)s"]'
-                ' | //separator[@name="%(field)s"]') % {'field': field}
-            for i, element in enumerate(tree.xpath(xpath)):
-                if type == 'tree' or element.tag == 'page':
-                    parent = element.getparent()
-                    parent.remove(element)
-                elif type == 'form':
-                    element.tag = 'label'
-                    colspan = element.attrib.get('colspan')
-                    element.attrib.clear()
-                    element.attrib['id'] = 'hidden %s-%s' % (field, i)
-                    if colspan is not None:
-                        element.attrib['colspan'] = colspan
+        buttons_to_remove = set()
+        for name, definition in cls._buttons.items():
+            if fields_to_remove & set(definition.get('depends', [])):
+                buttons_to_remove.add(name)
+
+        field_xpath = ('//field[@name="%(name)s"]'
+            '| //label[@name="%(name)s"] | //page[@name="%(name)s"]'
+            '| //group[@name="%(name)s"] | //separator[@name="%(name)s"]')
+        button_xpath = '//button[@name="%(name)s"]'
+        # Remove field and button without read acces
+        for xpath, names in (
+                (field_xpath, fields_to_remove),
+                (button_xpath, buttons_to_remove),
+                ):
+            for name in names:
+                path = xpath % {'name': name}
+                for i, element in enumerate(tree.xpath(path)):
+                    if type == 'tree' or element.tag == 'page':
+                        parent = element.getparent()
+                        parent.remove(element)
+                    elif type == 'form':
+                        element.tag = 'label'
+                        colspan = element.attrib.get('colspan')
+                        element.attrib.clear()
+                        element.attrib['id'] = 'hidden %s-%s' % (name, i)
+                        if colspan is not None:
+                            element.attrib['colspan'] = colspan
 
         # Remove empty pages
         if type == 'form':
@@ -677,7 +687,8 @@ class ModelView(Model):
                     if button_rules:
                         clicks = ButtonClick.register(
                             cls.__name__, func.__name__, records)
-                        records = [r for r in records if all(br.test(r, clicks.get(r.id, []))
+                        records = [r for r in records
+                            if all(br.test(r, clicks.get(r.id, []))
                                 for br in button_rules)]
                 # Reset click after filtering in case the button also has rules
                 names = Button.get_reset(cls.__name__, func.__name__)

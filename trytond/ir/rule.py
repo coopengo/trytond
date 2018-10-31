@@ -4,7 +4,6 @@ from ..model import ModelView, ModelSQL, fields, EvalEnvironment, Check
 from ..transaction import Transaction
 from ..cache import Cache
 from ..pool import Pool
-from .. import backend
 from ..pyson import PYSONDecoder
 
 __all__ = [
@@ -17,7 +16,7 @@ class RuleGroup(ModelSQL, ModelView):
     __name__ = 'ir.rule.group'
     name = fields.Char('Name', select=True)
     model = fields.Many2One('ir.model', 'Model', select=True,
-        required=True)
+        required=True, ondelete='CASCADE')
     global_p = fields.Boolean('Global', select=True,
         help="Make the rule global \nso every users must follow this rule")
     default_p = fields.Boolean('Default', select=True,
@@ -105,18 +104,6 @@ class Rule(ModelSQL, ModelView):
         cls._error_messages.update({
                 'invalid_domain': 'Invalid domain in rule "%s".',
                 })
-
-    @classmethod
-    def __register__(cls, module_name):
-        TableHandler = backend.get('TableHandler')
-        super(Rule, cls).__register__(module_name)
-        table = TableHandler(cls, module_name)
-
-        # Migration from 2.6: replace field, operator and operand by domain
-        table.not_null_action('field', action='remove')
-        table.drop_fk('field')
-        table.not_null_action('operator', action='remove')
-        table.not_null_action('operand', action='remove')
 
     @classmethod
     def validate(cls, rules):

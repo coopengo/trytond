@@ -50,9 +50,10 @@ class MenuitemTagHandler:
 
         self.xml_id = attributes['id']
 
-        for attr in ('name', 'icon', 'sequence', 'parent', 'action', 'groups'):
-            if attributes.get(attr):
+        for attr in ('name', 'sequence', 'parent', 'action', 'groups'):
+            if attr in attributes:
                 values[attr] = attributes.get(attr)
+        values['icon'] = attributes.get('icon', 'tryton-folder')
 
         if attributes.get('active'):
             values['active'] = bool(eval(attributes['active']))
@@ -110,7 +111,7 @@ class MenuitemTagHandler:
             elif icon_name:
                 values['icon'] = icon_name
             elif action_type == 'ir.action.wizard':
-                values['icon'] = 'tryton-executable'
+                values['icon'] = 'tryton-launch'
             elif action_type == 'ir.action.report':
                 values['icon'] = 'tryton-print'
             elif action_type == 'ir.action.act_window':
@@ -120,15 +121,15 @@ class MenuitemTagHandler:
                     else:
                         values['icon'] = 'tryton-list'
                 elif view_type == 'form':
-                    values['icon'] = 'tryton-new'
+                    values['icon'] = 'tryton-form'
                 elif view_type == 'graph':
                     values['icon'] = 'tryton-graph'
                 elif view_type == 'calendar':
                     values['icon'] = 'tryton-calendar'
             elif action_type == 'ir.action.url':
-                values['icon'] = 'tryton-web-browser'
+                values['icon'] = 'tryton-public'
             else:
-                values['icon'] = 'tryton-new'
+                values['icon'] = None
 
         if values.get('groups'):
             raise Exception("Please use separate records for groups")
@@ -157,7 +158,7 @@ class MenuitemTagHandler:
             return None
 
     def current_state(self):
-        return "Tag menuitem with id: %s" % self.xml_id
+        return "Tag menuitem with id %s.%s" % (self.mh.module, self.xml_id)
 
 
 class RecordTagHandler:
@@ -298,8 +299,9 @@ class RecordTagHandler:
             raise Exception("Unexpected closing tag '%s'" % (name,))
 
     def current_state(self):
-        return "In tag record: model %s with id %s." % \
-               (self.model and self.model.__name__ or "?", self.xml_id)
+        return "In tag record model %s with id %s.%s." % \
+               (self.model and self.model.__name__ or "?",
+                   self.mh.module, self.xml_id)
 
 
 # Custom exception:
@@ -359,9 +361,9 @@ class Fs2bdAccessor:
         models = Model.browse(ids)
         for model in models:
             if model.id in self.browserecord[module][model_name]:
-                for cache in list(Transaction().cache.values()):
-                    for cache in (cache, list(cache.get('_language_cache',
-                                {}).values())):
+                for cache in Transaction().cache.values():
+                    for cache in (
+                            cache, cache.get('_language_cache', {}).values()):
                         if (model_name in cache
                                 and model.id in cache[model_name]):
                             cache[model_name][model.id] = {}
@@ -492,7 +494,7 @@ class TrytondXmlHandler(sax.handler.ContentHandler):
 
         if name == 'data' and self.grouped:
             for model, values in self.grouped_creations.items():
-                self.create_records(model, list(values.values()), list(values.keys()))
+                self.create_records(model, values.values(), values.keys())
             self.grouped_creations.clear()
             for key, actions in self.grouped_write.items():
                 module, model = key
@@ -641,12 +643,8 @@ class TrytondXmlHandler(sax.handler.ContentHandler):
 
                 db_field = self._clean_value(key, record)
 
-                # if the fs value is the same has in the db, whe ignore it
-                val = values[key]
-                if isinstance(values[key], bytes):
-                    # Fix for migration to unicode
-                    val = values[key].decode('utf-8')
-                if db_field == val:
+                # if the fs value is the same as in the db, we ignore it
+                if db_field == values[key]:
                     continue
 
                 # we cannot update a field if it was changed by a user...
@@ -655,13 +653,6 @@ class TrytondXmlHandler(sax.handler.ContentHandler):
                         lambda *a: None)()
                 else:
                     expected_value = old_values[key]
-
-                # Migration from 2.0: Reference field change value
-                field_type = Model._fields[key]._type
-                if field_type == 'reference':
-                    if (expected_value and expected_value.endswith(',0')
-                            and not db_field):
-                        db_field = expected_value
 
                 # ... and we consider that there is an update if the
                 # expected value differs from the actual value, _and_
@@ -680,13 +671,10 @@ class TrytondXmlHandler(sax.handler.ContentHandler):
 
             if self.grouped:
                 self.grouped_write[(module, model)].extend(
-                    (record, to_update, old_values, fs_id, mdata_id))
+                    (record, to_update, old_values, values, fs_id, mdata_id))
             else:
-                self.write_records(module, model, record, to_update,
-                    old_values, fs_id, mdata_id)
-            self.grouped_model_data.extend(([self.ModelData(mdata_id)], {
-                        'fs_values': self.ModelData.dump_values(values),
-                        }))
+                self.write_records(module, model,
+                    record, to_update, old_values, values, fs_id, mdata_id)
         else:
             if self.grouped:
                 self.grouped_creations[model][fs_id] = values
@@ -730,13 +718,13 @@ class TrytondXmlHandler(sax.handler.ContentHandler):
             [r.id for r in records])
 
     def write_records(self, module, model,
-            record, values, old_values, fs_id, mdata_id, *args):
-        args = (record, values, old_values, fs_id, mdata_id) + args
+            record, values, old_values, new_values, fs_id, mdata_id, *args):
+        args = (record, values, old_values, new_values, fs_id, mdata_id) + args
         Model = self.pool.get(model)
 
         actions = iter(args)
         to_update = []
-        for record, values, _, _, _ in zip(*((actions,) * 5)):
+        for record, values, _, _, _, _ in zip(*((actions,) * 6)):
             if values:
                 to_update += [[record], values]
         # if there is values to update:
@@ -761,11 +749,13 @@ class TrytondXmlHandler(sax.handler.ContentHandler):
                 values[key] = self._clean_value(key, record)
 
         actions = iter(args)
-        for record, values, old_values, fs_id, mdata_id in zip(
-                *((actions,) * 5)):
+        for record, values, old_values, new_values, fs_id, mdata_id in zip(
+                *((actions,) * 6)):
             temp_values = old_values.copy()
             temp_values.update(values)
             values = temp_values
+            fs_values = old_values.copy()
+            fs_values.update(new_values)
 
             if values != old_values:
                 self.grouped_model_data.extend(([self.ModelData(mdata_id)], {
@@ -774,10 +764,11 @@ class TrytondXmlHandler(sax.handler.ContentHandler):
                             'module': module,
                             'db_id': record.id,
                             'values': self.ModelData.dump_values(values),
+                            'fs_values': self.ModelData.dump_values(fs_values),
                             }))
 
         # reset_browsercord to keep cache memory low
-        self.fs2db.reset_browsercord(module, Model.__name__, args[::5])
+        self.fs2db.reset_browsercord(module, Model.__name__, args[::6])
 
 
 def post_import(pool, module, to_delete):

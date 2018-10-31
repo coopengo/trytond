@@ -1,8 +1,25 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
 import datetime
+from sql.functions import Function
 
+from ... import backend
 from .field import Field
+
+
+class SQLite_Date(Function):
+    __slots__ = ()
+    _function = 'DATE'
+
+
+class SQLite_DateTime(Function):
+    __slots__ = ()
+    _function = 'DATETIME'
+
+
+class SQLite_Time(Function):
+    __slots__ = ()
+    _function = 'TIME'
 
 
 class Date(Field):
@@ -28,6 +45,11 @@ class Date(Field):
             raise ValueError("invalid type '%s' for %s"
                 % (type(value), type(self)))
         return value
+
+    def sql_cast(self, expression):
+        if backend.name() == 'sqlite':
+            return SQLite_Date(expression)
+        return super(Date, self).sql_cast(expression)
 
 
 class DateTime(Field):
@@ -65,6 +87,11 @@ class DateTime(Field):
                 % (type(value), type(self)))
         return value.replace(microsecond=0)
 
+    def sql_cast(self, expression):
+        if backend.name() == 'sqlite':
+            return SQLite_DateTime(expression)
+        return super(DateTime, self).sql_cast(expression)
+
 
 class Timestamp(Field):
     '''
@@ -72,6 +99,7 @@ class Timestamp(Field):
     '''
     _type = 'timestamp'
     _sql_type = 'TIMESTAMP'
+    format = '%H:%M:%S.%f'
 
     def sql_format(self, value):
         if value is None:
@@ -104,12 +132,17 @@ class Time(DateTime):
         if value is None:
             return None
         if isinstance(value, str):
-            hours, minutes, seconds = list(map(int, value.split(":")))
+            hours, minutes, seconds = map(int, value.split(":"))
             return datetime.time(hours, minutes, seconds)
         if not isinstance(value, datetime.time):
             raise ValueError("invalid type '%s' for %s"
                 % (type(value), type(self)))
         return value.replace(microsecond=0)
+
+    def sql_cast(self, expression):
+        if backend.name() == 'sqlite':
+            return SQLite_Time(expression)
+        return super(Time, self).sql_cast(expression)
 
 
 class TimeDelta(Field):

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
 import sys
@@ -19,7 +19,7 @@ from trytond.config import config, split_netloc
 parser = commandline.get_parser_daemon()
 options = parser.parse_args()
 commandline.config_log(options)
-config.update_etc(options.configfile)
+extra_files = config.update_etc(options.configfile)
 
 # Import trytond things after it is configured
 from trytond.wsgi import app
@@ -48,7 +48,6 @@ with commandline.pidfile(options):
         ssl_context = (certificate, privatekey)
     else:
         ssl_context = None
-    extra_files = options.configfile
     for module in get_module_list():
         info = get_module_info(module)
         path = os.path.join(info['directory'], 'view', '*.xml')

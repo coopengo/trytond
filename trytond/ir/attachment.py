@@ -3,8 +3,7 @@
 from sql import Null
 from sql.operators import Concat
 
-from ..model import ModelView, ModelSQL, fields, Unique
-from .. import backend
+from ..model import ModelView, ModelSQL, fields
 from ..transaction import Transaction
 from ..pyson import Eval
 from .resource import ResourceMixin
@@ -54,35 +53,17 @@ class Attachment(ResourceMixin, ModelSQL, ModelView):
 
     @classmethod
     def __setup__(cls):
-        super(Attachment, cls).__setup__()
-        table = cls.__table__()
-        cls._sql_constraints += [
-            ('resource_name',
-                Unique(table, table.resource, table.name),
-                'The names of attachments must be unique by resource.'),
-        ]
+        super().__setup__()
+        cls._order.insert(0, ('create_date', 'DESC'))
 
     @classmethod
     def __register__(cls, module_name):
-        TableHandler = backend.get('TableHandler')
         cursor = Transaction().connection.cursor()
 
         super(Attachment, cls).__register__(module_name)
 
-        table = TableHandler(cls, module_name)
+        table = cls.__table_handler__(module_name)
         attachment = cls.__table__()
-
-        # Migration from 1.4 res_model and res_id merged into resource
-        # Reference
-        if table.column_exist('res_model') and \
-                table.column_exist('res_id'):
-            table.drop_constraint('res_model_res_id_name')
-            cursor.execute(*attachment.update(
-                    [attachment.resource],
-                    [Concat(Concat(attachment.resource, ','),
-                            attachment.res_id)]))
-            table.drop_column('res_model')
-            table.drop_column('res_id')
 
         # Migration from 4.0: merge digest and collision into file_id
         if table.column_exist('digest') and table.column_exist('collision'):
@@ -99,6 +80,9 @@ class Attachment(ResourceMixin, ModelSQL, ModelView):
                     & (attachment.collision != Null)))
             table.drop_column('digest')
             table.drop_column('collision')
+
+        # Migration from 4.8: remove unique constraint
+        table.drop_constraint('resource_name')
 
     @staticmethod
     def default_type():

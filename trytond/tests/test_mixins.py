@@ -3,7 +3,7 @@
 # this repository contains the full copyright notices and license terms.
 
 import unittest
-import urllib.request, urllib.parse, urllib.error
+import urllib.parse
 
 from trytond.tests.test_tryton import activate_module, with_transaction
 from trytond.transaction import Transaction

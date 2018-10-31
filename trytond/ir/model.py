@@ -1,8 +1,9 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
-import re
 import heapq
 import json
+import logging
+import re
 
 from sql import Null
 from sql.aggregate import Max
@@ -19,7 +20,6 @@ from ..cache import Cache
 from ..pool import Pool
 from ..pyson import Bool, Eval, PYSONDecoder
 from ..rpc import RPC
-from .. import backend
 from ..protocols.jsonrpc import JSONDecoder, JSONEncoder
 from ..tools import is_instance_method, cursor_dict, grouped_slice
 try:
@@ -33,6 +33,7 @@ __all__ = [
     'ModelData', 'PrintModelGraphStart', 'PrintModelGraph', 'ModelGraph',
     'ModelWorkflowGraph',
     ]
+logger = logging.getLogger(__name__)
 
 
 class Model(ModelSQL, ModelView):
@@ -104,6 +105,26 @@ class Model(ModelSQL, ModelView):
                     [model._get_name(), model.__doc__],
                     where=ir_model.id == model_id))
         return model_id
+
+    @classmethod
+    def clean(cls):
+        pool = Pool()
+        transaction = Transaction()
+        cursor = transaction.connection.cursor()
+        ir_model = cls.__table__()
+        cursor.execute(*ir_model.select(ir_model.model, ir_model.id))
+        for model, id_ in cursor:
+            try:
+                pool.get(model)
+            except KeyError:
+                logger.info("remove model: %s", model)
+                try:
+                    cls.delete([cls(id_)])
+                    transaction.commit()
+                except Exception:
+                    transaction.rollback()
+                    logger.error(
+                        "could not delete model: %s", model, exc_info=True)
 
     @classmethod
     def list_models(cls):
@@ -259,6 +280,29 @@ class ModelField(ModelSQL, ModelView):
                         where=ir_model_field.id ==
                         model_fields[field_name]['id']))
 
+    @classmethod
+    def clean(cls):
+        pool = Pool()
+        IrModel = pool.get('ir.model')
+        transaction = Transaction()
+        cursor = transaction.connection.cursor()
+        ir_model = IrModel.__table__()
+        ir_model_field = cls.__table__()
+        cursor.execute(*ir_model_field
+            .join(ir_model, condition=ir_model_field.model == ir_model.id)
+            .select(ir_model.model, ir_model_field.name, ir_model_field.id))
+        for model, field, id_ in cursor:
+            Model = pool.get(model)
+            if field not in Model._fields:
+                logger.info("remove field: %s.%s", model, field)
+                try:
+                    cls.delete([cls(id_)])
+                    transaction.commit()
+                except Exception:
+                    transaction.rollback()
+                    logger.error(
+                        "could not delete field: %s.%s", model, field,
+                        exc_info=True)
 
     @staticmethod
     def default_name():
@@ -387,17 +431,6 @@ class ModelAccess(ModelSQL, ModelView):
         cls.__rpc__.update({
                 'get_access': RPC(),
                 })
-
-    @classmethod
-    def __register__(cls, module_name):
-        TableHandler = backend.get('TableHandler')
-
-        super(ModelAccess, cls).__register__(module_name)
-
-        table = TableHandler(cls, module_name)
-
-        # Migration from 2.6 (model, group) no more unique
-        table.drop_constraint('model_group_uniq')
 
     @staticmethod
     def check_xml_record(accesses, values):
@@ -571,17 +604,6 @@ class ModelFieldAccess(ModelSQL, ModelView):
             'read': 'You can not read the field! (%s.%s)',
             'write': 'You can not write on the field! (%s.%s)',
             })
-
-    @classmethod
-    def __register__(cls, module_name):
-        TableHandler = backend.get('TableHandler')
-
-        super(ModelFieldAccess, cls).__register__(module_name)
-
-        table = TableHandler(cls, module_name)
-
-        # Migration from 2.6 (field, group) no more unique
-        table.drop_constraint('field_group_uniq')
 
     @staticmethod
     def check_xml_record(field_accesses, values):
@@ -1076,19 +1098,10 @@ class ModelData(ModelSQL, ModelView):
 
     @classmethod
     def __register__(cls, module_name):
-        TableHandler = backend.get('TableHandler')
         cursor = Transaction().connection.cursor()
         model_data = cls.__table__()
 
         super(ModelData, cls).__register__(module_name)
-
-        table = TableHandler(cls, module_name)
-
-        # Migration from 2.6: remove inherit
-        if table.column_exist('inherit'):
-            cursor.execute(*model_data.delete(
-                    where=model_data.inherit == True))
-            table.drop_column('inherit', True)
 
         # Migration from 4.6: register buttons on ir module
         cursor.execute(*model_data.update(
@@ -1323,7 +1336,7 @@ class ModelGraph(Report):
                 label += '+ ' + field.name + ': ' + field.ttype
                 if field.relation:
                     label += ' ' + field.relation
-                label += '\l'
+                label += '\\l'
             label += '}"'
             node_name = '"%s"' % model.model
             node = pydot.Node(node_name, shape='record', label=label)

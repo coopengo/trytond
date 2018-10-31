@@ -4,7 +4,7 @@ import os
 import shutil
 import tempfile
 import unittest
-from mock import patch
+from unittest.mock import patch
 
 from trytond.config import config
 from trytond.filestore import filestore

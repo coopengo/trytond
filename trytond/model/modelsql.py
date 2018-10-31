@@ -1,10 +1,9 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
 import datetime
-import traceback
-import logging
 from itertools import islice, chain
 from collections import OrderedDict
+from functools import wraps
 
 from sql import (Table, Column, Literal, Desc, Asc, Expression, Null,
     NullsFirst, NullsLast)
@@ -141,6 +140,15 @@ class Exclude(Constraint):
         return tuple(p)
 
 
+def no_table_query(func):
+    @wraps(func)
+    def wrapper(cls, *args, **kwargs):
+        if callable(cls.table_query):
+            raise NotImplementedError("On table_query")
+        return func(cls, *args, **kwargs)
+    return wrapper
+
+
 class ModelSQL(ModelStorage):
     """
     Define a model with storage in database.
@@ -149,6 +157,7 @@ class ModelSQL(ModelStorage):
     _order = None
     _order_name = None  # Use to force order field when sorting on Many2One
     _history = False
+    table_query = None
 
     @classmethod
     def __setup__(cls):
@@ -170,7 +179,10 @@ class ModelSQL(ModelStorage):
 
     @classmethod
     def __table__(cls):
-        return cls.table_query() or Table(cls._table)
+        if callable(cls.table_query):
+            return cls.table_query()
+        else:
+            return Table(cls._table)
 
     @classmethod
     def __table_history__(cls):
@@ -179,21 +191,26 @@ class ModelSQL(ModelStorage):
         return Table(cls._table + '__history')
 
     @classmethod
+    def __table_handler__(cls, module_name=None, history=False):
+        TableHandler = backend.get('TableHandler')
+        return TableHandler(cls, module_name, history=history)
+
+    @classmethod
     def __register__(cls, module_name):
         sql_table = cls.__table__()
         cursor = Transaction().connection.cursor()
         TableHandler = backend.get('TableHandler')
         super(ModelSQL, cls).__register__(module_name)
 
-        if cls.table_query():
+        if callable(cls.table_query):
             return
 
         pool = Pool()
 
         # create/update table in the database
-        table = TableHandler(cls, module_name)
+        table = cls.__table_handler__(module_name)
         if cls._history:
-            history_table = TableHandler(cls, module_name, history=True)
+            history_table = cls.__table_handler__(module_name, history=True)
             history_table.index_action('id', action='add')
 
         for field_name, field in cls._fields.items():
@@ -229,7 +246,7 @@ class ModelSQL(ModelStorage):
                 else:
                     ref_model = pool.get(field.model_name)
                     if (issubclass(ref_model, ModelSQL)
-                            and not ref_model.table_query()):
+                            and not callable(ref_model.table_query)):
                         ref = ref_model._table
                         # Create foreign key table if missing
                         if not TableHandler.table_exist(ref):
@@ -291,9 +308,8 @@ class ModelSQL(ModelStorage):
 
     @classmethod
     def _update_history_table(cls):
-        TableHandler = backend.get('TableHandler')
         if cls._history:
-            history_table = TableHandler(cls, history=True)
+            history_table = cls.__table_handler__(history=True)
             for field_name, field in cls._fields.items():
                 if not field.sql_type():
                     continue
@@ -306,10 +322,6 @@ class ModelSQL(ModelStorage):
         for _, _, error in cls._sql_constraints:
             res.append(error)
         return res
-
-    @staticmethod
-    def table_query():
-        return None
 
     @classmethod
     def __raise_integrity_error(
@@ -523,18 +535,15 @@ class ModelSQL(ModelStorage):
                         'Records were modified in the meanwhile')
 
     @classmethod
+    @no_table_query
     def create(cls, vlist):
         DatabaseIntegrityError = backend.get('DatabaseIntegrityError')
         transaction = Transaction()
         cursor = transaction.connection.cursor()
         pool = Pool()
         Translation = pool.get('ir.translation')
-        Rule = pool.get('ir.rule')
 
         super(ModelSQL, cls).create(vlist)
-
-        if cls.table_query():
-            raise NotImplementedError('Can not create model with table_query')
 
         table = cls.__table__()
         modified_fields = set()
@@ -602,21 +611,6 @@ class ModelSQL(ModelStorage):
                         exception, values, transaction=transaction)
                 raise
 
-        domain = Rule.domain_get(cls.__name__, mode='create')
-        if domain:
-            tables = {None: (table, None)}
-            tables, expression = cls.search_domain(
-                domain, active_test=False, tables=tables)
-            from_ = convert_from(None, tables)
-            for sub_ids in grouped_slice(new_ids):
-                sub_ids = list(sub_ids)
-                red_sql = reduce_ids(table.id, sub_ids)
-
-                cursor.execute(*from_.select(table.id,
-                        where=red_sql & expression))
-                if len(cursor.fetchall()) != len(sub_ids):
-                    cls.raise_user_error('access_error', cls.__name__)
-
         transaction.create_records.setdefault(cls.__name__,
             set()).update(new_ids)
 
@@ -654,6 +648,7 @@ class ModelSQL(ModelStorage):
         field_names = list(cls._fields.keys())
         cls._update_mptt(field_names, [new_ids] * len(field_names))
 
+        cls.__check_domain_rule(new_ids, 'create')
         records = cls.browse(new_ids)
         for sub_records in grouped_slice(records, cache_size()):
             cls._validate(sub_records)
@@ -699,7 +694,6 @@ class ModelSQL(ModelStorage):
 
         result = []
         table = cls.__table__()
-        table_query = cls.table_query()
 
         in_max = transaction.database.IN_MAX
         history_order = None
@@ -707,7 +701,7 @@ class ModelSQL(ModelStorage):
         history_limit = None
         if (cls._history
                 and transaction.context.get('_datetime')
-                and not table_query):
+                and not callable(cls.table_query)):
             in_max = 1
             table = cls.__table_history__()
             column = Coalesce(table.write_date, table.create_date)
@@ -723,7 +717,7 @@ class ModelSQL(ModelStorage):
             field = cls._fields.get(f)
             if field and field.sql_type():
                 columns.append(field.sql_column(table).as_(f))
-            elif f == '_timestamp' and not table_query:
+            elif f == '_timestamp' and not callable(cls.table_query):
                 sql_type = fields.Char('timestamp').sql_type().base
                 columns.append(Extract('EPOCH',
                         Coalesce(table.write_date, table.create_date)
@@ -919,6 +913,7 @@ class ModelSQL(ModelStorage):
         return result
 
     @classmethod
+    @no_table_query
     def write(cls, records, values, *args):
         DatabaseIntegrityError = backend.get('DatabaseIntegrityError')
         transaction = Transaction()
@@ -926,7 +921,6 @@ class ModelSQL(ModelStorage):
         pool = Pool()
         Translation = pool.get('ir.translation')
         Config = pool.get('ir.configuration')
-        Rule = pool.get('ir.rule')
 
         assert not len(args) % 2
         # Remove possible duplicates from all records
@@ -940,12 +934,10 @@ class ModelSQL(ModelStorage):
 
         super(ModelSQL, cls).write(records, values, *args)
 
-        if cls.table_query():
-            raise NotImplementedError(
-                'Can not write on model with table_query')
         table = cls.__table__()
 
         cls.__check_timestamp(all_ids)
+        cls.__check_domain_rule(all_ids, 'write', nodomain='write_error')
 
         fields_to_set = {}
         actions = iter((records, values) + args)
@@ -970,31 +962,8 @@ class ModelSQL(ModelStorage):
                         columns.append(Column(table, fname))
                         update_values.append(field.sql_format(value))
 
-            domain = Rule.domain_get(cls.__name__, mode='write')
-            tables = {None: (table, None)}
-            if domain:
-                tables, dom_exp = cls.search_domain(
-                    domain, active_test=False, tables=tables)
-            from_ = convert_from(None, tables)
             for sub_ids in grouped_slice(ids):
-                sub_ids = list(sub_ids)
                 red_sql = reduce_ids(table.id, sub_ids)
-                where = red_sql
-                if domain:
-                    where &= dom_exp
-                cursor.execute(*from_.select(table.id, where=where))
-                rowcount = cursor.rowcount
-                if rowcount == -1 or rowcount is None:
-                    rowcount = len(cursor.fetchall())
-                if not rowcount == len({}.fromkeys(sub_ids)):
-                    if domain:
-                        cursor.execute(*table.select(table.id, where=red_sql))
-                        rowcount = cursor.rowcount
-                        if rowcount == -1 or rowcount is None:
-                            rowcount = len(cursor.fetchall())
-                        if rowcount == len({}.fromkeys(sub_ids)):
-                            cls.raise_user_error('access_error', cls.__name__)
-                    cls.raise_user_error('write_error', cls.__name__)
                 try:
                     cursor.execute(*table.update(columns, update_values,
                             where=red_sql))
@@ -1027,25 +996,26 @@ class ModelSQL(ModelStorage):
             field.set(cls, fname, *fargs)
 
         cls._insert_history(all_ids)
+
+        cls.__check_domain_rule(all_ids, 'write')
         for sub_records in grouped_slice(all_records, cache_size()):
             cls._validate(sub_records, field_names=all_field_names)
+
         cls.trigger_write(trigger_eligibles)
 
     @classmethod
+    @no_table_query
     def delete(cls, records):
         DatabaseIntegrityError = backend.get('DatabaseIntegrityError')
         transaction = Transaction()
         cursor = transaction.connection.cursor()
         pool = Pool()
         Translation = pool.get('ir.translation')
-        Rule = pool.get('ir.rule')
         ids = list(map(int, records))
 
         if not ids:
             return
 
-        if cls.table_query():
-            raise NotImplementedError('Can not delete model with table_query')
         table = cls.__table__()
 
         if transaction.delete and transaction.delete.get(cls.__name__):
@@ -1055,6 +1025,7 @@ class ModelSQL(ModelStorage):
                     ids.remove(del_id)
 
         cls.__check_timestamp(ids)
+        cls.__check_domain_rule(ids, 'delete')
 
         has_translation = False
         tree_ids = {}
@@ -1075,7 +1046,7 @@ class ModelSQL(ModelStorage):
         foreign_keys_toupdate = []
         foreign_keys_todelete = []
         for _, model in pool.iterobject():
-            if hasattr(model, 'table_query') and model.table_query():
+            if callable(getattr(model, 'table_query', None)):
                 continue
             if not issubclass(model, ModelStorage):
                 continue
@@ -1093,25 +1064,6 @@ class ModelSQL(ModelStorage):
                         foreign_keys_tocheck.append((model, field_name))
 
         transaction.delete.setdefault(cls.__name__, set()).update(ids)
-
-        domain = Rule.domain_get(cls.__name__, mode='delete')
-
-        if domain:
-            tables = {None: (table, None)}
-            tables, dom_exp = cls.search_domain(
-                domain, active_test=False, tables=tables)
-            from_ = convert_from(None, tables)
-            for sub_ids in grouped_slice(ids):
-                sub_ids = list(sub_ids)
-                red_sql = reduce_ids(table.id, sub_ids)
-                cursor.execute(*from_.select(table.id,
-                        where=red_sql & dom_exp))
-                rowcount = cursor.rowcount
-                if rowcount == -1 or rowcount is None:
-                    rowcount = len(cursor.fetchall())
-                if not rowcount == len({}.fromkeys(sub_ids)):
-                    cls.raise_user_error('access_error', cls.__name__)
-
         cls.trigger_delete(records)
 
         def get_related_records(Model, field_name, sub_ids):
@@ -1181,6 +1133,35 @@ class ModelSQL(ModelStorage):
         cls._update_mptt(list(tree_ids.keys()), list(tree_ids.values()))
 
     @classmethod
+    def __check_domain_rule(cls, ids, mode, nodomain=None):
+        pool = Pool()
+        Rule = pool.get('ir.rule')
+        table = cls.__table__()
+        cursor = Transaction().connection.cursor()
+
+        domain = Rule.domain_get(cls.__name__, mode=mode)
+        tables = {None: (table, None)}
+        if domain or nodomain:
+            if domain:
+                tables, dom_exp = cls.search_domain(
+                    domain, active_test=False, tables=tables)
+            from_ = convert_from(None, tables)
+            for sub_ids in grouped_slice(ids):
+                sub_ids = list(set(sub_ids))
+                where = reduce_ids(table.id, sub_ids)
+                if domain:
+                    where &= dom_exp
+                cursor.execute(*from_.select(table.id, where=where))
+                rowcount = cursor.rowcount
+                if rowcount == -1 or rowcount is None:
+                    rowcount = len(cursor.fetchall())
+                if rowcount != len(sub_ids):
+                    if domain:
+                        cls.raise_user_error('access_error', cls.__name__)
+                    else:
+                        cls.raise_user_error(nodomain, cls.__name__)
+
+    @classmethod
     def search(cls, domain, offset=0, limit=None, order=None, count=False,
             query=False):
         pool = Pool()
@@ -1246,7 +1227,7 @@ class ModelSQL(ModelStorage):
                 and n != 'id'
                 and not getattr(f, 'translate', False)
                 and f.loading == 'eager']
-            if not cls.table_query():
+            if not callable(cls.table_query):
                 sql_type = fields.Char('timestamp').sql_type().base
                 columns += [Extract('EPOCH',
                         Coalesce(main_table.write_date, main_table.create_date)

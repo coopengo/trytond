@@ -4,8 +4,7 @@
 
 import unittest
 import time
-
-from mock import patch, call
+from unittest.mock import patch, call
 
 from trytond import backend
 from trytond.exceptions import UserError, ConcurrencyException

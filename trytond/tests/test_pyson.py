@@ -51,8 +51,6 @@ class PYSONTestCase(unittest.TestCase):
             'v': True,
             })
 
-        self.assertRaises(AssertionError, pyson.Not, 'foo')
-
         self.assertEqual(pyson.Not(True).types(), set([bool]))
 
         eval = pyson.PYSONEncoder().encode(pyson.Not(True))
@@ -111,9 +109,6 @@ class PYSONTestCase(unittest.TestCase):
             's': [True, False],
             })
 
-        self.assertRaises(AssertionError, pyson.And, 'test', False)
-        self.assertRaises(AssertionError, pyson.And, True, 'test')
-        self.assertRaises(AssertionError, pyson.And, True, False, 'test')
         self.assertRaises(AssertionError, pyson.And, True)
         self.assertRaises(AssertionError, pyson.And)
 
@@ -156,9 +151,6 @@ class PYSONTestCase(unittest.TestCase):
             's': [True, False],
             })
 
-        self.assertRaises(AssertionError, pyson.Or, 'test', False)
-        self.assertRaises(AssertionError, pyson.Or, True, 'test')
-        self.assertRaises(AssertionError, pyson.Or, True, False, 'test')
         self.assertRaises(AssertionError, pyson.Or, True)
         self.assertRaises(AssertionError, pyson.Or)
 
@@ -226,7 +218,6 @@ class PYSONTestCase(unittest.TestCase):
 
         self.assertRaises(AssertionError, pyson.Greater, 'test', 0)
         self.assertRaises(AssertionError, pyson.Greater, 1, 'test')
-        self.assertRaises(AssertionError, pyson.Greater, 1, 0, 'test')
 
         self.assertEqual(pyson.Greater(1, 0).types(), set([bool]))
 
@@ -267,7 +258,6 @@ class PYSONTestCase(unittest.TestCase):
 
         self.assertRaises(AssertionError, pyson.Less, 'test', 1)
         self.assertRaises(AssertionError, pyson.Less, 0, 'test')
-        self.assertRaises(AssertionError, pyson.Less, 0, 1, 'test')
 
         self.assertEqual(pyson.Less(0, 1).types(), set([bool]))
 
@@ -306,7 +296,6 @@ class PYSONTestCase(unittest.TestCase):
             'e': 'bar',
             })
 
-        self.assertRaises(AssertionError, pyson.If, 'test', 'foo', 'bar')
         self.assertRaises(AssertionError, pyson.If, True, 'foo', False)
 
         self.assertEqual(pyson.If(True, 'foo', 'bar').types(),
@@ -577,6 +566,37 @@ class PYSONTestCase(unittest.TestCase):
         self.assertEqual(pyson.PYSONDecoder().decode(eval), 7)
 
         self.assertEqual(repr(pyson.Len([1, 2, 3])), 'Len([1, 2, 3])')
+
+    def test_TimeDelta_pyson(self):
+        "Test pyson.TimeDelta.pyson"
+        self.assertEqual(pyson.TimeDelta(1, 2, 3).pyson(), {
+                '__class__': 'TimeDelta',
+                'd': 1,
+                's': 2,
+                'm': 3,
+                })
+
+    def test_TimeDelta_types(self):
+        "Test pyson.TimeDelta.types"
+        self.assertEqual(
+            pyson.TimeDelta(seconds=10).types(), {datetime.timedelta})
+
+    def test_TimeDelta_invalid_type(self):
+        "Test pyson.TimeDelta invalid type"
+        with self.assertRaises(AssertionError):
+            pyson.TimeDelta('foo')
+
+    def test_TimeDelta_eval(self):
+        "Test pyson.TimeDelta.eval"
+        eval = pyson.PYSONEncoder().encode(pyson.TimeDelta(1, 2, 3))
+
+        self.assertEqual(
+            pyson.PYSONDecoder().decode(eval), datetime.timedelta(1, 2, 3))
+
+    def test_TimeDelta_repr(self):
+        "Test pyson.TimeDelta.repr"
+        self.assertEqual(
+            repr(pyson.TimeDelta(1, 2, 3)), 'TimeDelta(1, 2, 3)')
 
     def test_Composite(self):
         'Test Composite'

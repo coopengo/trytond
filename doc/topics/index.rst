@@ -15,7 +15,7 @@ Introduction to all the key parts of trytond:
     logs
     start_server
     models/index
-    backend-types
+    backend_types
     models/fields_default_value
     models/fields_on_change
     domain
@@ -28,7 +28,9 @@ Introduction to all the key parts of trytond:
     wizard
     reports/index
     rpc
+    task_queue
     user_application
+    bus
     modules/index
     translation
     testing

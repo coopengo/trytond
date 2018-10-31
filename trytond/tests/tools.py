@@ -7,6 +7,7 @@ from .test_tryton import restore_db_cache, backup_db_cache, drop_create
 __all__ = ['activate_modules', 'set_user']
 
 
+# PKU add cache_file_name
 def activate_modules(modules, cache_file_name=None):
     if isinstance(modules, str):
         modules = [modules]

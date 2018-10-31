@@ -2,8 +2,8 @@
 # this repository contains the full copyright notices and license terms.
 
 import encodings.idna
-import urllib.request, urllib.parse, urllib.error
 import socket
+import urllib.parse
 
 from trytond.config import config
 from trytond.transaction import Transaction

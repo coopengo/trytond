@@ -2,9 +2,8 @@
 # this repository contains the full copyright notices and license terms.
 import logging
 import smtplib
-import urllib.request, urllib.parse, urllib.error
 from email.message import Message
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, unquote_plus
 
 from .config import config, parse_uri
 from .transaction import Transaction
@@ -36,7 +35,7 @@ def sendmail(from_addr, to_addrs, msg, server=None):
         logger.error('fail to send email', exc_info=True)
     else:
         if senderrs:
-            logger.warn('fail to send email to %s', senderrs)
+            logger.warning('fail to send email to %s', senderrs)
     if quit:
         server.quit()
 
@@ -60,8 +59,8 @@ def get_smtp_server(uri=None):
 
     if uri.username and uri.password:
         server.login(
-            urllib.parse.unquote_plus(uri.username),
-            urllib.parse.unquote_plus(uri.password))
+            unquote_plus(uri.username),
+            unquote_plus(uri.password))
     return server
 
 

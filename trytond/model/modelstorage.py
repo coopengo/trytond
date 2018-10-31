@@ -161,7 +161,7 @@ class ModelStorage(Model):
                 cls.raise_user_error('write_xml_record',
                         error_description='xml_record_desc')
             all_records += records
-            all_fields.update(iter(values.keys()))
+            all_fields.update(values.keys())
 
         ModelAccess.check(cls.__name__, 'write')
         ModelFieldAccess.check(cls.__name__, all_fields, 'write')
@@ -183,6 +183,7 @@ class ModelStorage(Model):
                         cache[cls.__name__][record.id].clear()
 
     @classmethod
+    @without_check_access
     def trigger_write_get_eligibles(cls, records):
         '''
         Return eligible records for write actions by triggers
@@ -237,7 +238,8 @@ class ModelStorage(Model):
 
         # Clean transaction cache
         for cache in list(Transaction().cache.values()):
-            for cache in (cache, list(cache.get('_language_cache', {}).values())):
+            for cache in (cache,
+                    list(cache.get('_language_cache', {}).values())):
                 if cls.__name__ in cache:
                     for record in records:
                         if record.id in cache[cls.__name__]:
@@ -270,18 +272,21 @@ class ModelStorage(Model):
         Lang = pool.get('ir.lang')
         if default is None:
             default = {}
-
-        if 'state' not in default:
-            if 'state' in cls._defaults:
-                default['state'] = cls._defaults['state']()
+        else:
+            default = default.copy()
 
         def is_readonly(Model):
             return (not issubclass(Model, ModelStorage)
-                or (hasattr(Model, 'table_query')
-                    and Model.table_query()))
+                or callable(getattr(Model, 'table_query', None)))
 
-        def convert_data(field_defs, data):
-            data = data.copy()
+        def get_default(name):
+            prefix = name + '.'
+            return {name[len(prefix):]: value
+                for name, value in default.items()
+                if name.startswith(prefix)}
+
+        def convert_data(field_defs, origin):
+            data = origin.copy()
             for field_name in field_defs:
                 ftype = field_defs[field_name]['type']
                 field = cls._fields[field_name]
@@ -295,7 +300,10 @@ class ModelStorage(Model):
                     del data[field_name]
 
                 if field_name in default:
-                    data[field_name] = default[field_name]
+                    if callable(default[field_name]):
+                        data[field_name] = default[field_name](origin)
+                    else:
+                        data[field_name] = default[field_name]
                 if (isinstance(field, fields.Function)
                         and not isinstance(field, fields.MultiValue)):
                     del data[field_name]
@@ -309,7 +317,9 @@ class ModelStorage(Model):
                     if is_readonly(field.get_target()):
                         del data[field_name]
                     elif data[field_name]:
-                        data[field_name] = [('copy', data[field_name])]
+                        data[field_name] = [(
+                                'copy', data[field_name],
+                                get_default(field_name))]
                 elif ftype == 'many2many':
                     if is_readonly(pool.get(field.relation_name)):
                         del data[field_name]
@@ -353,13 +363,13 @@ class ModelStorage(Model):
                 ('translatable', '=', True),
                 ])
             if langs:
+                fields_names = list(fields_translate.keys()) + ['id']
                 for lang in langs:
                     # Prevent fuzzing translations when copying as the terms
                     # should be the same.
                     with Transaction().set_context(language=lang.code,
                             fuzzy_translation=False):
-                        datas = cls.read(ids,
-                                fields_names=list(fields_translate.keys()) + ['id'])
+                        datas = cls.read(ids, fields_names=fields_names)
                         to_write = []
                         for data in datas:
                             to_write.append([id2new_record[data['id']]])
@@ -741,7 +751,8 @@ class ModelStorage(Model):
                 (newrow, max2, _) = res
                 nbrmax = max(nbrmax, max2)
                 reduce(lambda x, y: x and y, newrow)
-                row[field] = (reduce(lambda x, y: x or y, list(newrow.values())) and
+                row[field] = (
+                    reduce(lambda x, y: x or y, list(newrow.values())) and
                          [('create', [newrow])]) or []
                 i = max2
                 while (position + i) < len(data):
@@ -821,49 +832,6 @@ class ModelStorage(Model):
                     if key in xml_values and val != xml_values[key]:
                         return False
         return True
-
-    @classmethod
-    def check_recursion(cls, records, parent='parent', rec_name='rec_name'):
-        '''
-        Function that checks if there is no recursion in the tree
-        composed with parent as parent field name.
-        '''
-        parent_type = cls._fields[parent]._type
-
-        if parent_type not in ('many2one', 'many2many', 'one2one'):
-            raise Exception(
-                'Unsupported field type "%s" for field "%s" on "%s"'
-                % (parent_type, parent, cls.__name__))
-
-        visited = set()
-
-        for record in records:
-            walked = set()
-            walker = getattr(record, parent)
-            while walker:
-                if parent_type == 'many2many':
-                    for walk in walker:
-                        walked.add(walk.id)
-                        if walk.id == record.id:
-                            parent_rec_name = ', '.join(getattr(r, rec_name)
-                                for r in getattr(record, parent))
-                            cls.raise_user_error('recursion_error', {
-                                    'rec_name': getattr(record, rec_name),
-                                    'parent_rec_name': parent_rec_name,
-                                    })
-                    walker = list(chain(*(getattr(walk, parent)
-                                for walk in walker if walk.id not in visited)))
-                else:
-                    walked.add(walker.id)
-                    if walker.id == record.id:
-                        cls.raise_user_error('recursion_error', {
-                                'rec_name': getattr(record, rec_name),
-                                'parent_rec_name': getattr(getattr(record,
-                                        parent), rec_name)
-                                })
-                    walker = (getattr(walker, parent) not in visited
-                        and getattr(walker, parent))
-            visited.update(walked)
 
     @classmethod
     def _get_error_args(cls, field_name):
@@ -968,7 +936,8 @@ class ModelStorage(Model):
                     in_max = Transaction().database.IN_MAX
                     count = in_max // 10
                     new_domains = {}
-                    for sub_domains in grouped_slice(list(domains.keys()), count):
+                    for sub_domains in grouped_slice(list(domains.keys()),
+                            count):
                         grouped_domain = ['OR']
                         grouped_records = []
                         for d in sub_domains:
@@ -1029,8 +998,7 @@ class ModelStorage(Model):
                         and not (depends & field_names)
                         and not (depends & function_fields)):
                     continue
-                if isinstance(field, fields.Function) and \
-                        not field.setter:
+                if isinstance(field, fields.Function):
                     continue
 
                 validate_domain(field)
@@ -1545,14 +1513,17 @@ class ModelStorage(Model):
                         transaction.reset_context(), \
                         transaction.set_context(context):
                     if to_create:
-                        news = cls.create([save_values[id(r)] for r in to_create])
+                        # ABE: use records addresses as keys instead of records
+                        news = cls.create(
+                            [save_values[id(r)] for r in to_create])
                         for record, new in zip(to_create, news):
                             record._ids.remove(record.id)
                             record._id = new.id
                             record._ids.append(record.id)
                     if to_write:
                         cls.write(*sum(
-                                (([r], save_values[id(r)]) for r in to_write), ()))
+                                (([r], save_values[id(r)]) for r in to_write),
+                                ()))
             except:
                 for record in to_create + to_write:
                     record._values = values[id(record)]

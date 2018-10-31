@@ -16,7 +16,6 @@ from .trigger import *
 from .access import *
 from .wizard import *
 from .workflow import *
-from .copy_ import *
 from .history import *
 from .field_context import *
 from . import model
@@ -42,6 +41,9 @@ from . import field_many2many
 from . import field_one2one
 from . import multivalue
 from . import mixin
+from . import tree
+from . import rule
+from . import copy_
 
 
 def register():
@@ -49,8 +51,10 @@ def register():
         ModelViewChangedValues,
         ModelViewChangedValuesTarget,
         ModelViewButton,
+        ModelViewButtonDepends,
         ModelViewRPC,
         ModelViewEmptyPage,
+        ModelViewCircularDepends,
         MPTT,
         ImportDataBoolean,
         ImportDataInteger,
@@ -82,16 +86,6 @@ def register():
         TestAccess,
         TestWizardStart,
         WorkflowedModel,
-        CopyOne2Many,
-        CopyOne2ManyTarget,
-        CopyOne2ManyReference,
-        CopyOne2ManyReferenceTarget,
-        CopyMany2Many,
-        CopyMany2ManyTarget,
-        CopyMany2ManyRelation,
-        CopyMany2ManyReference,
-        CopyMany2ManyReferenceTarget,
-        CopyMany2ManyReferenceRelation,
         TestHistory,
         TestHistoryLine,
         FieldContextChild,
@@ -124,6 +118,9 @@ def register():
     field_one2one.register('tests')
     multivalue.register('tests')
     mixin.register('tests')
+    tree.register('tests')
+    rule.register('tests')
+    copy_.register('tests')
 
     if pkg_resources is not None:
         entry_points = pkg_resources.iter_entry_points('trytond.tests')

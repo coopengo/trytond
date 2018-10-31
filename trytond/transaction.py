@@ -31,6 +31,7 @@ class _Local(local):
     def __init__(self):
         # Transaction stack control
         self.transactions = []
+        self.tasks = []
 
 
 class Transaction(object):
@@ -64,6 +65,10 @@ class Transaction(object):
         else:
             instance = transactions[-1]
         return instance
+
+    @property
+    def tasks(self):
+        return self._local.tasks
 
     def get_cache(self):
         from trytond.cache import LRUDict
@@ -124,7 +129,9 @@ class Transaction(object):
             if transactions.count(self) == 1:
                 try:
                     try:
-                        if commit and not self.readonly:
+                        # Transaction must be commited to send notifications
+                        if commit and (not self.readonly
+                                or self.database.has_channel()):
                             self.commit()
                         else:
                             self.rollback()

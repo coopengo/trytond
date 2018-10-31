@@ -109,7 +109,14 @@ class TranslateFactory:
                 code = get_parent_language(code)
         return self.cache[self.language].get(text, text)
 
-    def set_language(self, language):
+    def set_language(self, language=None):
+        pool = Pool()
+        Config = pool.get('ir.configuration')
+        Lang = pool.get('ir.lang')
+        if isinstance(language, Lang):
+            language = language.code
+        if not language:
+            language = Config.get_language()
         self.language = language
 
 
@@ -192,6 +199,8 @@ class Report(URLMixin, PoolBase):
     def _get_records(cls, ids, model, data):
         pool = Pool()
         Model = pool.get(model)
+        Config = pool.get('ir.configuration')
+        Lang = pool.get('ir.lang')
         context = Transaction().context
 
         class TranslateModel(object):
@@ -201,7 +210,11 @@ class Report(URLMixin, PoolBase):
                 self.id = id
                 self._language = Transaction().language
 
-            def set_lang(self, language):
+            def set_lang(self, language=None):
+                if isinstance(language, Lang):
+                    language = language.code
+                if not language:
+                    language = Config.get_language()
                 self._language = language
 
             def __getattr__(self, name):

@@ -41,6 +41,11 @@ Class attributes are:
 
     The definition of the field ``id`` of records.
 
+.. attribute:: Model.__queue__
+
+    It returns a queue caller for the model. The called method will be pushed
+    into the queue.
+
 Class methods:
 
 .. classmethod:: Model.__setup__()
@@ -283,8 +288,17 @@ Class methods:
 
 .. classmethod:: ModelStorage.copy(records[, default])
 
-    Duplicate the records. ``default`` is a dictionary of default value for the
-    created records.
+    Duplicate the records. ``default`` is a dictionary of default value per
+    field name for the created records.
+
+    The values of ``default`` may be also callable that take a dictionary
+    containing the fields and values of the record copied and return of the
+    value.
+
+    The keys of ``default`` may use the dotted notation for the
+    :class:`fields.One2Many` to define the default to pass to its `copy`
+    operation.
+
     New records are returned following the input order.
 
 .. classmethod:: ModelStorage.search(domain[, offset[, limit[, order[, count]]]])
@@ -334,11 +348,6 @@ Class methods:
     Verify if the records are originating from XML data. It is used to prevent
     modification of data coming from XML files. This method must be overiden to
     change this behavior.
-
-.. classmethod:: ModelStorage.check_recursion(records[, parent])
-
-    Helper method that checks if there is no recursion in the tree composed
-    with ``parent`` as parent field name.
 
 .. classmethod:: ModelStorage.validate(records)
 
@@ -416,9 +425,14 @@ Class methods:
 
     Return a SQL Table instance for the history of Model.
 
+
+.. classmethod:: ModelSQL.__table_handler__([module_name[, history]])
+
+    Return a TableHandler for the Model.
+
 .. classmethod:: ModelSQL.table_query()
 
-    Could be overrided to use a custom SQL query instead of a table of the
+    Could be defined to use a custom SQL query instead of a table of the
     database. It should return a SQL FromItem.
 
     .. warning::
@@ -649,6 +663,16 @@ Class attributes are:
     The definition of the :class:`trytond.model.fields.Integer` field for the
     digits number when the type is `float` or `numeric`.
 
+.. attribute:: DictSchemaMixin.domain
+
+   A :ref:`domain <topics-domain>` constraint on the dictionary key that will
+   be enforced only on the client side.
+
+   The key must be referenced by its name in the left operator of the domain.
+   The :ref:`PYSON <ref-pyson>` evaluation context used to compute the domain
+   is the dictionary value. Likewise the domain is tested using the dictionary
+   value.
+
 .. attribute:: DictSchemaMixin.selection
 
     The definition of the :class:`trytond.model.fields.Text` field to store the
@@ -823,3 +847,25 @@ Class attributes are:
 .. _mixin: http://en.wikipedia.org/wiki/Mixin
 .. _JSON: http://en.wikipedia.org/wiki/Json
 .. _UNION: http://en.wikipedia.org/wiki/Union_(SQL)#UNION_operator
+
+====
+tree
+====
+
+.. method:: tree([parent[, name[, separator]]])
+
+Returns a mixin_ class :class:`TreeMixin`. `parent` indicates the name of the
+field that defines the parent of the tree and its default value is `parent`.
+`name` indicates the name of the field that defines the name of the record and
+its default value is `name`. If `separator` is set, the
+:meth:`ModelStorage.get_rec_name` constructs the name by concatenating each
+parent names using it as separator and :meth:`ModelStorage.search_rec_name` is
+adapted to search across the tree.
+
+
+.. class:: TreeMixin
+
+.. classmethod:: TreeMixin.check_recursion(records)
+
+    Helper method that checks if there is no recursion in the tree defined by
+    :meth:`tree`.

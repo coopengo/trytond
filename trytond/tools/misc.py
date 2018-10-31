@@ -22,11 +22,7 @@ from trytond.const import OPERATORS
 def file_open(name, mode="r", subdir='modules', encoding=None):
     """Open a file from the root dir, using a subdir folder."""
     from trytond.modules import EGG_MODULES
-    if sys.version_info < (3,):
-        filename = __file__.decode(sys.getfilesystemencoding())
-    else:
-        filename = __file__
-    root_path = os.path.dirname(os.path.dirname(os.path.abspath(filename)))
+    root_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
     def secure_join(root, *paths):
         "Join paths and ensure it still below root"

@@ -1,13 +1,9 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
-import sys
 
 
 class TrytonException(Exception):
-
-    if sys.version_info < (3, ):
-        def __str__(self):
-            return str(self).encode('utf-8')
+    pass
 
 
 class UserError(TrytonException):

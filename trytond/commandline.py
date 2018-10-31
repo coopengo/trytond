@@ -44,6 +44,19 @@ def get_parser_daemon():
     return parser
 
 
+def get_parser_worker():
+    parser = get_parser_daemon()
+    parser.add_argument("--name", dest='name',
+        help="work only on the named queue")
+    parser.add_argument("-n", dest='processes', type=int,
+        help="number of processes to use")
+    parser.add_argument("--max", dest='maxtasksperchild', type=int,
+        help="number of tasks a worker process before being replaced")
+    parser.add_argument("-t", "--timeout", dest='timeout', default=60,
+        type=int, help="maximum timeout when waiting notification")
+    return parser
+
+
 def get_parser_admin():
     parser = get_parser()
 
@@ -51,9 +64,9 @@ def get_parser_admin():
         metavar='MODULE', help="update a module")
     parser.add_argument("--all", dest="update", action="append_const",
         const="ir", help="update all installed modules")
-    parser.add_argument("--install-dependencies", dest="installdeps",
+    parser.add_argument("--activate-dependencies", dest="activatedeps",
         action="store_true",
-        help="Install missing dependencies of updated modules")
+        help="Activate missing dependencies of updated modules")
     parser.add_argument("--email", dest="email", help="set the admin email")
     parser.add_argument("-p", "--password", dest="password",
         action='store_true', help="set the admin password")
@@ -63,6 +76,8 @@ def get_parser_admin():
         dest="update_modules_list", help="Update list of tryton modules")
     parser.add_argument("-l", "--language", dest="languages", nargs='+',
         default=[], metavar='CODE', help="Load language translations")
+    parser.add_argument("--hostname", dest="hostname", default=None,
+        help="Limit database listing to the hostname")
 
     parser.epilog = ('The first time a database is initialized '
         'or when the password is set, the admin password is read '
