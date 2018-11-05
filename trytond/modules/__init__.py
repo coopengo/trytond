@@ -33,6 +33,7 @@ MODULES = []
 
 EGG_MODULES = {}
 
+#PKUNK 9502 Add auto_uninstall
 AUTO_UNINSTALL = os.environ.get('COOG_AUTO_UNINSTALL')
 
 
@@ -372,6 +373,7 @@ def load_modules(
             else:
                 modules_to_migrate[module_in_db] = ('to_drop', None)
 
+        # PKUNK 9502 add logs and control before uninstall modules
         if (not AUTO_UNINSTALL):
             dropped = False
             for module in modules_to_migrate:
@@ -385,6 +387,7 @@ def load_modules(
             for module in modules_to_migrate:
                 if modules_to_migrate[module][0] == 'to_drop':
                     logger.warning('%s is about to be uninstalled' % (module))
+        # PKUNK 9502 end
 
         def rename(cursor, table_name, old_name, new_name, var_name):
             table = Table(table_name)
