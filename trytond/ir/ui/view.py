@@ -12,6 +12,7 @@ from trytond.transaction import Transaction
 from trytond.wizard import Wizard, StateView, Button
 from trytond.pool import Pool
 from trytond.rpc import RPC
+from trytond.cache import MemoryCache
 
 __all__ = [
     'View', 'ShowViewStart', 'ShowView',
@@ -61,6 +62,8 @@ class View(ModelSQL, ModelView):
     domain = fields.Char('Domain', states={
             'invisible': ~Eval('inherit'),
             }, depends=['inherit'])
+    # AKE : Force usage of MemoryCache for non serializable data
+    _get_rng_cache = MemoryCache('ir_ui_view.get_rng')
 
     @classmethod
     def __setup__(cls):
