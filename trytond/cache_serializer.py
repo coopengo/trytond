@@ -64,4 +64,4 @@ def pack(value):
 
 
 def unpack(bundle):
-    return msgpack.unpackb(bundle, encoding='utf-8', object_hook=decode_hook)
+    return msgpack.unpackb(bundle, raw=False, object_hook=decode_hook)

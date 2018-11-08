@@ -682,8 +682,6 @@ class TrytondXmlHandler(sax.handler.ContentHandler):
                 self.create_records(model, [values], [fs_id])
 
     def create_records(self, model, vlist, fs_ids):
-        logger.debug(self.module + ':loading ' +
-            ', '.join(str(x) for x in fs_ids[0:10]))
         Model = self.pool.get(model)
 
         with Transaction().set_context(module=self.module, language='en'):
@@ -691,6 +689,7 @@ class TrytondXmlHandler(sax.handler.ContentHandler):
 
         mdata_values = []
         for record, values, fs_id in zip(records, vlist, fs_ids):
+            logger.debug(self.module + ':loading ' + fs_id)
             for key in values:
                 values[key] = self._clean_value(key, record)
 
