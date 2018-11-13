@@ -84,5 +84,9 @@ class DictSchemaMixin(object):
                 new_key['sorted'] = record.selection_sorted
             elif record.type_ in ('float', 'numeric'):
                 new_key['digits'] = (16, record.digits)
+            # ABDC Inject sequence order in dict schema to allow client sorting
+            # properly using this custom sequence instead of extra data key
+            if hasattr(record, 'sequence_order'):
+                new_key['sequence_order'] = record.sequence_order
             keys.append(new_key)
         return keys
