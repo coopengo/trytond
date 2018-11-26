@@ -222,7 +222,7 @@ class Trigger(DeactivableMixin, ModelSQL, ModelView):
                     # SQLite return string for MAX
                     if isinstance(delay[record_id], str):
                         datepart, timepart = delay[record_id].split(" ")
-                        year, month, day = map(int, datepart.split("-"))
+                        year, month, day = list(map(int, datepart.split("-")))
                         timepart_full = timepart.split(".")
                         hours, minutes, seconds = map(
                             int, timepart_full[0].split(":"))

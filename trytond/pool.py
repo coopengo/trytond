@@ -133,7 +133,7 @@ class Pool(object):
         '''
         with cls._lock:
             databases = []
-            for database in cls._pool.keys():
+            for database in list(cls._pool.keys()):
                 if cls._locks.get(database):
                     if cls._locks[database].acquire(False):
                         databases.append(database)
@@ -168,7 +168,7 @@ class Pool(object):
             logger.info('init pool for "%s"', self.database_name)
             self._pool.setdefault(self.database_name, {})
             # Clean the _pool before loading modules
-            for type in self.classes.keys():
+            for type in list(self.classes.keys()):
                 self._pool[self.database_name][type] = {}
             self._post_init_calls[self.database_name] = []
             restart = not load_modules(self.database_name, self, update=update,
@@ -192,7 +192,7 @@ class Pool(object):
         :return: the instance
         '''
         if type == '*':
-            for type in self.classes.keys():
+            for type in list(self.classes.keys()):
                 if name in self._pool[self.database_name][type]:
                     break
         try:
@@ -230,7 +230,7 @@ class Pool(object):
         Return a list of classes for each type in a dictionary.
         '''
         classes = {}
-        for type_ in self.classes.keys():
+        for type_ in list(self.classes.keys()):
             classes[type_] = []
             for cls, depends in self.classes[type_].get(module, {}).items():
                 if not depends.issubset(modules):
@@ -252,7 +252,8 @@ class Pool(object):
         if classes is None:
             classes = {}
             for type_ in self._pool[self.database_name]:
-                classes[type_] = list(self._pool[self.database_name][type_].values())
+                classes[type_] = list(
+                    self._pool[self.database_name][type_].values())
         for type_, lst in classes.items():
             for cls in lst:
                 cls.__setup__()
@@ -264,7 +265,7 @@ class Pool(object):
         for module in modules:
             if module not in self.classes_mixin:
                 continue
-            for type_ in self.classes.keys():
+            for type_ in list(self.classes.keys()):
                 for _, cls in self.iterobject(type=type_):
                     for parent, mixin in self.classes_mixin[module]:
                         if (not issubclass(cls, parent)

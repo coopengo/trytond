@@ -138,8 +138,10 @@ class One2Many(Field):
         targets = list(chain(*targets))
 
         for target in targets:
-            origin_id = getattr(target, self.field).id
-            res[origin_id].append(target.id)
+            # JCA: Fix one2many to not crash when loading missing field
+            if getattr(target, self.field):
+                origin_id = getattr(target, self.field).id
+                res[origin_id].append(target.id)
         return dict((key, tuple(value)) for key, value in res.items())
 
     def set(self, Model, name, ids, values, *args):

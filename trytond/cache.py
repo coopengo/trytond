@@ -67,7 +67,6 @@ class BaseCache(object):
         raise NotImplemented
 
 
-
 class MemoryCache(BaseCache):
     """
     A key value LRU cache with size limit.
@@ -163,6 +162,23 @@ class MemoryCache(BaseCache):
     def drop(cls, dbname):
         for inst in cls._cache_instance:
             inst._cache.pop(dbname, None)
+
+
+class DefaultCacheValue:
+    pass
+
+
+_default_cache_value = DefaultCacheValue()
+
+
+class SerializableMemoryCache(MemoryCache):
+    def get(self, key, default=None):
+        result = super(SerializableMemoryCache, self).get(key,
+            _default_cache_value)
+        return default if result == _default_cache_value else unpack(result)
+
+    def set(self, key, value):
+        super(SerializableMemoryCache, self).set(key, pack(value))
 
 
 if config.get('cache', 'class'):

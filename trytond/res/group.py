@@ -15,7 +15,7 @@ class MenuMany2Many(fields.Many2Many):
         Menu = self.get_target()
         res = super(MenuMany2Many, self).get(ids, model, name,
                 values=values)
-        menu_ids = list(set(chain(*res.values())))
+        menu_ids = list(set(chain(*list(res.values()))))
         test_ids = []
         for sub_ids in grouped_slice(menu_ids):
             test_ids.append(list(map(int, Menu.search([

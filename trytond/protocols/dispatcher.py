@@ -4,6 +4,8 @@
 import http.client
 import logging
 import pydoc
+import time
+import traceback
 try:
     from http import HTTPStatus
 except ImportError:
@@ -22,6 +24,9 @@ from trytond.exceptions import (
     RateLimitException)
 from trytond.tools import is_instance_method
 from trytond.wsgi import app
+from trytond.perf_analyzer import PerfLog, profile
+from trytond.perf_analyzer import logger as perf_logger
+from trytond.sentry import sentry_wrap
 from trytond.worker import run_task
 from .wrappers import with_pool
 
@@ -185,6 +190,31 @@ def _dispatch(request, pool, *args, **kwargs):
         obj, method, args, kwargs, username, request.remote_addr, request.path)
     logger.info(log_message, *log_args)
 
+    # JCA: log slow RPC
+    if slow_threshold >= 0:
+        slow_msg = '%s.%s (%s s)'
+        slow_args = (obj, method)
+        slow_start = time.time()
+
+    user = request.user_id
+
+    # AKE: add session to transaction context
+    token, session = None, None
+    if request.authorization.type == 'session':
+        session = request.authorization.get('session')
+    elif request.authorization.type == 'token':
+        token = {
+            'key': request.authorization.get('token'),
+            'user': user,
+            'party': request.authorization.get('party_id'),
+            }
+
+    # AKE: perf analyzer hooks
+    try:
+        PerfLog().on_execute(user, session, request.rpc_method, args, kwargs)
+    except Exception:
+        perf_logger.exception('on_execute failed')
+
     for count in range(config.getint('database', 'retry'), -1, -1):
         with Transaction().start(pool.database_name, user,
                 readonly=rpc.readonly) as transaction:
@@ -251,6 +281,10 @@ def _dispatch(request, pool, *args, **kwargs):
                 raise
             # Need to commit to unlock SQLite database
             transaction.commit()
+        if request.authorization.type == 'session':
+            # AKE: moved all session ops to security script
+            security.reset_user_session(
+                pool.database_name, user, request.authorization.get('session'))
         while transaction.tasks:
             task_id = transaction.tasks.pop()
             run_task(pool, task_id)

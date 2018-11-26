@@ -233,6 +233,8 @@ class Transaction(object):
             Cache.resets(self.database.name)
 
     def rollback(self):
+        for sub_transaction in self._sub_transactions:
+            sub_transaction.rollback()
         for cache in self.cache.values():
             cache.clear()
         for datamanager in self._datamanagers:

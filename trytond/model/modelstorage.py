@@ -134,7 +134,7 @@ class ModelStorage(Model):
 
         if not fields_names:
             fields_names = []
-            for field_name in cls._fields.keys():
+            for field_name in list(cls._fields.keys()):
                 if ModelAccess.check_relation(cls.__name__, field_name,
                         mode='read'):
                     fields_names.append(field_name)
@@ -238,7 +238,8 @@ class ModelStorage(Model):
 
         # Clean transaction cache
         for cache in list(Transaction().cache.values()):
-            for cache in (cache, list(cache.get('_language_cache', {}).values())):
+            for cache in (cache,
+                    list(cache.get('_language_cache', {}).values())):
                 if cls.__name__ in cache:
                     for record in records:
                         if record.id in cache[cls.__name__]:
@@ -750,7 +751,8 @@ class ModelStorage(Model):
                 (newrow, max2, _) = res
                 nbrmax = max(nbrmax, max2)
                 reduce(lambda x, y: x and y, newrow)
-                row[field] = (reduce(lambda x, y: x or y, list(newrow.values())) and
+                row[field] = (
+                    reduce(lambda x, y: x or y, list(newrow.values())) and
                          [('create', [newrow])]) or []
                 i = max2
                 while (position + i) < len(data):
@@ -934,7 +936,8 @@ class ModelStorage(Model):
                     in_max = Transaction().database.IN_MAX
                     count = in_max // 10
                     new_domains = {}
-                    for sub_domains in grouped_slice(list(domains.keys()), count):
+                    for sub_domains in grouped_slice(list(domains.keys()),
+                            count):
                         grouped_domain = ['OR']
                         grouped_records = []
                         for d in sub_domains:
@@ -1174,7 +1177,7 @@ class ModelStorage(Model):
     def _clean_defaults(cls, defaults):
         pool = Pool()
         vals = {}
-        for field in defaults.keys():
+        for field in list(defaults.keys()):
             if '.' in field:  # skip all related fields
                 continue
             fld_def = cls._fields[field]
@@ -1510,14 +1513,17 @@ class ModelStorage(Model):
                         transaction.reset_context(), \
                         transaction.set_context(context):
                     if to_create:
-                        news = cls.create([save_values[r] for r in to_create])
+                        # ABE: use records addresses as keys instead of records
+                        news = cls.create(
+                            [save_values[id(r)] for r in to_create])
                         for record, new in zip(to_create, news):
                             record._ids.remove(record.id)
                             record._id = new.id
                             record._ids.append(record.id)
                     if to_write:
                         cls.write(*sum(
-                                (([r], save_values[id(r)]) for r in to_write), ()))
+                                (([r], save_values[id(r)]) for r in to_write),
+                                ()))
             except:
                 for record in to_create + to_write:
                     record._values = values[id(record)]

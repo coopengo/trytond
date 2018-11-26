@@ -347,7 +347,7 @@ class ModelView(Model):
             child_field = result['field_childs']
             result['children_definitions'] = defs = {}
             model = cls
-            requisite_fields = result['fields'].keys()
+            requisite_fields = list(result['fields'].keys())
             requisite_fields.remove(child_field)
             while model and model.__name__ not in defs:
                 fields_to_get = [rfield for rfield in requisite_fields

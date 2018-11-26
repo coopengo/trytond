@@ -560,7 +560,7 @@ class ModelSQL(ModelStorage):
 
             # Get default values
             default = []
-            for f in cls._fields.keys():
+            for f in list(cls._fields.keys()):
                 if (f not in values
                         and f not in ('create_uid', 'create_date',
                             'write_uid', 'write_date', 'id')):

@@ -29,6 +29,7 @@ from sql.conditionals import Coalesce, Case
 from sql.aggregate import Count
 from sql.operators import Concat
 
+import trytond.security as security
 from passlib.context import CryptContext
 
 try:

@@ -110,7 +110,7 @@ def backup_db_cache(name):
 
 
 def _db_cache_file(path, name, backend_name):
-    return os.path.join(path, '%s-%s.dump' % (name, backend_name))
+    return os.path.join(path, 'test_%s_cache_%s.dump' % (backend_name, name))
 
 
 def _sqlite_copy(file_, restore=False):

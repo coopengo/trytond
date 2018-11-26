@@ -33,6 +33,7 @@ MODULES = []
 
 EGG_MODULES = {}
 
+#PKUNK 9502 Add auto_uninstall
 AUTO_UNINSTALL = os.environ.get('COOG_AUTO_UNINSTALL')
 
 
@@ -81,7 +82,6 @@ def import_module(name, fullname=None):
         else:
             raise
     return module
-
 
 
 def get_module_info(name):
@@ -279,9 +279,10 @@ def load_module_graph(graph, pool, update=None, lang=None):
             ModelField = pool.get('ir.model.field')
             ModelField.clean()
             transaction.commit()
+        # JCA: Add update parameter to post init hooks
+        pool.post_init(None)
 
         pool.setup_mixin(modules)
-
 
         for model_name in models_to_update_history:
             model = pool.get(model_name)
@@ -307,7 +308,7 @@ def get_module_list():
             if os.path.isdir(OPJ(MODULES_PATH, file)):
                 module_list.add(file)
     update_egg_modules()
-    module_list.update(EGG_MODULES.keys())
+    module_list.update(list(EGG_MODULES.keys()))
     module_list.add('ir')
     module_list.add('res')
     module_list.add('tests')
@@ -372,6 +373,7 @@ def load_modules(
             else:
                 modules_to_migrate[module_in_db] = ('to_drop', None)
 
+        # PKUNK 9502 add logs and control before uninstall modules
         if (not AUTO_UNINSTALL):
             dropped = False
             for module in modules_to_migrate:
@@ -385,6 +387,7 @@ def load_modules(
             for module in modules_to_migrate:
                 if modules_to_migrate[module][0] == 'to_drop':
                     logger.warning('%s is about to be uninstalled' % (module))
+        # PKUNK 9502 end
 
         def rename(cursor, table_name, old_name, new_name, var_name):
             table = Table(table_name)
@@ -418,7 +421,7 @@ def load_modules(
             cursor.execute(*table.delete(
                     where=(getattr(table, var_name) == old_name)))
 
-        for old_name, (action, new_name) in modules_to_migrate.iteritems():
+        for old_name, (action, new_name) in modules_to_migrate.items():
             cursor.execute(*ir_module.select(Count(ir_module.id),
                     where=ir_module.name == old_name))
             count, = cursor.fetchone()

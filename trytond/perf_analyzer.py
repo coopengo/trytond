@@ -84,9 +84,9 @@ except ImportError:
     msgpack = None
 
 from threading import local
-from urlparse import urlparse
+from urllib.parse import urlparse
 from datetime import datetime
-import cStringIO as StringIO
+import io as StringIO
 import cProfile as Profile
 
 from trytond.config import config
@@ -133,9 +133,7 @@ class ThreadSingleton(type):
         return ThreadLog.inst
 
 
-class PerfLog(object):
-    __metaclass__ = ThreadSingleton
-
+class PerfLog(object, metaclass=ThreadSingleton):
     def __init__(self):
         logger.debug('new instance')
         self.broker = None

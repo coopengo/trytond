@@ -74,7 +74,7 @@ class TranslatedDict(object):
             domain = [('type_', '=', 'selection')]
 
         records = []
-        for key_names in grouped_slice(value.keys()):
+        for key_names in grouped_slice(list(value.keys())):
             records += SchemaModel.search([
                     ('name', 'in', key_names),
                     ] + domain)

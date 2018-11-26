@@ -6,6 +6,7 @@ from difflib import SequenceMatcher
 from hashlib import md5
 from io import BytesIO
 from lxml import etree
+import logging
 
 import polib
 from sql import Column, Null, Literal
@@ -859,7 +860,14 @@ class Translation(ModelSQL, ModelView):
                                 to_save.append(old_translation)
                             else:
                                 translations.add(old_translation)
-        cls.save([_f for _f in to_save if _f])
+        # JCA : Add try catch to help with debugging
+        try:
+            cls.save([_f for _f in to_save if _f])
+        except:
+            logger.debug('Failed to save translations')
+            for data in to_save:
+                logging.getLogger().debug('    ' + str(data._save_values))
+            raise
         translations |= set(to_save)
 
         if translations:
@@ -1292,7 +1300,7 @@ class TranslationClean(Wizard):
                 or not getattr(field, 'translate_selection', True)):
             return True
         if (isinstance(field.selection, (tuple, list))
-                and translation.src not in dict(field.selection).values()):
+                and translation.src not in list(dict(field.selection).values())):
             return True
 
     @staticmethod

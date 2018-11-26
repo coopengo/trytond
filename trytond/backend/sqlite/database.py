@@ -38,13 +38,13 @@ class SQLiteExtract(Function):
         if date is None:
             return None
         if len(date) == 10:
-            year, month, day = map(int, date.split('-'))
+            year, month, day = list(map(int, date.split('-')))
             date = datetime.date(year, month, day)
         else:
             datepart, timepart = date.split(" ")
-            year, month, day = map(int, datepart.split("-"))
+            year, month, day = list(map(int, datepart.split("-")))
             timepart_full = timepart.split(".")
-            hours, minutes, seconds = map(int, timepart_full[0].split(":"))
+            hours, minutes, seconds = list(map(int, timepart_full[0].split(":")))
             if len(timepart_full) == 2:
                 microseconds = int(timepart_full[1])
             else:

@@ -18,7 +18,7 @@ class _AttributeManager(object):
 
     def __exit__(self, type, value, traceback):
         context = ServerContext()
-        for name, value in self.kwargs.iteritems():
+        for name, value in self.kwargs.items():
             setattr(context, name, value)
 
 

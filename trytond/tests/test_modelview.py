@@ -281,7 +281,7 @@ class ModelView(unittest.TestCase):
         TestModel = pool.get('test.modelview.rpc')
 
         def check_rpc(rpc, attributes):
-            for key, value in attributes.items():
+            for key, value in list(attributes.items()):
                 self.assertEqual(getattr(rpc, key), value)
 
         NO_INSTANTIATION = {

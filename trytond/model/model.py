@@ -175,7 +175,7 @@ class Model(WarningErrorMixin, URLMixin, PoolBase, metaclass=ModelMeta):
         # Add translation to cache
         language = Transaction().language
         trans_args = []
-        for field in (x for x in cls._fields.keys()
+        for field in (x for x in list(cls._fields.keys())
                 if ((not fields_names) or x in fields_names)):
             trans_args.append((cls.__name__ + ',' + field, 'field', language,
                 None))
@@ -197,7 +197,7 @@ class Model(WarningErrorMixin, URLMixin, PoolBase, metaclass=ModelMeta):
         encoder = PYSONEncoder()
 
         accesses = FieldAccess.get_access([cls.__name__])[cls.__name__]
-        for field in (x for x in cls._fields.keys()
+        for field in (x for x in list(cls._fields.keys())
                 if ((not fields_names) or x in fields_names)):
             res[field] = {
                 'type': cls._fields[field]._type,

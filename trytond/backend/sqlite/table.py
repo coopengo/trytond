@@ -331,6 +331,7 @@ class TableHandler(TableHandlerInterface):
                 size = values['size']
                 new_table._add_raw_column(
                     name, database.sql_type(typname), field_size=size)
+
         columns_name = list(new_table._columns.keys())
         cursor.execute(('INSERT INTO "%s" (' +
                         ','.join('"%s"' % c for c in columns_name) +
