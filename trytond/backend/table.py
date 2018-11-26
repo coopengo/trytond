@@ -123,12 +123,13 @@ class TableHandlerInterface(object):
         '''
         raise NotImplementedError
 
-    def index_action(self, column_name, action='add', table=None):
+    def index_action(self, columns, action='add', where=None, table=None):
         '''
         Add/remove an index
 
-        :param column_name: the column name or a list of column name
+        :param columns: the column or a list of columns/expressions
         :param action: 'add' or 'remove'
+        :param where: predicate expression
         :param table: optional table name
         '''
         raise NotImplementedError
@@ -187,7 +188,7 @@ class TableHandlerInterface(object):
         :param name: the data name
         '''
         if cls.namedatalen and len(name) >= cls.namedatalen:
-            if isinstance(name, unicode):
+            if isinstance(name, str):
                 name = name.encode('utf-8')
             name = hashlib.sha256(name).hexdigest()[:cls.namedatalen - 1]
         return name

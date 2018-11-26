@@ -1,18 +1,20 @@
 # -*- coding: utf-8 -*-
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
+import http.client
 import logging
 import pydoc
-import time
-import traceback
+try:
+    from http import HTTPStatus
+except ImportError:
+    from http import client as HTTPStatus
 
-from werkzeug.utils import redirect
 from werkzeug.exceptions import abort
 from sql import Table
 
 from trytond import security
 from trytond import backend
-from trytond.config import config
+from trytond.config import config, get_hostname
 from trytond import __version__
 from trytond.transaction import Transaction
 from trytond.exceptions import (
@@ -20,9 +22,7 @@ from trytond.exceptions import (
     RateLimitException)
 from trytond.tools import is_instance_method
 from trytond.wsgi import app
-from trytond.perf_analyzer import PerfLog, profile
-from trytond.perf_analyzer import logger as perf_logger
-from trytond.sentry import sentry_wrap
+from trytond.worker import run_task
 from .wrappers import with_pool
 
 logger = logging.getLogger(__name__)
@@ -66,7 +66,7 @@ def login(request, database_name, user, parameters, language=None):
         Database(database_name).connect()
     except DatabaseOperationalError:
         logger.error('fail to connect to %s', database_name, exc_info=True)
-        abort(404)
+        abort(HTTPStatus.NOT_FOUND)
     context = {
         'language': language,
         '_request': request.context,
@@ -74,10 +74,10 @@ def login(request, database_name, user, parameters, language=None):
     try:
         session = security.login(
             database_name, user, parameters, context=context)
-        code = 403
+        code = HTTPStatus.UNAUTHORIZED
     except RateLimitException:
         session = None
-        code = 429
+        code = HTTPStatus.TOO_MANY_REQUESTS
     if not session:
         abort(code)
     return session
@@ -100,17 +100,6 @@ def root(request, *args):
     return methods[request.rpc_method](request, *request.rpc_params)
 
 
-@app.route('/', methods=['GET'])
-def home(request):
-    return redirect('/index.html')  # XXX find a better way
-
-
-# AKE: route to bench index.html
-@app.route('/bench/', methods=['GET'])
-def bench(request):
-    return redirect('/bench/index.html')  # XXX find a better way
-
-
 def db_exist(request, database_name):
     Database = backend.get('Database')
     try:
@@ -122,12 +111,13 @@ def db_exist(request, database_name):
 
 def db_list(request, *args):
     if not config.getboolean('database', 'list'):
-        raise Exception('AccessDenied')
+        abort(HTTPStatus.FORBIDDEN)
     context = {'_request': request.context}
+    hostname = get_hostname(request.host)
     with Transaction().start(
             None, 0, context=context, close=True, _nocache=True
             ) as transaction:
-        return transaction.database.list()
+        return transaction.database.list(hostname=hostname)
 
 
 @app.auth_required
@@ -174,8 +164,18 @@ def _dispatch(request, pool, *args, **kwargs):
     if method in obj.__rpc__:
         rpc = obj.__rpc__[method]
     else:
-        raise UserError('Calling method %s on %s is not allowed'
-            % (method, obj))
+        abort(HTTPStatus.FORBIDDEN)
+
+    user = request.user_id
+    session = None
+    if request.authorization.type == 'session':
+        session = request.authorization.get('session')
+
+    if rpc.fresh_session and session:
+        context = {'_request': request.context}
+        if not security.check_timeout(
+                pool.database_name, user, session, context=context):
+            abort(http.client.UNAUTHORIZED)
 
     log_message = '%s.%s(*%s, **%s) from %s@%s/%s'
     username = request.authorization.username
@@ -184,31 +184,6 @@ def _dispatch(request, pool, *args, **kwargs):
     log_args = (
         obj, method, args, kwargs, username, request.remote_addr, request.path)
     logger.info(log_message, *log_args)
-
-    # JCA: log slow RPC
-    if slow_threshold >= 0:
-        slow_msg = '%s.%s (%s s)'
-        slow_args = (obj, method)
-        slow_start = time.time()
-
-    user = request.user_id
-
-    # AKE: add session to transaction context
-    token, session = None, None
-    if request.authorization.type == 'session':
-        session = request.authorization.get('session')
-    elif request.authorization.type == 'token':
-        token = {
-            'key': request.authorization.get('token'),
-            'user': user,
-            'party': request.authorization.get('party_id'),
-            }
-
-    # AKE: perf analyzer hooks
-    try:
-        PerfLog().on_execute(user, session, request.rpc_method, args, kwargs)
-    except Exception:
-        perf_logger.exception('on_execute failed')
 
     for count in range(config.getint('database', 'retry'), -1, -1):
         with Transaction().start(pool.database_name, user,
@@ -276,18 +251,12 @@ def _dispatch(request, pool, *args, **kwargs):
                 raise
             # Need to commit to unlock SQLite database
             transaction.commit()
-        if request.authorization.type == 'session':
-            # AKE: moved all session ops to security script
-            security.reset(
-                pool.database_name, user, request.authorization.get('session'))
+        while transaction.tasks:
+            task_id = transaction.tasks.pop()
+            run_task(pool, task_id)
+        if session:
             context = {'_request': request.context}
-            try:
-                with Transaction().start(
-                        pool.database_name, 0, context=context) as transaction:
-                    Session = pool.get('ir.session')
-                    Session.reset(request.authorization.get('session'))
-            except DatabaseOperationalError:
-                logger.debug('Reset session failed', exc_info=True)
+            security.reset(pool.database_name, session, context=context)
         logger.debug('Result: %s', result)
 
         # JCA: log slow RPC

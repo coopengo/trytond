@@ -22,7 +22,7 @@ class _AttributeManager(object):
         return Transaction()
 
     def __exit__(self, type, value, traceback):
-        for name, value in self.kwargs.iteritems():
+        for name, value in self.kwargs.items():
             setattr(Transaction(), name, value)
 
 
@@ -31,6 +31,7 @@ class _Local(local):
     def __init__(self):
         # Transaction stack control
         self.transactions = []
+        self.tasks = []
 
 
 class Transaction(object):
@@ -64,6 +65,10 @@ class Transaction(object):
         else:
             instance = transactions[-1]
         return instance
+
+    @property
+    def tasks(self):
+        return self._local.tasks
 
     def get_cache(self):
         from trytond.cache import LRUDict
@@ -124,7 +129,9 @@ class Transaction(object):
             if transactions.count(self) == 1:
                 try:
                     try:
-                        if commit and not self.readonly:
+                        # Transaction must be commited to send notifications
+                        if commit and (not self.readonly
+                                or self.database.has_channel()):
                             self.commit()
                         else:
                             self.rollback()
@@ -226,9 +233,7 @@ class Transaction(object):
             Cache.resets(self.database.name)
 
     def rollback(self):
-        for sub_transaction in self._sub_transactions:
-            sub_transaction.rollback()
-        for cache in self.cache.itervalues():
+        for cache in self.cache.values():
             cache.clear()
         for datamanager in self._datamanagers:
             datamanager.tpc_abort(self)

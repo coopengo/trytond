@@ -1,14 +1,6 @@
 # -*- coding: utf-8 -*-
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
-import sys
-try:
-    import cdecimal
-    if 'decimal' not in sys.modules:
-        sys.modules['decimal'] = cdecimal
-except ImportError:
-    import decimal
-    sys.modules['cdecimal'] = decimal
 import unittest
 from decimal import Decimal
 import datetime
@@ -168,7 +160,7 @@ class ExportDataTestCase(unittest.TestCase):
         export1, = ExportData.create([{
                     'date': datetime.date(2010, 1, 1),
                     }])
-        self.assert_(ExportData.export_data([export1],
+        self.assertTrue(ExportData.export_data([export1],
             ['date']) == [[datetime.date(2010, 1, 1)]])
 
         export2, = ExportData.create([{

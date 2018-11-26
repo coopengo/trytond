@@ -2,12 +2,13 @@
 # this repository contains the full copyright notices and license terms.
 import os
 import sys
+import importlib
 import itertools
 import logging
-import imp
-import ConfigParser
+import configparser
 from glob import iglob
 from collections import defaultdict
+from importlib.machinery import FileFinder, SourceFileLoader, SOURCE_SUFFIXES
 
 from sql import Table
 from sql.functions import CurrentTimestamp
@@ -48,11 +49,46 @@ def update_egg_modules():
 update_egg_modules()
 
 
+def import_module(name, fullname=None):
+    if fullname is None:
+        fullname = 'trytond.modules.' + name
+    try:
+        module = importlib.import_module(fullname)
+    except ImportError:
+        if name not in EGG_MODULES:
+            raise
+        ep = EGG_MODULES[name]
+        # Can not use ep.load because modules are declared in an importable
+        # path and it can not import submodule.
+        path = os.path.join(
+            ep.dist.location, *ep.module_name.split('.')[:-1])
+        if not os.path.isdir(path):
+            # Find module in path
+            for path in sys.path:
+                path = os.path.join(
+                    path, *ep.module_name.split('.')[:-1])
+                if os.path.isdir(os.path.join(path, name)):
+                    break
+            else:
+                # When testing modules from setuptools location is the
+                # module directory
+                path = os.path.dirname(ep.dist.location)
+        spec = FileFinder(
+            path, (SourceFileLoader, SOURCE_SUFFIXES)
+            ).find_spec(fullname)
+        if spec.loader:
+            module = spec.loader.load_module()
+        else:
+            raise
+    return module
+
+
+
 def get_module_info(name):
     "Return the content of the tryton.cfg"
-    module_config = ConfigParser.ConfigParser()
+    module_config = configparser.ConfigParser()
     with tools.file_open(os.path.join(name, 'tryton.cfg')) as fp:
-        module_config.readfp(fp)
+        module_config.read_file(fp)
         directory = os.path.dirname(fp.name)
     info = dict(module_config.items('tryton'))
     info['directory'] = directory
@@ -77,7 +113,7 @@ class Graph(dict):
         return node
 
     def __iter__(self):
-        for node in sorted(self.itervalues(), key=lambda n: (n.depth, n.name)):
+        for node in sorted(self.values(), key=lambda n: (n.depth, n.name)):
             yield node
 
 
@@ -150,7 +186,8 @@ def load_module_graph(graph, pool, update=None, lang=None):
             lang.add(code)
             code = get_parent_language(code)
 
-    with Transaction().connection.cursor() as cursor:
+    transaction = Transaction()
+    with transaction.connection.cursor() as cursor:
         modules = [x.name for x in graph]
         cursor.execute(*ir_module.select(ir_module.name, ir_module.state,
                 where=ir_module.name.in_(modules)))
@@ -177,7 +214,7 @@ def load_module_graph(graph, pool, update=None, lang=None):
                         package_state = 'to activate'
                 for child in node:
                     module2state[child.name] = package_state
-                for type in classes.keys():
+                for type in list(classes.keys()):
                     for cls in classes[type]:
                         logger.info('%s:register %s', module, cls.__name__)
                         cls.__register__(module)
@@ -185,7 +222,7 @@ def load_module_graph(graph, pool, update=None, lang=None):
                     if hasattr(model, '_history'):
                         models_to_update_history.add(model.__name__)
 
-                # Instanciate a new parser for the package:
+                # Instanciate a new parser for the module
                 tryton_parser = convert.TrytondXmlHandler(
                     pool, module, package_state, modules)
 
@@ -209,7 +246,7 @@ def load_module_graph(graph, pool, update=None, lang=None):
                         continue
                     lang2filenames[lang2].append(filename)
                 base_path_position = len(node.info['directory']) + 1
-                for language, files in lang2filenames.iteritems():
+                for language, files in lang2filenames.items():
                     filenames = [f[base_path_position:] for f in files]
                     logger.info('%s:loading %s', module, ','.join(filenames))
                     Translation = pool.get('ir.translation')
@@ -231,11 +268,17 @@ def load_module_graph(graph, pool, update=None, lang=None):
                                 ]))
                 module2state[module] = 'activated'
 
-            Transaction().connection.commit()
+            transaction.commit()
 
         if not update:
             pool.setup()
-        pool.post_init(None)
+        else:
+            # Remove unknown models and fields
+            Model = pool.get('ir.model')
+            Model.clean()
+            ModelField = pool.get('ir.model.field')
+            ModelField.clean()
+            transaction.commit()
 
         pool.setup_mixin(modules)
 
@@ -290,39 +333,15 @@ def register_classes():
             MODULES.append(module)
             continue
 
-        if os.path.isdir(OPJ(MODULES_PATH, module)):
-            mod_path = MODULES_PATH
-        elif module in EGG_MODULES:
-            ep = EGG_MODULES[module]
-            mod_path = os.path.join(ep.dist.location,
-                    *ep.module_name.split('.')[:-1])
-            if not os.path.isdir(mod_path):
-                # Find module in path
-                for path in sys.path:
-                    mod_path = os.path.join(path,
-                            *ep.module_name.split('.')[:-1])
-                    if os.path.isdir(os.path.join(mod_path, module)):
-                        break
-                if not os.path.isdir(os.path.join(mod_path, module)):
-                    # When testing modules from setuptools location is the
-                    # module directory
-                    mod_path = os.path.dirname(ep.dist.location)
-        else:
-            raise Exception('Couldn\'t find module %s' % module)
-        mod_file, pathname, description = imp.find_module(module,
-                [mod_path])
-        the_module = imp.load_module('trytond.modules.' + module,
-            mod_file, pathname, description)
+        the_module = import_module(module)
         # Some modules register nothing in the Pool
         if hasattr(the_module, 'register'):
             the_module.register()
-        if mod_file is not None:
-            mod_file.close()
         MODULES.append(module)
 
 
 def load_modules(
-        database_name, pool, update=None, lang=None, installdeps=False):
+        database_name, pool, update=None, lang=None, activatedeps=False):
     res = True
     if update:
         update = update[:]
@@ -485,7 +504,7 @@ def load_modules(
                 try:
                     graph = create_graph(module_list)
                 except MissingDependenciesException as e:
-                    if not installdeps:
+                    if not activatedeps:
                         raise
                     update += e.missings
 

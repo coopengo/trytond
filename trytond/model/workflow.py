@@ -35,7 +35,7 @@ class Workflow(object):
 
                 result = func(cls, filtered, *args, **kwargs)
                 if to_update:
-                    for record in to_update.keys():
+                    for record in list(to_update.keys()):
                         current_state = getattr(record, cls._transition_state)
                         if current_state != to_update[record]:
                             del to_update[record]
@@ -45,3 +45,13 @@ class Workflow(object):
                 return result
             return wrapper
         return check_transition
+
+    @classmethod
+    def copy(cls, records, default=None):
+        if default is None:
+            default = {}
+        else:
+            default = default.copy()
+        default.setdefault(
+            cls._transition_state, cls._defaults[cls._transition_state]())
+        return super().copy(records, default=default)

@@ -1,17 +1,41 @@
-Version 4.8.4 - 2018-08-20
+Version 5.0.0 - 2018-10-01
 * Bug fixes (see mercurial logs for details)
-
-Version 4.8.3 - 2018-08-03
-* Bug fixes (see mercurial logs for details)
-
-Version 4.8.2 - 2018-07-05
-* Bug fixes (see mercurial logs for details)
-
-* BUG#9523 Add ttl on redis cache, default 12 hours, configurable on config and on code
-* BUG#9502 Don't auto_uninstall modules
-
-Version 4.8.1 - 2018-05-21
-* Bug fixes (see mercurial logs for details)
+* Allow non translatable reports
+* Replace hard coded 'state' by '_transition_state' in copy
+* Support dotted notation in copy default
+* Allow callable in copy default
+* Add bus system
+* Allow to set any default configuration value from environment
+* Clear existing session when password is changed
+* Manage session with max_age and timeout
+* Use passlib to hash and update password
+* Remove unique constraint on attachment name
+* New icons
+* Add pyson TimeDelta
+* Remove button if it is not allowed to access some of its dependant fields
+* Add support for Python 3.7
+* Add transactional queue and workers
+* Add __table_handler__ to ModelSQL
+* Support partial index
+* Allow to use SQL expression for index action
+* Add cache clean timeout configuration
+* Implicit conversion to boolean in PYSON statement
+* Add domain to dictionary schema
+* Fill main language in ir.configuration at database initialization
+* Remove support for Python 2.7
+* Check Rule also after modification
+* Check Rule after indirect fields
+* Allow to define view id in switch client action
+* Do not validate Function fields even with setter
+* Simplify the creation of dependencies graph
+* Make depends on methods generic to any method
+* Add width/height attribute to notebook
+* Allow to call set_lang with None and language instance
+* Add hostname configuration to list database
+* Add tree mixin
+* Rename "install-dependences" into "activate-dependencies"
+* Use recursive common table expression for child_of/parent_of operators
+* Add sql_cast on Field
 
 Version 4.8.0 - 2018-04-23
 * Bug fixes (see mercurial logs for details)

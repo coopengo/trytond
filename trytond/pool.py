@@ -1,11 +1,11 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 from threading import RLock
 import logging
 from trytond.modules import load_modules, register_classes
 from trytond.transaction import Transaction
-import __builtin__
+import builtins
 
 __all__ = ['Pool', 'PoolMeta', 'PoolBase', 'isregisteredby']
 
@@ -24,9 +24,7 @@ class PoolMeta(type):
         return new
 
 
-class PoolBase(object):
-    __metaclass__ = PoolMeta
-
+class PoolBase(object, metaclass=PoolMeta):
     @classmethod
     def __setup__(cls):
         pass
@@ -43,9 +41,9 @@ class PoolBase(object):
 class Pool(object):
 
     classes = {
-        'model': {},
-        'wizard': {},
-        'report': {},
+        'model': defaultdict(OrderedDict),
+        'wizard': defaultdict(OrderedDict),
+        'report': defaultdict(OrderedDict),
     }
     classes_mixin = defaultdict(list)
     _started = False
@@ -86,11 +84,10 @@ class Pool(object):
         depends = set(kwargs.get('depends', []))
         assert type_ in ('model', 'report', 'wizard')
         for cls in classes:
-            mpool = Pool.classes[type_].setdefault(module, [])
-            classes = {c for c, _ in mpool}
-            assert cls not in classes, cls
+            mpool = Pool.classes[type_][module]
+            assert cls not in mpool, cls
             assert issubclass(cls.__class__, PoolMeta), cls
-            mpool.append((cls, depends))
+            mpool[cls] = depends
 
     @staticmethod
     def register_mixin(mixin, classinfo, module):
@@ -108,7 +105,7 @@ class Pool(object):
         Start/restart the Pool
         '''
         with cls._lock:
-            for classes in Pool.classes.itervalues():
+            for classes in Pool.classes.values():
                 classes.clear()
             cls._init_hooks = {}
             register_classes()
@@ -150,7 +147,7 @@ class Pool(object):
         '''
         return self._locks[self.database_name]
 
-    def init(self, update=None, lang=None, installdeps=False):
+    def init(self, update=None, lang=None, activatedeps=False):
         '''
         Init pool
         Set update to proceed to update
@@ -175,7 +172,7 @@ class Pool(object):
                 self._pool[self.database_name][type] = {}
             self._post_init_calls[self.database_name] = []
             restart = not load_modules(self.database_name, self, update=update,
-                    lang=lang, installdeps=installdeps)
+                    lang=lang, activatedeps=activatedeps)
             if restart:
                 self.init()
             # AKE: inter-workers communication
@@ -204,7 +201,7 @@ class Pool(object):
             if type == 'report':
                 from trytond.report import Report
                 # Keyword argument 'type' conflicts with builtin function
-                cls = __builtin__.type(str(name), (Report,), {})
+                cls = builtins.type(str(name), (Report,), {})
                 cls.__setup__()
                 self.add(cls, type)
                 return cls
@@ -224,7 +221,7 @@ class Pool(object):
         :param type: the type
         :return: an iterator
         '''
-        return self._pool[self.database_name][type].iteritems()
+        return self._pool[self.database_name][type].items()
 
     def fill(self, module, modules):
         '''
@@ -235,7 +232,7 @@ class Pool(object):
         classes = {}
         for type_ in self.classes.keys():
             classes[type_] = []
-            for cls, depends in self.classes[type_].get(module, []):
+            for cls, depends in self.classes[type_].get(module, {}).items():
                 if not depends.issubset(modules):
                     continue
                 try:
@@ -255,8 +252,8 @@ class Pool(object):
         if classes is None:
             classes = {}
             for type_ in self._pool[self.database_name]:
-                classes[type_] = self._pool[self.database_name][type_].values()
-        for type_, lst in classes.iteritems():
+                classes[type_] = list(self._pool[self.database_name][type_].values())
+        for type_, lst in classes.items():
             for cls in lst:
                 cls.__setup__()
             for cls in lst:
@@ -280,4 +277,4 @@ class Pool(object):
 def isregisteredby(obj, module, type_='model'):
     pool = Pool()
     classes = pool.classes[type_]
-    return any(issubclass(obj, cls) for cls, _ in classes.get(module, []))
+    return any(issubclass(obj, cls) for cls in classes[module])

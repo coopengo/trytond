@@ -2,7 +2,7 @@
 # this repository contains the full copyright notices and license terms.
 from string import Template
 import time
-from itertools import izip
+
 from sql import Literal, For
 
 from ..model import ModelView, ModelSQL, DeactivableMixin, fields, Check
@@ -99,27 +99,6 @@ class Sequence(DeactivableMixin, ModelSQL, ModelView):
                     'future on sequence "%s".'),
                 })
 
-    @classmethod
-    def __register__(cls, module_name):
-        TableHandler = backend.get('TableHandler')
-        table = TableHandler(cls, module_name)
-        transaction = Transaction()
-
-        # Migration from 2.0 rename number_next into number_next_internal
-        table.column_rename('number_next', 'number_next_internal')
-
-        super(Sequence, cls).__register__(module_name)
-
-        # Migration from 2.0 create sql_sequence
-        if sql_sequence and not cls._strict:
-            sequences = cls.search([])
-            for sequence in sequences:
-                if sequence.type != 'incremental':
-                    continue
-                if not transaction.database.sequence_exist(
-                        transaction.connection, sequence._sql_sequence_name):
-                    sequence.create_sql_sequence(sequence.number_next_internal)
-
     @staticmethod
     def default_type():
         return 'incremental'
@@ -184,7 +163,7 @@ class Sequence(DeactivableMixin, ModelSQL, ModelView):
     @classmethod
     def create(cls, vlist):
         sequences = super(Sequence, cls).create(vlist)
-        for sequence, values in izip(sequences, vlist):
+        for sequence, values in zip(sequences, vlist):
             if sql_sequence and not cls._strict:
                 sequence.update_sql_sequence(values.get('number_next',
                         cls.default_number_next()))
@@ -351,7 +330,7 @@ class Sequence(DeactivableMixin, ModelSQL, ModelView):
         '''
         if isinstance(domain, cls):
             domain = domain.id
-        if isinstance(domain, (int, long)):
+        if isinstance(domain, int):
             domain = [('id', '=', domain)]
 
         # bypass rules on sequences

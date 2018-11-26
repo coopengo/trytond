@@ -1,8 +1,9 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
-import re
 import heapq
 import json
+import logging
+import re
 
 from sql import Null
 from sql.aggregate import Max
@@ -19,7 +20,6 @@ from ..cache import Cache
 from ..pool import Pool
 from ..pyson import Bool, Eval, PYSONDecoder
 from ..rpc import RPC
-from .. import backend
 from ..protocols.jsonrpc import JSONDecoder, JSONEncoder
 from ..tools import is_instance_method, cursor_dict, grouped_slice
 try:
@@ -33,6 +33,7 @@ __all__ = [
     'ModelData', 'PrintModelGraphStart', 'PrintModelGraph', 'ModelGraph',
     'ModelWorkflowGraph',
     ]
+logger = logging.getLogger(__name__)
 
 
 class Model(ModelSQL, ModelView):
@@ -104,6 +105,26 @@ class Model(ModelSQL, ModelView):
                     [model._get_name(), model.__doc__],
                     where=ir_model.id == model_id))
         return model_id
+
+    @classmethod
+    def clean(cls):
+        pool = Pool()
+        transaction = Transaction()
+        cursor = transaction.connection.cursor()
+        ir_model = cls.__table__()
+        cursor.execute(*ir_model.select(ir_model.model, ir_model.id))
+        for model, id_ in cursor:
+            try:
+                pool.get(model)
+            except KeyError:
+                logger.info("remove model: %s", model)
+                try:
+                    cls.delete([cls(id_)])
+                    transaction.commit()
+                except Exception:
+                    transaction.rollback()
+                    logger.error(
+                        "could not delete model: %s", model, exc_info=True)
 
     @classmethod
     def list_models(cls):
@@ -231,7 +252,7 @@ class ModelField(ModelSQL, ModelView):
                 where=ir_model.model == model.__name__))
         model_fields = {f['name']: f for f in cursor_dict(cursor)}
 
-        for field_name, field in model._fields.iteritems():
+        for field_name, field in model._fields.items():
             if hasattr(field, 'model_name'):
                 relation = field.model_name
             elif hasattr(field, 'relation_name'):
@@ -259,6 +280,29 @@ class ModelField(ModelSQL, ModelView):
                         where=ir_model_field.id ==
                         model_fields[field_name]['id']))
 
+    @classmethod
+    def clean(cls):
+        pool = Pool()
+        IrModel = pool.get('ir.model')
+        transaction = Transaction()
+        cursor = transaction.connection.cursor()
+        ir_model = IrModel.__table__()
+        ir_model_field = cls.__table__()
+        cursor.execute(*ir_model_field
+            .join(ir_model, condition=ir_model_field.model == ir_model.id)
+            .select(ir_model.model, ir_model_field.name, ir_model_field.id))
+        for model, field, id_ in cursor:
+            Model = pool.get(model)
+            if field not in Model._fields:
+                logger.info("remove field: %s.%s", model, field)
+                try:
+                    cls.delete([cls(id_)])
+                    transaction.commit()
+                except Exception:
+                    transaction.rollback()
+                    logger.error(
+                        "could not delete field: %s.%s", model, field,
+                        exc_info=True)
 
     @staticmethod
     def default_name():
@@ -294,7 +338,7 @@ class ModelField(ModelSQL, ModelView):
         to_delete = []
         if Transaction().context.get('language'):
             if fields_names is None:
-                fields_names = cls._fields.keys()
+                fields_names = list(cls._fields.keys())
 
             if 'field_description' in fields_names \
                     or 'help' in fields_names:
@@ -388,17 +432,6 @@ class ModelAccess(ModelSQL, ModelView):
                 'get_access': RPC(),
                 })
 
-    @classmethod
-    def __register__(cls, module_name):
-        TableHandler = backend.get('TableHandler')
-
-        super(ModelAccess, cls).__register__(module_name)
-
-        table = TableHandler(cls, module_name)
-
-        # Migration from 2.6 (model, group) no more unique
-        table.drop_constraint('model_group_uniq')
-
     @staticmethod
     def check_xml_record(accesses, values):
         return True
@@ -469,7 +502,7 @@ class ModelAccess(ModelSQL, ModelView):
         access.update(dict(
                 (m, {'read': r, 'write': w, 'create': c, 'delete': d})
                 for m, r, w, c, d in cursor.fetchall()))
-        for model, maccess in access.iteritems():
+        for model, maccess in access.items():
             cls._get_access_cache.set((user, model), maccess)
         return access
 
@@ -513,7 +546,7 @@ class ModelAccess(ModelSQL, ModelView):
                 return True
         elif field._type == 'reference':
             selection = field.selection
-            if isinstance(selection, basestring):
+            if isinstance(selection, str):
                 sel_func = getattr(Model, field.selection)
                 if not is_instance_method(Model, field.selection):
                     selection = sel_func()
@@ -571,17 +604,6 @@ class ModelFieldAccess(ModelSQL, ModelView):
             'read': 'You can not read the field! (%s.%s)',
             'write': 'You can not write on the field! (%s.%s)',
             })
-
-    @classmethod
-    def __register__(cls, module_name):
-        TableHandler = backend.get('TableHandler')
-
-        super(ModelFieldAccess, cls).__register__(module_name)
-
-        table = TableHandler(cls, module_name)
-
-        # Migration from 2.6 (field, group) no more unique
-        table.drop_constraint('field_group_uniq')
 
     @staticmethod
     def check_xml_record(field_accesses, values):
@@ -658,7 +680,7 @@ class ModelFieldAccess(ModelSQL, ModelView):
                 group_by=[ir_model.model, model_field.name]))
         for m, f, r, w, c, d in cursor.fetchall():
             accesses[m][f] = {'read': r, 'write': w, 'create': c, 'delete': d}
-        for model, maccesses in accesses.iteritems():
+        for model, maccesses in accesses.items():
             cls._get_access_cache.set((user, model), maccesses)
         return accesses
 
@@ -678,7 +700,7 @@ class ModelFieldAccess(ModelSQL, ModelView):
             return True
 
         accesses = dict((f, a[mode])
-            for f, a in cls.get_access([model_name])[model_name].iteritems())
+            for f, a in cls.get_access([model_name])[model_name].items())
         if access:
             return accesses
         for field in fields:
@@ -1076,19 +1098,10 @@ class ModelData(ModelSQL, ModelView):
 
     @classmethod
     def __register__(cls, module_name):
-        TableHandler = backend.get('TableHandler')
         cursor = Transaction().connection.cursor()
         model_data = cls.__table__()
 
         super(ModelData, cls).__register__(module_name)
-
-        table = TableHandler(cls, module_name)
-
-        # Migration from 2.6: remove inherit
-        if table.column_exist('inherit'):
-            cursor.execute(*model_data.delete(
-                    where=model_data.inherit == True))
-            table.drop_column('inherit', True)
 
         # Migration from 4.6: register buttons on ir module
         cursor.execute(*model_data.update(
@@ -1167,7 +1180,7 @@ class ModelData(ModelSQL, ModelView):
     @classmethod
     def dump_values(cls, values):
         return json.dumps(
-            sorted(values.iteritems()), cls=JSONEncoder, separators=(',', ':'))
+            sorted(values.items()), cls=JSONEncoder, separators=(',', ':'))
 
     @classmethod
     def load_values(cls, values):
@@ -1200,7 +1213,7 @@ class ModelData(ModelSQL, ModelView):
             to_write.extend([[data], {
                         'values': cls.dump_values(fs_values),
                         }])
-        for Model, values_to_write in models_to_write.iteritems():
+        for Model, values_to_write in models_to_write.items():
             Model.write(*values_to_write)
         if to_write:
             cls.write(*to_write)
@@ -1323,7 +1336,7 @@ class ModelGraph(Report):
                 label += '+ ' + field.name + ': ' + field.ttype
                 if field.relation:
                     label += ' ' + field.relation
-                label += '\l'
+                label += '\\l'
             label += '}"'
             node_name = '"%s"' % model.model
             node = pydot.Node(node_name, shape='record', label=label)

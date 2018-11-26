@@ -1,7 +1,8 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
-import httplib
+import http.client
 import logging
+import os
 import sys
 import traceback
 
@@ -9,6 +10,7 @@ from werkzeug.wrappers import Response
 from werkzeug.routing import Map, Rule
 from werkzeug.exceptions import abort, HTTPException, InternalServerError
 from werkzeug.contrib.fixers import ProxyFix
+from werkzeug.wsgi import SharedDataMiddleware
 
 import wrapt
 
@@ -41,9 +43,7 @@ class TrytondWSGI(object):
         if request.user_id:
             return wrapped(*args, **kwargs)
         else:
-            # ABDC: Here we change the code from UNAUTHORIZED because it 
-            # is not properly handled by the client and causes a crash.
-            abort(httplib.FORBIDDEN)
+            abort(http.client.UNAUTHORIZED)
 
     def check_request_size(self, request, size=None):
         if request.method not in {'POST', 'PUT', 'PATCH'}:
@@ -60,9 +60,9 @@ class TrytondWSGI(object):
         if max_size:
             content_length = request.content_length
             if content_length is None:
-                abort(httplib.LENGTH_REQUIRED)
+                abort(http.client.LENGTH_REQUIRED)
             elif content_length > max_size:
-                abort(httplib.REQUEST_ENTITY_TOO_LARGE)
+                abort(http.client.REQUEST_ENTITY_TOO_LARGE)
 
     def dispatch_request(self, request):
         adapter = self.url_map.bind_to_environ(request.environ)
@@ -71,9 +71,9 @@ class TrytondWSGI(object):
             max_request_size = getattr(endpoint, 'max_request_size', None)
             self.check_request_size(request, max_request_size)
             return endpoint(request, **request.view_args)
-        except HTTPException, e:
+        except HTTPException as e:
             return e
-        except Exception, e:
+        except Exception as e:
             tb_s = ''.join(traceback.format_exception(*sys.exc_info()))
             for path in sys.path:
                 tb_s = tb_s.replace(path, '')
@@ -120,8 +120,36 @@ class TrytondWSGI(object):
     def __call__(self, environ, start_response):
         return self.wsgi_app(environ, start_response)
 
+
+class SharedDataMiddlewareIndex(SharedDataMiddleware):
+    def __call__(self, environ, start_response):
+        if environ['REQUEST_METHOD'] not in {'GET', 'HEAD'}:
+            return self.app(environ, start_response)
+        return super(SharedDataMiddlewareIndex, self).__call__(
+            environ, start_response)
+
+    def get_directory_loader(self, directory):
+        def loader(path):
+            if path is not None:
+                path = os.path.join(directory, path)
+            else:
+                path = directory
+            if os.path.isdir(path):
+                path = os.path.join(path, 'index.html')
+            if os.path.isfile(path):
+                return os.path.basename(path), self._opener(path)
+            return None, None
+        return loader
+
+
 app = TrytondWSGI()
+if config.get('web', 'root'):
+    static_files = {
+        '/': config.get('web', 'root'),
+        }
+    app.wsgi_app = SharedDataMiddlewareIndex(app.wsgi_app, static_files)
 num_proxies = config.getint('web', 'num_proxies')
 if num_proxies:
     app.wsgi_app = ProxyFix(app.wsgi_app, num_proxies=num_proxies)
 import trytond.protocols.dispatcher
+import trytond.bus

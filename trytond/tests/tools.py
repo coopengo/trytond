@@ -7,8 +7,8 @@ from .test_tryton import restore_db_cache, backup_db_cache, drop_create
 __all__ = ['activate_modules', 'set_user']
 
 
-def activate_modules(modules, cache_file_name=None):
-    if isinstance(modules, basestring):
+def activate_modules(modules):
+    if isinstance(modules, str):
         modules = [modules]
     cache_name = cache_file_name or '-'.join(modules)
     if restore_db_cache(cache_name):

@@ -241,8 +241,8 @@ Display a field of the object with the value of the current record.
       ``tree,form``)
 
     * ``view_ids``: A comma separated list that specifies the view ids used to
-      display the relation. For Many2One, the order should always be tree then
-      form.
+      display the relation. For Many2One and Many2Many, the order should always
+      be tree then form.
 
     * ``product``: Only for One2Many fields, a comma separated list of target
       field name used to create records from the cartesian product.
@@ -360,7 +360,7 @@ of the ``string``, ``confirm`` and ``help`` attributes can be can be defined.
         * ``next``: to go to the next record
         * ``previous``: to go to the previous record
         * ``close``: to close the current tab
-        * ``switch <view type>``: to switch the view to the defined type
+        * ``switch <view type> [<view id>]``: to switch the view
         * ``reload``: to reload the current tab
         * ``reload context``: to reload user context
         * ``reload menu``: to reload menu

@@ -4,7 +4,7 @@ import warnings
 from functools import wraps
 
 from sql import (operators, Column, Literal, Select, CombiningQuery, Null,
-    Query, Expression)
+    Query, Expression, Cast)
 from sql.conditionals import Coalesce, NullIf
 from sql.operators import Concat
 
@@ -25,13 +25,13 @@ def domain_validate(value):
 
     def test_domain(dom):
         for arg in dom:
-            if isinstance(arg, basestring):
+            if isinstance(arg, str):
                 if arg not in ('AND', 'OR'):
                     return False
             elif (isinstance(arg, tuple)
                 or (isinstance(arg, list)
                     and len(arg) > 2
-                    and ((isinstance(arg[1], basestring)
+                    and ((isinstance(arg[1], str)
                                 and arg[1] in OPERATORS)
                         or (isinstance(arg[1], PYSON)
                                 and arg[1].types() == set([str]))))):
@@ -316,6 +316,9 @@ class Field(object):
     def sql_type(self):
         database = Transaction().database
         return database.sql_type(self._sql_type)
+
+    def sql_cast(self, expression):
+        return Cast(expression, self.sql_type().base)
 
     def sql_column(self, table):
         return Column(table, self.name)

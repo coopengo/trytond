@@ -1,7 +1,7 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
 "User"
-from __future__ import division
+
 import copy
 import string
 import random
@@ -16,9 +16,10 @@ try:
 except ImportError:
     secrets = None
 import ipaddress
+import warnings
 from email.header import Header
 from functools import wraps
-from itertools import groupby, ifilter
+from itertools import groupby
 from operator import attrgetter
 from ast import literal_eval
 
@@ -28,7 +29,7 @@ from sql.conditionals import Coalesce, Case
 from sql.aggregate import Count
 from sql.operators import Concat
 
-import trytond.security as security
+from passlib.context import CryptContext
 
 try:
     import bcrypt
@@ -39,7 +40,6 @@ from ..model import (
     ModelView, ModelSQL, Workflow, DeactivableMixin, fields, Unique)
 from ..wizard import Wizard, StateView, Button, StateTransition
 from ..tools import grouped_slice
-from .. import backend
 from ..transaction import Transaction
 from ..cache import Cache
 from ..pool import Pool
@@ -59,6 +59,15 @@ __all__ = [
 logger = logging.getLogger(__name__)
 _has_password = 'password' in config.get(
     'session', 'authentications', default='password').split(',')
+
+passlib_path = config.get('password', 'passlib')
+if passlib_path:
+    CRYPT_CONTEXT = CryptContext.from_path(passlib_path)
+else:
+    schemes = ['pbkdf2_sha512']
+    if bcrypt:
+        schemes.insert(0, 'bcrypt')
+    CRYPT_CONTEXT = CryptContext(schemes=schemes)
 
 
 def gen_password(length=8):
@@ -139,7 +148,8 @@ class User(DeactivableMixin, ModelSQL, ModelView):
         super(User, cls).__setup__()
         cls.__rpc__.update({
                 'get_preferences': RPC(check_access=False),
-                'set_preferences': RPC(readonly=False, check_access=False),
+                'set_preferences': RPC(
+                    readonly=False, check_access=False, fresh_session=True),
                 'get_preferences_fields_view': RPC(check_access=False),
                 })
         table = cls.__table__()
@@ -173,7 +183,6 @@ class User(DeactivableMixin, ModelSQL, ModelView):
                 'delete_forbidden': ('Users can not be deleted '
                     'for logging purpose.\n'
                     'Instead you must inactivate them.'),
-                'wrong_password': 'Wrong password!',
                 'password_length': "The password is too short.",
                 'password_forbidden': "The password is forbidden.",
                 'password_name': (
@@ -189,31 +198,9 @@ class User(DeactivableMixin, ModelSQL, ModelView):
 
     @classmethod
     def __register__(cls, module_name):
-        TableHandler = backend.get('TableHandler')
         cursor = Transaction().connection.cursor()
         super(User, cls).__register__(module_name)
-        table = TableHandler(cls, module_name)
-
-        # Migration from 1.6
-
-        # For module dashboard
-        table.module_name = 'dashboard'
-        table.not_null_action('dashboard_layout', action='remove')
-
-        # For module calendar_scheduling
-        table.module_name = 'calendar_scheduling'
-        for field in ('calendar_email_notification_new',
-                'calendar_email_notification_update',
-                'calendar_email_notification_cancel',
-                'calendar_email_notification_partstat',
-                ):
-            table.not_null_action(field, action='remove')
-
-        # Migration from 2.2
-        table.not_null_action('menu', action='remove')
-
-        # Migration from 2.6
-        table.drop_column('login_try')
+        table = cls.__table_handler__(module_name)
 
         # Migration from 3.0
         if table.column_exist('password') and table.column_exist('salt'):
@@ -279,7 +266,7 @@ class User(DeactivableMixin, ModelSQL, ModelView):
     @classmethod
     def validate_password(cls, password, users):
         password_b = password
-        if isinstance(password, unicode):
+        if isinstance(password, str):
             password_b = password.encode('utf-8')
         length = config.getint('password', 'length', default=0)
         if length > 0:
@@ -356,7 +343,7 @@ class User(DeactivableMixin, ModelSQL, ModelView):
                     timestamp = session.write_date or session.create_date
                     return abs(timestamp - now) < timeout
                 result.update(dict((i, len(list(g)))
-                        for i, g in groupby(ifilter(filter_, sessions),
+                        for i, g in groupby(filter(filter_, sessions),
                             attrgetter('create_uid.id'))))
         return result
 
@@ -387,15 +374,26 @@ class User(DeactivableMixin, ModelSQL, ModelView):
 
     @classmethod
     def write(cls, users, values, *args):
+        pool = Pool()
+        Session = pool.get('ir.session')
+
         actions = iter((users, values) + args)
         all_users = []
+        session_to_clear = []
         args = []
         for users, values in zip(actions, actions):
             all_users += users
             args.extend((users, cls._convert_vals(values)))
+
+            if 'password' in values:
+                session_to_clear += users
+
         super(User, cls).write(*args)
+
+        Session.clear(session_to_clear)
+
         # Clean cursor cache as it could be filled by domain_get
-        for cache in Transaction().cache.itervalues():
+        for cache in Transaction().cache.values():
             if cls.__name__ in cache:
                 for user in all_users:
                     if user.id in cache[cls.__name__]:
@@ -522,9 +520,9 @@ class User(DeactivableMixin, ModelSQL, ModelView):
         return preferences.copy()
 
     @classmethod
-    def set_preferences(cls, values, parameters):
+    def set_preferences(cls, values):
         '''
-        Set user preferences using login parameters
+        Set user preferences
         '''
         pool = Pool()
         Lang = pool.get('ir.lang')
@@ -535,9 +533,6 @@ class User(DeactivableMixin, ModelSQL, ModelView):
         for field in values:
             if field not in fields or field == 'groups':
                 del values_clean[field]
-            if field == 'password':
-                if not cls._login_password(user.login, parameters):
-                    cls.raise_user_error('wrong_password')
             if field == 'language':
                 langs = Lang.search([
                     ('code', '=', values['language']),
@@ -667,15 +662,19 @@ class User(DeactivableMixin, ModelSQL, ModelView):
         user_id, password_hash, password_reset = cls._get_login(login)
         if user_id and password_hash:
             password = parameters['password']
-            if cls.check_password(password, password_hash):
+            valid, new_hash = cls.check_password(password, password_hash)
+            if valid:
+                if new_hash:
+                    logger.info("Update password hash for %s", user_id)
+                    with Transaction().new_transaction() as transaction:
+                        with transaction.set_user(0):
+                            cls.write([cls(user_id)], {
+                                    'password_hash': new_hash,
+                                    })
                 return user_id
         elif user_id and password_reset:
             if password_reset == parameters['password']:
                 return user_id
-
-    @staticmethod
-    def hash_method():
-        return 'bcrypt' if bcrypt else 'sha1'
 
     @classmethod
     def hash_password(cls, password):
@@ -683,48 +682,59 @@ class User(DeactivableMixin, ModelSQL, ModelView):
         <hash_method>$<password>$<salt>...'''
         if not password:
             return None
-        return getattr(cls, 'hash_' + cls.hash_method())(password)
+        return CRYPT_CONTEXT.hash(password)
 
     @classmethod
     def check_password(cls, password, hash_):
         if not hash_:
             return False
-        hash_method = hash_.split('$', 1)[0]
-        return getattr(cls, 'check_' + hash_method)(password, hash_)
+        try:
+            return CRYPT_CONTEXT.verify_and_update(password, hash_)
+        except ValueError:
+            hash_method = hash_.split('$', 1)[0]
+            warnings.warn(
+                "Use deprecated hash method %s" % hash_method,
+                DeprecationWarning)
+            valid = getattr(cls, 'check_' + hash_method)(password, hash_)
+            if valid:
+                new_hash = CRYPT_CONTEXT.hash(password)
+            else:
+                new_hash = None
+            return valid, new_hash
 
     @classmethod
     def hash_sha1(cls, password):
         salt = gen_password()
         salted_password = password + salt
-        if isinstance(salted_password, unicode):
+        if isinstance(salted_password, str):
             salted_password = salted_password.encode('utf-8')
         hash_ = hashlib.sha1(salted_password).hexdigest()
         return '$'.join(['sha1', hash_, salt])
 
     @classmethod
     def check_sha1(cls, password, hash_):
-        if isinstance(password, unicode):
+        if isinstance(password, str):
             password = password.encode('utf-8')
         hash_method, hash_, salt = hash_.split('$', 2)
         salt = salt or ''
-        if isinstance(salt, unicode):
+        if isinstance(salt, str):
             salt = salt.encode('utf-8')
         assert hash_method == 'sha1'
         return hash_ == hashlib.sha1(password + salt).hexdigest()
 
     @classmethod
     def hash_bcrypt(cls, password):
-        if isinstance(password, unicode):
+        if isinstance(password, str):
             password = password.encode('utf-8')
         hash_ = bcrypt.hashpw(password, bcrypt.gensalt()).decode('utf-8')
         return '$'.join(['bcrypt', hash_])
 
     @classmethod
     def check_bcrypt(cls, password, hash_):
-        if isinstance(password, unicode):
+        if isinstance(password, str):
             password = password.encode('utf-8')
         hash_method, hash_ = hash_.split('$', 1)
-        if isinstance(hash_, unicode):
+        if isinstance(hash_, str):
             hash_ = hash_.encode('utf-8')
         assert hash_method == 'bcrypt'
         return hash_ == bcrypt.hashpw(password, hash_)
@@ -741,15 +751,6 @@ class LoginAttempt(ModelSQL):
     ip_address = fields.Char("IP Address")
     ip_network = fields.Char("IP Network")
 
-    @classmethod
-    def __register__(cls, module_name):
-        TableHandler = backend.get('TableHandler')
-        super(LoginAttempt, cls).__register__(module_name)
-        table = TableHandler(cls, module_name)
-
-        # Migration from 2.8: remove user
-        table.drop_column('user')
-
     @staticmethod
     def delay():
         return (datetime.datetime.now()
@@ -762,11 +763,11 @@ class LoginAttempt(ModelSQL):
         ip_network = ''
         if context.get('_request') and context['_request'].get('remote_addr'):
             ip_address = ipaddress.ip_address(
-                unicode(context['_request']['remote_addr']))
+                str(context['_request']['remote_addr']))
             prefix = config.getint(
                 'session', 'ip_network_%s' % ip_address.version)
             ip_network = ipaddress.ip_network(
-                unicode(context['_request']['remote_addr']))
+                str(context['_request']['remote_addr']))
             ip_network = ip_network.supernet(new_prefix=prefix)
         return ip_address, ip_network
 
@@ -859,21 +860,6 @@ class UserGroup(ModelSQL):
     group = fields.Many2One('res.group', 'Group', ondelete='CASCADE',
             select=True, required=True)
 
-    @classmethod
-    def __register__(cls, module_name):
-        TableHandler = backend.get('TableHandler')
-        transaction = Transaction()
-
-        # Migration from 1.0 table name change
-        TableHandler.table_rename('res_group_user_rel', cls._table)
-        transaction.database.sequence_rename(transaction.connection,
-            'res_group_user_rel_id_seq', cls._table + '_id_seq')
-        # Migration from 2.0 uid and gid rename into user and group
-        table = TableHandler(cls, module_name)
-        table.column_rename('uid', 'user')
-        table.column_rename('gid', 'group')
-        super(UserGroup, cls).__register__(module_name)
-
 
 class Warning_(ModelSQL, ModelView):
     'User Warning'
@@ -933,7 +919,7 @@ class UserApplication(Workflow, ModelSQL, ModelView):
 
     @classmethod
     def default_key(cls):
-        return ''.join(uuid.uuid4().hex for _ in xrange(4))
+        return ''.join(uuid.uuid4().hex for _ in range(4))
 
     @classmethod
     def default_state(cls):

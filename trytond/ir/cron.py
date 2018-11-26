@@ -12,7 +12,6 @@ from ast import literal_eval
 from ..model import ModelView, ModelSQL, DeactivableMixin, fields, dualmethod
 from ..transaction import Transaction
 from ..pool import Pool
-from .. import backend
 from ..config import config
 from ..sendmail import sendmail
 
@@ -70,29 +69,9 @@ class Cron(DeactivableMixin, ModelSQL, ModelView):
                 })
         cls._buttons.update({
                 'run_once': {
-                    'icon': 'tryton-executable',
+                    'icon': 'tryton-launch',
                     },
                 })
-
-    @classmethod
-    def __register__(cls, module_name):
-        TableHandler = backend.get('TableHandler')
-        cursor = Transaction().connection.cursor()
-        cron = cls.__table__()
-
-        # Migration from 2.0: rename numbercall, doall and nextcall
-        table = TableHandler(cls, module_name)
-        table.column_rename('numbercall', 'number_calls')
-        table.column_rename('doall', 'repeat_missed')
-        table.column_rename('nextcall', 'next_call')
-        table.drop_column('running')
-
-        super(Cron, cls).__register__(module_name)
-
-        # Migration from 2.0: work_days removed
-        cursor.execute(*cron.update(
-                [cron.interval_type], ['days'],
-                where=cron.interval_type == 'work_days'))
 
     @staticmethod
     def default_next_call():

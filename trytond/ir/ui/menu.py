@@ -3,7 +3,7 @@
 from itertools import groupby
 
 from trytond.model import (
-    ModelView, ModelSQL, DeactivableMixin, fields, sequence_ordered)
+    ModelView, ModelSQL, DeactivableMixin, fields, sequence_ordered, tree)
 from trytond.transaction import Transaction
 from trytond.tools import grouped_slice
 from trytond.pool import Pool
@@ -22,56 +22,64 @@ def one_in(i, j):
             return True
     return False
 
-CLIENT_ICONS = [(x, x) for x in (
-    'tryton-attachment-hi',
-    'tryton-attachment',
-    'tryton-cancel',
-    'tryton-clear',
-    'tryton-close',
-    'tryton-connect',
-    'tryton-copy',
-    'tryton-delete',
-    'tryton-dialog-error',
-    'tryton-dialog-information',
-    'tryton-dialog-warning',
-    'tryton-disconnect',
-    'tryton-executable',
-    'tryton-find-replace',
-    'tryton-find',
-    'tryton-folder-new',
-    'tryton-fullscreen',
-    'tryton-go-home',
-    'tryton-go-jump',
-    'tryton-go-next',
-    'tryton-go-previous',
-    'tryton-help',
-    'tryton-icon',
-    'tryton-list-add',
-    'tryton-list-remove',
-    'tryton-locale',
-    'tryton-lock',
-    'tryton-log-out',
-    'tryton-mail-message-new',
-    'tryton-mail-message',
-    'tryton-new',
-    'tryton-ok',
-    'tryton-open',
-    'tryton-preferences-system-session',
-    'tryton-preferences-system',
-    'tryton-preferences',
-    'tryton-print',
-    'tryton-refresh',
-    'tryton-save-as',
-    'tryton-save',
-    'tryton-start-here',
-    'tryton-system-file-manager',
-    'tryton-system',
-    'tryton-undo',
-    'tryton-web-browser')]
-SEPARATOR = ' / '
+
+CLIENT_ICONS = [(x, x) for x in [
+        'tryton-add',
+        'tryton-archive',
+        'tryton-attach',
+        'tryton-back',
+        'tryton-bookmark-border',
+        'tryton-bookmark',
+        'tryton-bookmarks',
+        'tryton-cancel',
+        'tryton-clear',
+        'tryton-close',
+        'tryton-copy',
+        'tryton-create',
+        'tryton-date',
+        'tryton-delete',
+        'tryton-email',
+        'tryton-error',
+        'tryton-exit',
+        'tryton-export',
+        'tryton-filter',
+        'tryton-format-align-center',
+        'tryton-format-align-justify',
+        'tryton-format-align-left',
+        'tryton-format-align-right',
+        'tryton-format-bold',
+        'tryton-format-color-text',
+        'tryton-format-italic',
+        'tryton-format-underline',
+        'tryton-forward',
+        'tryton-history',
+        'tryton-import',
+        'tryton-info',
+        'tryton-launch',
+        'tryton-link',
+        'tryton-log',
+        'tryton-menu',
+        'tryton-note',
+        'tryton-ok',
+        'tryton-open',
+        'tryton-print',
+        'tryton-public',
+        'tryton-refresh',
+        'tryton-remove',
+        'tryton-save',
+        'tryton-search',
+        'tryton-star-border',
+        'tryton-star',
+        'tryton-switch',
+        'tryton-translate',
+        'tryton-unarchive',
+        'tryton-undo',
+        'tryton-warning',
+        ]]
 
 
-class UIMenu(DeactivableMixin, sequence_ordered(), ModelSQL, ModelView):
+class UIMenu(DeactivableMixin, sequence_ordered(), tree(separator=' / '),
+        ModelSQL, ModelView):
     "UI menu"
     __name__ = 'ir.ui.menu'
 
@@ -97,20 +105,12 @@ class UIMenu(DeactivableMixin, sequence_ordered(), ModelSQL, ModelView):
     favorite = fields.Function(fields.Boolean('Favorite'), 'get_favorite')
 
     @classmethod
-    def __setup__(cls):
-        super(UIMenu, cls).__setup__()
-        cls._error_messages.update({
-                'wrong_name': ('"%%s" is not a valid menu name because it is '
-                    'not allowed to contain "%s".' % SEPARATOR),
-                })
-
-    @classmethod
     def order_complete_name(cls, tables):
         return cls.name.convert_order('name', tables, cls)
 
     @staticmethod
     def default_icon():
-        return 'tryton-open'
+        return 'tryton-folder'
 
     @staticmethod
     def default_sequence():
@@ -122,40 +122,6 @@ class UIMenu(DeactivableMixin, sequence_ordered(), ModelSQL, ModelView):
         Icon = pool.get('ir.ui.icon')
         return sorted(CLIENT_ICONS
             + [(name, name) for _, name in Icon.list_icons()])
-
-    @classmethod
-    def validate(cls, menus):
-        super(UIMenu, cls).validate(menus)
-        cls.check_recursion(menus)
-        for menu in menus:
-            menu.check_name()
-
-    def check_name(self):
-        if SEPARATOR in self.name:
-            self.raise_user_error('wrong_name', (self.name,))
-
-    def get_rec_name(self, name):
-        parent = self.parent
-        name = self.name
-        while parent:
-            name = parent.name + SEPARATOR + name
-            parent = parent.parent
-        return name
-
-    @classmethod
-    def search_rec_name(cls, name, clause):
-        if isinstance(clause[2], basestring):
-            values = clause[2].split(SEPARATOR.strip())
-            values.reverse()
-            domain = []
-            field = 'name'
-            for name in values:
-                domain.append((field, clause[1], name.strip()))
-                field = 'parent.' + field
-        else:
-            domain = [('name',) + tuple(clause[1:])]
-        ids = [m.id for m in cls.search(domain, order=[])]
-        return [('parent', 'child_of', ids)]
 
     @classmethod
     def search_global(cls, text):
@@ -207,7 +173,7 @@ class UIMenu(DeactivableMixin, sequence_ordered(), ModelSQL, ModelView):
             action2keyword = {k.action.id: k for k in action_keywords}
             with Transaction().set_context(active_test=False):
                 factions = Action.search([
-                        ('action', 'in', action2keyword.keys()),
+                        ('action', 'in', list(action2keyword.keys())),
                         ])
             for action in factions:
                 model = action2keyword[action.id].model
@@ -231,7 +197,7 @@ class UIMenu(DeactivableMixin, sequence_ordered(), ModelSQL, ModelView):
                 ActionKeyword.delete(action_keywords)
         if not value:
             return
-        if isinstance(value, basestring):
+        if isinstance(value, str):
             action_type, action_id = value.split(',')
         else:
             action_type, action_id = value
