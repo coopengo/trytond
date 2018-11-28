@@ -49,6 +49,7 @@ def login(dbname, loginname, parameters, cache=True, context=None):
             User = pool.get('res.user')
             try:
                 user_id = User.get_login(loginname, parameters)
+                break
             except DatabaseOperationalError:
                 if count:
                     continue
@@ -57,7 +58,6 @@ def login(dbname, loginname, parameters, cache=True, context=None):
                 # Let's store any changes done
                 transaction.commit()
                 raise
-        break
     session = None
     if user_id:
         if not cache:
@@ -94,12 +94,17 @@ def logout(dbname, user, session, context=None):
             Session = pool.get('ir.session')
             try:
                 name = Session.remove(session)
+                break
             except DatabaseOperationalError:
                 if count:
                     continue
                 raise
-    logger.info("logout for '%s' from '%s' on database '%s'",
-        name, _get_remote_addr(context), dbname)
+    if name:
+        logger.info("logout for '%s' from '%s' on database '%s'",
+            name, _get_remote_addr(context), dbname)
+    else:
+        logger.error("logout failed for '%s' from '%s' on database '%s'",
+            user, _get_remote_addr(context), dbname)
 
 
 def check(dbname, user, session, context=None):
