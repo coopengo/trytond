@@ -1,5 +1,6 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
+import time
 import datetime
 import logging
 import os
@@ -308,11 +309,12 @@ class Report(URLMixin, PoolBase):
         if output_format in MIMETYPES:
             return output_format, data
 
-        dtemp = tempfile.mkdtemp(prefix='trytond_')
-        path = os.path.join(
-            dtemp, report.report_name + os.extsep + input_format)
+        fd, path = tempfile.mkstemp(suffix=(os.extsep + input_format),
+            prefix='trytond_')
         oext = FORMAT2EXT.get(output_format, output_format)
-        with open(path, 'wb+') as fp:
+        output = None
+        dtemp = os.path.dirname(path)
+        with os.fdopen(fd, 'wb+') as fp:
             fp.write(data)
         try:
             cmd = ['soffice',
@@ -321,17 +323,25 @@ class Report(URLMixin, PoolBase):
             logger = logging.getLogger(__name__)
             output = os.path.splitext(path)[0] + os.extsep + oext
             subprocess.check_call(cmd)
-            if os.path.exists(output):
-                with open(output, 'rb') as fp:
-                    return oext, fp.read()
+            # ABDC: Please don't judge me... Soffice makes me do this because
+            # its returns before file creation.
+            nb_retry = 0
+            while nb_retry < 10:
+                nb_retry += 1
+                if os.path.exists(output):
+                    break
+                time.sleep(0.2)
             else:
                 logger.error(
-                    'fail to convert %s to %s', report.report_name, oext)
+                    'fail to convert file %s to %s' % (path, output))
                 return input_format, data
+            with open(output, 'rb') as fp:
+                return oext, fp.read()
         finally:
             try:
                 os.remove(path)
-                os.remove(output)
+                if output:
+                    os.remove(output)
                 os.rmdir(dtemp)
             except OSError:
                 pass
