@@ -363,12 +363,13 @@ class Report(URLMixin, PoolBase):
         if input_format == output_format and output_format in MIMETYPES:
             return output_format, data
 
-        dtemp = tempfile.mkdtemp(prefix='trytond_')
-        path = os.path.join(
-            dtemp, report.report_name + os.extsep + input_format)
+        fd, path = tempfile.mkstemp(suffix=(os.extsep + input_format),
+            prefix='trytond_')
         oext = FORMAT2EXT.get(output_format, output_format)
+        output = None
+        dtemp = os.path.dirname(path)
         mode = 'w+' if isinstance(data, str) else 'wb+'
-        with open(path, mode) as fp:
+        with os.fdopen(fd, mode) as fp:
             fp.write(data)
         try:
             cmd = ['soffice',
@@ -378,15 +379,15 @@ class Report(URLMixin, PoolBase):
             for count in range(retry, -1, -1):
                 if count != retry:
                     time.sleep(0.02 * (retry - count))
-                try:
-                    subprocess.check_call(cmd, timeout=timeout)
-                except subprocess.CalledProcessError:
-                    if count:
-                        continue
-                    logger.error(
-                        "fail to convert %s to %s", report.report_name, oext,
-                        exc_info=True)
-                    break
+                subprocess.check_call(cmd, timeout=timeout)
+                # ABDC: Please don't judge me... Soffice makes me do this because
+                # its returns before file creation.
+                nb_retry = 0
+                while nb_retry < 10:
+                    nb_retry += 1
+                    if os.path.exists(output):
+                        break
+                    time.sleep(0.2)
                 if os.path.exists(output):
                     with open(output, 'rb') as fp:
                         return oext, fp.read()
@@ -397,7 +398,8 @@ class Report(URLMixin, PoolBase):
         finally:
             try:
                 os.remove(path)
-                os.remove(output)
+                if output:
+                    os.remove(output)
                 os.rmdir(dtemp)
             except OSError:
                 pass
