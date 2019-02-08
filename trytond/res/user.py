@@ -47,7 +47,7 @@ from ..pool import Pool
 from ..config import config
 from ..pyson import PYSONEncoder, Eval, Bool
 from ..rpc import RPC
-from ..exceptions import LoginException, RateLimitException
+from ..exceptions import LoginException
 from trytond.report import Report, get_email
 from trytond.sendmail import sendmail_transactional
 from trytond.url import HOSTNAME
@@ -195,6 +195,9 @@ class User(DeactivableMixin, ModelSQL, ModelView):
                 'password_entropy': (
                     "The password contains too much times "
                     "the same characters."),
+                'wrong_password': 'Wrong password!',
+                'account_locked': 'Account locked for %s '
+                'minute(s) and %s second(s).',
                 })
 
     @classmethod
@@ -633,15 +636,19 @@ class User(DeactivableMixin, ModelSQL, ModelView):
         '''
         LoginAttempt = Pool().get('res.user.login.attempt')
         count_ip = LoginAttempt.count_ip()
+        waiting_for = config.get('session', 'wait_max_attempt', default=60)
         if count_ip > config.getint(
                 'session', 'max_attempt_ip_network', default=300):
             # Do not add attempt as the goal is to prevent flooding
-            raise RateLimitException()
+            cls.raise_user_error('account_locked', str(waiting_for // 60),
+                    str(waiting_for % 60))
+
         count = LoginAttempt.count(login)
         if count > config.getint('session', 'max_attempt', default=5):
             LoginAttempt.add(login)
-            raise RateLimitException()
-        Transaction().atexit(time.sleep, 2 ** count - 1)
+            cls.raise_user_error('account_locked', str(waiting_for // 60),
+                str(waiting_for % 60))
+
         for method in config.get(
                 'session', 'authentications', default='password').split(','):
             try:
@@ -755,7 +762,8 @@ class LoginAttempt(ModelSQL):
     @staticmethod
     def delay():
         return (datetime.datetime.now()
-            - datetime.timedelta(seconds=config.getint('session', 'timeout')))
+            - datetime.timedelta(seconds=config.getint(
+                'session', 'wait_max_attempt', default=60)))
 
     @classmethod
     def ipaddress(cls):
@@ -804,6 +812,7 @@ class LoginAttempt(ModelSQL):
     def count(cls, login):
         cursor = Transaction().connection.cursor()
         table = cls.__table__()
+        cursor.execute(*table.delete(where=table.create_date < cls.delay()))
         cursor.execute(*table.select(Count(Literal('*')),
                 where=(table.login == login)
                 & (table.create_date >= cls.delay())))
