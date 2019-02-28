@@ -657,12 +657,22 @@ class Translation(ModelSQL, ModelView):
 
     @classmethod
     def delete(cls, translations):
+        pool = Pool()
+        Model = pool.get('ir.model')
+        ModelField = pool.get('ir.model.field')
+        Model._get_name_cache.clear()
+        ModelField._get_name_cache.clear()
         cls._translation_cache.clear()
         ModelView._fields_view_get_cache.clear()
         return super(Translation, cls).delete(translations)
 
     @classmethod
     def create(cls, vlist):
+        pool = Pool()
+        Model = pool.get('ir.model')
+        ModelField = pool.get('ir.model.field')
+        Model._get_name_cache.clear()
+        ModelField._get_name_cache.clear()
         cls._translation_cache.clear()
         ModelView._fields_view_get_cache.clear()
         vlist = [x.copy() for x in vlist]
@@ -676,6 +686,11 @@ class Translation(ModelSQL, ModelView):
 
     @classmethod
     def write(cls, translations, values, *args):
+        pool = Pool()
+        Model = pool.get('ir.model')
+        ModelField = pool.get('ir.model.field')
+        Model._get_name_cache.clear()
+        ModelField._get_name_cache.clear()
         cls._translation_cache.clear()
         ModelView._fields_view_get_cache.clear()
         actions = iter((translations, values) + args)
