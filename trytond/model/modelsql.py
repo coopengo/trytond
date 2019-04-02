@@ -343,7 +343,7 @@ class ModelSQL(ModelStorage):
                     and field_name not in ('create_uid', 'create_date')):
                 if values.get(field_name) is None:
                     cls.raise_user_error('required_field',
-                        error_args=cls._get_error_args(field_name))
+                        error_args=cls.__names__(field_name))
             if isinstance(field, fields.Many2One) and values.get(field_name):
                 Model = pool.get(field.model_name)
                 create_records = transaction.create_records.get(
@@ -356,7 +356,7 @@ class ModelSQL(ModelStorage):
                 if not ((target_records
                             or (values[field_name] in create_records))
                         and (values[field_name] not in delete_records)):
-                    error_args = cls._get_error_args(field_name)
+                    error_args = cls.__names__(field_name)
                     error_args['value'] = values[field_name]
                     cls.raise_user_error('foreign_model_missing',
                         error_args=error_args)
@@ -1111,7 +1111,7 @@ class ModelSQL(ModelStorage):
                     if Model.search([
                                 (field_name, 'in', sub_ids),
                                 ], order=[]):
-                        error_args = Model._get_error_args(field_name)
+                        error_args = Model.__names__(field_name)
                         cls.raise_user_error('foreign_model_exist',
                             error_args=error_args)
 
