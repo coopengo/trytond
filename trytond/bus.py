@@ -15,7 +15,7 @@ from werkzeug.exceptions import NotImplemented, BadRequest
 from trytond import backend
 from trytond.wsgi import app
 from trytond.transaction import Transaction
-from trytond.protocols.jsonrpc import JSONEncoder
+from trytond.protocols.jsonrpc import JSONEncoder, JSONDecoder
 from trytond.config import config
 from trytond.tools import resolve
 
@@ -87,6 +87,7 @@ class LongPollingBus:
             if start_listener:
                 listener = threading.Thread(
                     target=cls._listen, args=(database,), daemon=True)
+                cls._queues[database]['listener'] = listener
                 listener.start()
 
         messages = cls._messages.get(database)
@@ -154,7 +155,9 @@ class LongPollingBus:
                 conn.poll()
                 while conn.notifies:
                     notification = conn.notifies.pop()
-                    payload = json.loads(notification.payload)
+                    payload = json.loads(
+                        notification.payload,
+                        object_hook=JSONDecoder())
                     channel = payload['channel']
                     message = payload['message']
                     messages.append(channel, message)
@@ -181,7 +184,10 @@ class LongPollingBus:
                 del cls._queues[database]
             else:
                 # A query arrived between the end of the while and here
-                cls._listen(database)
+                listener = threading.Thread(
+                    target=cls._listen, args=(database,), daemon=True)
+                cls._queues[database]['listener'] = listener
+                listener.start()
 
     @classmethod
     def publish(cls, channel, message):

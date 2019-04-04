@@ -141,6 +141,8 @@ def with_pool(func):
 
 
 def with_transaction(readonly=None):
+    from trytond.worker import run_task
+
     def decorator(func):
         @wraps(func)
         def wrapper(request, pool, *args, **kwargs):
@@ -169,6 +171,9 @@ def with_transaction(readonly=None):
                         raise
                     # Need to commit to unlock SQLite database
                     transaction.commit()
+                while transaction.tasks:
+                    task_id = transaction.tasks.pop()
+                    run_task(pool, task_id)
                 return result
         return wrapper
     return decorator
