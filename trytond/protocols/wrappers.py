@@ -118,7 +118,7 @@ def parse_authorization_header(value):
                 'session': bytes_to_wsgi(session),
                 })
     elif auth_type == b'token':
-        return Authorization('token', {'token': auth_info})
+        return Authorization('token', {'token': bytes_to_wsgi(auth_info)})
 
 
 def set_max_request_size(size):
