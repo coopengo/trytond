@@ -468,9 +468,6 @@ class User(DeactivableMixin, ModelSQL, ModelView):
         else:
             fields = cls._preferences_fields + cls._context_fields
         for field in fields:
-            logger.info('#' * 80)
-            logger.info(field)
-            logger.info('#' * 80)
             if cls._fields[field]._type in ('many2one',):
                 if field == 'language':
                     if user.language:
