@@ -46,11 +46,14 @@ DB_CACHE = os.environ.get('DB_CACHE')
 Pool.test = True
 
 
-def activate_module(name):
+def activate_module(name, cache_name=None):
     '''
     Activate module for the tested database
     '''
-    if not db_exist(DB_NAME) and restore_db_cache(name):
+    # JCA : Allow multiple modules to be installed in unittests
+    module_names = [name] if isinstance(name, str) else name
+    cache_name = cache_name or '-'.join(module_names)
+    if not db_exist(DB_NAME) and restore_db_cache(cache_name):
         return
     create_db()
     with Transaction().start(DB_NAME, 1, close=True) as transaction:
@@ -58,12 +61,12 @@ def activate_module(name):
         Module = pool.get('ir.module')
 
         modules = Module.search([
-                ('name', '=', name),
+                ('name', 'in', module_names),
                 ])
-        assert modules, "%s not found" % name
+        assert modules, "%s not found" % cache_name
 
         modules = Module.search([
-                ('name', '=', name),
+                ('name', 'in', module_names),
                 ('state', '!=', 'activated'),
                 ])
 
@@ -78,7 +81,7 @@ def activate_module(name):
             ActivateUpgrade(instance_id).transition_upgrade()
             ActivateUpgrade.delete(instance_id)
             transaction.commit()
-    backup_db_cache(name)
+    backup_db_cache(cache_name)
 
 
 def restore_db_cache(name):
