@@ -50,7 +50,8 @@ def activate_module(name, cache_name=None):
     '''
     Activate module for the tested database
     '''
-    # JCA : Allow multiple modules to be installed in unittests
+    # JCA : Allow multiple modules to be installed in unittests. Should be
+    # removed when upgrading to Tryton 5.2
     module_names = [name] if isinstance(name, str) else name
     cache_name = cache_name or '-'.join(module_names)
     if not db_exist(DB_NAME) and restore_db_cache(cache_name):
