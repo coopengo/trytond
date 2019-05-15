@@ -1378,7 +1378,9 @@ class ModelStorage(Model):
 
         def instantiate(field, value, data):
             if field._type in ('many2one', 'one2one', 'reference'):
-                if value is None or value is False:
+                # ABDC: Fix when data is an empty string, we should return
+                # None
+                if value is None or value is False or value == '':
                     return None
             elif field._type in ('one2many', 'many2many'):
                 if not value:
