@@ -4,6 +4,7 @@
 import inspect
 import copy
 
+from trytond.i18n import gettext
 from trytond.model.fields.field import Field
 from trytond.tools import is_instance_method
 from trytond.transaction import Transaction
@@ -76,7 +77,9 @@ class Function(Field):
             return method(domain, tables)
         if self.searcher:
             return getattr(Model, self.searcher)(self.name, domain)
-        Model.raise_user_error('search_function_missing', self.name)
+        raise NotImplementedError(gettext(
+                'ir.msg_search_function_missing',
+                **Model.__names__(self.name)))
 
     def get(self, ids, Model, name, values=None):
         '''
@@ -117,9 +120,21 @@ class Function(Field):
                 args = iter((ids, value) + args)
                 for ids, value in zip(args, args):
                     setter(Model.browse(ids), name, value)
+            else:
+                raise NotImplementedError(gettext(
+                        'ir.msg_setter_function_missing',
+                        **Model.__names__(self.name)))
 
     def __set__(self, inst, value):
         self._field.__set__(inst, value)
+
+    def definition(self, model, language):
+        definition = self._field.definition(model, language)
+        definition.update(super().definition(model, language))
+        definition['searchable'] &= (
+            bool(self.searcher) or hasattr(model, 'domain_' + self.name))
+        definition['sortable'] &= hasattr(model, 'order_' + self.name)
+        return definition
 
 
 class MultiValue(Function):

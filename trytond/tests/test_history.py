@@ -3,10 +3,10 @@
 import unittest
 import datetime
 
+from trytond.model.exceptions import AccessError
 from trytond.tests.test_tryton import activate_module, with_transaction
 from trytond.transaction import Transaction
 from trytond.pool import Pool
-from trytond.exceptions import UserError
 from trytond import backend
 
 
@@ -73,7 +73,8 @@ class HistoryTestCase(unittest.TestCase):
                 self.assertEqual(history.value, value)
 
         with Transaction().set_context(_datetime=datetime.datetime.min):
-            self.assertRaises(UserError, History.read, [history_id])
+            with self.assertRaises(AccessError):
+                History.read([history_id], ['value'])
 
     @unittest.skipUnless(backend.name() == 'postgresql',
         'CURRENT_TIMESTAMP as transaction_timestamp is specific to postgresql')
@@ -174,7 +175,8 @@ class HistoryTestCase(unittest.TestCase):
         transaction.rollback()
 
         History.restore_history([history_id], datetime.datetime.min)
-        self.assertRaises(UserError, History.read, [history_id])
+        with self.assertRaises(AccessError):
+            History.read([history_id], ['value'])
 
         transaction.rollback()
 
@@ -183,7 +185,8 @@ class HistoryTestCase(unittest.TestCase):
         transaction.commit()
 
         History.restore_history([history_id], datetime.datetime.max)
-        self.assertRaises(UserError, History.read, [history_id])
+        with self.assertRaises(AccessError):
+            History.read([history_id], ['value'])
 
     @with_transaction()
     def test_restore_history_before(self):
@@ -408,6 +411,8 @@ class HistoryTestCase(unittest.TestCase):
         history.value = 2
         history.save()
 
+        second_bis_stamp = history.write_date
+
         Line.delete([Line(line_b_id)])
 
         line_a = Line(line_a_id)
@@ -439,7 +444,7 @@ class HistoryTestCase(unittest.TestCase):
             [l.name for l in history.lines_at_stamp], ['a', 'b'])
 
         # COOG - JCA : Test _datetime_exclude
-        with Transaction().set_context(_datetime=second_stamp,
+        with Transaction().set_context(_datetime=second_bis_stamp,
                 _datetime_exclude=True):
             history = History(history_id)
         self.assertEqual(history.value, 1)

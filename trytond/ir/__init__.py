@@ -21,6 +21,11 @@ from .date import *
 from .trigger import *
 from .session import *
 from . import queue
+from . import calendar_
+from . import message
+from . import routes
+
+__all__ = ['register', 'routes']
 
 
 def register():
@@ -87,6 +92,9 @@ def register():
         Session,
         SessionWizard,
         queue.Queue,
+        calendar_.Month,
+        calendar_.Day,
+        message.Message,
         module='ir', type_='model')
     Pool.register(
         TranslationSet,

@@ -78,3 +78,10 @@ class Char(FieldTranslate):
             database = Transaction().database
             value = database.unaccent(value)
         return value
+
+    def definition(self, model, language):
+        definition = super().definition(model, language)
+        definition['autocomplete'] = list(self.autocomplete)
+        if self.size is not None:
+            definition['size'] = self.size
+        return definition

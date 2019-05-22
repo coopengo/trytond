@@ -4,12 +4,13 @@
 
 import unittest
 import doctest
-import datetime
 import sql
 import sql.operators
 
-from trytond.tools import reduce_ids, datetime_strftime, \
-    reduce_domain, decimal_, is_instance_method, file_open
+from trytond.tools import (
+    reduce_ids, reduce_domain, decimal_, is_instance_method, file_open,
+    strip_wildcard, lstrip_wildcard, rstrip_wildcard)
+from trytond.tools.string_ import StringPartitioned
 
 
 class ToolsTestCase(unittest.TestCase):
@@ -58,19 +59,6 @@ class ToolsTestCase(unittest.TestCase):
             (((self.table.id >= 1.0) & (self.table.id <= 12.0))
                 | (self.table.id.in_([15.0, 18.0, 19.0, 21.0]))))
         self.assertRaises(AssertionError, reduce_ids, self.table.id, [1.1])
-
-    def test_datetime_strftime(self):
-        'Test datetime_strftime'
-        self.assertTrue(datetime_strftime(datetime.date(2005, 3, 2),
-            '%Y-%m-%d'), '2005-03-02')
-        self.assertTrue(datetime_strftime(datetime.date(1805, 3, 2),
-            '%Y-%m-%d'), '1805-03-02')
-        self.assertTrue(datetime_strftime(datetime.datetime(2005, 3, 2, 0, 0, 0),
-            '%Y-%m-%d'), '2005-03-02')
-        with self.assertRaises(TypeError):
-            datetime_strftime(None, '%Y-%m-%d')
-        with self.assertRaises(TypeError):
-            datetime_strftime(2, '%Y-%m-%d')
 
     def test_reduce_domain(self):
         'Test reduce_domain'
@@ -145,11 +133,116 @@ class ToolsTestCase(unittest.TestCase):
         with self.assertRaisesRegex(IOError, "Permission denied:"):
             file_open('../trytond_suffix', subdir=None)
 
+    def test_strip_wildcard(self):
+        'Test strip wildcard'
+        for clause, result in [
+                ('%a%', 'a'),
+                ('%%%%a%%%', 'a'),
+                ('\\%a%', '\\%a'),
+                ('\\%a\\%', '\\%a\\%'),
+                ('a', 'a'),
+                ('', ''),
+                (None, None),
+                ]:
+            self.assertEqual(
+                strip_wildcard(clause), result, msg=clause)
+
+    def test_strip_wildcard_different_wildcard(self):
+        'Test strip wildcard with different wildcard'
+        self.assertEqual(strip_wildcard('___a___', '_'), 'a')
+
+    def test_lstrip_wildcard(self):
+        'Test lstrip wildcard'
+        for clause, result in [
+                ('%a', 'a'),
+                ('%a%', 'a%'),
+                ('%%%%a%', 'a%'),
+                ('\\%a%', '\\%a%'),
+                ('a', 'a'),
+                ('', ''),
+                (None, None),
+                ]:
+            self.assertEqual(
+                lstrip_wildcard(clause), result, msg=clause)
+
+    def test_lstrip_wildcard_different_wildcard(self):
+        'Test lstrip wildcard with different wildcard'
+        self.assertEqual(lstrip_wildcard('___a', '_'), 'a')
+
+    def test_rstrip_wildcard(self):
+        'Test rstrip wildcard'
+        for clause, result in [
+                ('a%', 'a'),
+                ('%a%', '%a'),
+                ('%a%%%%%', '%a'),
+                ('%a\\%', '%a\\%'),
+                ('a', 'a'),
+                ('', ''),
+                (None, None),
+                ]:
+            self.assertEqual(
+                rstrip_wildcard(clause), result, msg=clause)
+
+    def test_rstrip_wildcard_diferent_wildcard(self):
+        self.assertEqual(rstrip_wildcard('a___', '_'), 'a')
+
+
+class StringPartitionedTestCase(unittest.TestCase):
+    "Test StringPartitioned"
+
+    def test_init(self):
+        s = StringPartitioned('foo')
+
+        self.assertEqual(s, 'foo')
+        self.assertEqual(s._parts, ('foo',))
+
+    def test_init_partitioned(self):
+        s = StringPartitioned(
+            StringPartitioned('foo') + StringPartitioned('bar'))
+
+        self.assertEqual(s, 'foobar')
+        self.assertEqual(s._parts, ('foo', 'bar'))
+
+    def test_iter(self):
+        s = StringPartitioned('foo')
+
+        self.assertEqual(list(s), ['foo'])
+
+    def test_len(self):
+        s = StringPartitioned('foo')
+
+        self.assertEqual(len(s), 3)
+
+    def test_str(self):
+        s = StringPartitioned('foo')
+
+        s = str(s)
+
+        self.assertEqual(s, 'foo')
+        self.assertIsInstance(s, str)
+        self.assertNotIsInstance(s, StringPartitioned)
+
+    def test_add(self):
+        s = StringPartitioned('foo')
+
+        s = s + 'bar'
+
+        self.assertEqual(s, 'foobar')
+        self.assertEqual(list(s), ['foo', 'bar'])
+
+    def test_radd(self):
+        s = StringPartitioned('foo')
+
+        s = 'bar' + s
+
+        self.assertEqual(s, 'barfoo')
+        self.assertEqual(list(s), ['bar', 'foo'])
+
 
 def suite():
     func = unittest.TestLoader().loadTestsFromTestCase
     suite = unittest.TestSuite()
-    for testcase in (ToolsTestCase,):
+    for testcase in [ToolsTestCase, StringPartitionedTestCase]:
         suite.addTests(func(testcase))
     suite.addTest(doctest.DocTestSuite(decimal_))
     return suite

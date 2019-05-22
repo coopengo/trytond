@@ -11,6 +11,8 @@ from sql.conditionals import Case
 from collections import defaultdict
 from itertools import groupby
 
+from trytond.i18n import gettext
+from trytond.model.exceptions import AccessError, ValidationError
 from ..model import (ModelView, ModelSQL, Workflow, DeactivableMixin, fields,
     Unique, EvalEnvironment)
 from ..report import Report
@@ -22,10 +24,7 @@ from ..pyson import Bool, Eval, PYSONDecoder
 from ..rpc import RPC
 from ..protocols.jsonrpc import JSONDecoder, JSONEncoder
 from ..tools import is_instance_method, cursor_dict, grouped_slice
-try:
-    from ..tools.StringMatcher import StringMatcher
-except ImportError:
-    from difflib import SequenceMatcher as StringMatcher
+from ..tools.string_ import StringMatcher
 
 __all__ = [
     'Model', 'ModelField', 'ModelAccess', 'ModelFieldAccess', 'ModelButton',
@@ -34,6 +33,10 @@ __all__ = [
     'ModelWorkflowGraph',
     ]
 logger = logging.getLogger(__name__)
+
+
+class ConditionError(ValidationError):
+    pass
 
 
 class Model(ModelSQL, ModelView):
@@ -225,8 +228,6 @@ class ModelField(ModelSQL, ModelView):
             'readonly': Bool(Eval('module')),
             },
         depends=['module'])
-    groups = fields.Many2Many('ir.model.field-res.group', 'field',
-            'group', 'Groups')
     help = fields.Text('Help', translate=True, loading='lazy',
         states={
             'readonly': Bool(Eval('module')),
@@ -361,16 +362,13 @@ class ModelField(ModelSQL, ModelView):
         return name
 
     @classmethod
-    def read(cls, ids, fields_names=None):
+    def read(cls, ids, fields_names):
         pool = Pool()
         Translation = pool.get('ir.translation')
         Model = pool.get('ir.model')
 
         to_delete = []
         if Transaction().context.get('language'):
-            if fields_names is None:
-                fields_names = list(cls._fields.keys())
-
             if 'field_description' in fields_names \
                     or 'help' in fields_names:
                 if 'model' not in fields_names:
@@ -380,7 +378,7 @@ class ModelField(ModelSQL, ModelView):
                     fields_names.append('name')
                     to_delete.append('name')
 
-        res = super(ModelField, cls).read(ids, fields_names=fields_names)
+        res = super(ModelField, cls).read(ids, fields_names)
 
         if (Transaction().context.get('language')
                 and ('field_description' in fields_names
@@ -436,7 +434,7 @@ class ModelField(ModelSQL, ModelView):
         return res
 
 
-class ModelAccess(ModelSQL, ModelView):
+class ModelAccess(DeactivableMixin, ModelSQL, ModelView):
     "Model access"
     __name__ = 'ir.model.access'
     model = fields.Many2One('ir.model', 'Model', required=True,
@@ -453,12 +451,6 @@ class ModelAccess(ModelSQL, ModelView):
     @classmethod
     def __setup__(cls):
         super(ModelAccess, cls).__setup__()
-        cls._error_messages.update({
-            'read': 'You can not read this document! (%s)',
-            'write': 'You can not write in this document! (%s)',
-            'create': 'You can not create this kind of document! (%s)',
-            'delete': 'You can not delete this document! (%s)',
-            })
         cls.__rpc__.update({
                 'get_access': RPC(),
                 })
@@ -500,11 +492,13 @@ class ModelAccess(ModelSQL, ModelView):
         pool = Pool()
         Model = pool.get('ir.model')
         UserGroup = pool.get('res.user-res.group')
+        Group = pool.get('res.group')
         cursor = Transaction().connection.cursor()
         user = Transaction().user
         model_access = cls.__table__()
         ir_model = Model.__table__()
         user_group = UserGroup.__table__()
+        group = Group.__table__()
 
         access = {}
         for model in models:
@@ -521,6 +515,8 @@ class ModelAccess(ModelSQL, ModelView):
                 condition=model_access.model == ir_model.id
                 ).join(user_group, 'LEFT',
                 condition=user_group.group == model_access.group
+                ).join(group, 'LEFT',
+                condition=model_access.group == group.id
                 ).select(
                 ir_model.model,
                 Max(Case((model_access.perm_read == True, 1), else_=0)),
@@ -528,7 +524,10 @@ class ModelAccess(ModelSQL, ModelView):
                 Max(Case((model_access.perm_create == True, 1), else_=0)),
                 Max(Case((model_access.perm_delete == True, 1), else_=0)),
                 where=ir_model.model.in_(models)
-                & ((user_group.user == user) | (model_access.group == Null)),
+                & (model_access.active == True)
+                & (((user_group.user == user)
+                        & (group.active == True))
+                    | (model_access.group == Null)),
                 group_by=ir_model.model))
         access.update(dict(
                 (m, {'read': r, 'write': w, 'create': c, 'delete': d})
@@ -552,7 +551,8 @@ class ModelAccess(ModelSQL, ModelView):
         access = cls.get_access([model_name])[model_name][mode]
         if not access and access is not None:
             if raise_exception:
-                cls.raise_user_error(mode, Model.__names__()['model'])
+                raise AccessError(gettext(
+                        'ir.msg_access_rule_error', **Model.__names__()))
             else:
                 return False
         return True
@@ -617,7 +617,7 @@ class ModelAccess(ModelSQL, ModelView):
         ModelView._fields_view_get_cache.clear()
 
 
-class ModelFieldAccess(ModelSQL, ModelView):
+class ModelFieldAccess(DeactivableMixin, ModelSQL, ModelView):
     "Model Field Access"
     __name__ = 'ir.model.field.access'
     field = fields.Many2One('ir.model.field', 'Field', required=True,
@@ -629,14 +629,6 @@ class ModelFieldAccess(ModelSQL, ModelView):
     perm_delete = fields.Boolean('Delete Access')
     description = fields.Text('Description')
     _get_access_cache = Cache('ir_model_field_access.check', context=False)
-
-    @classmethod
-    def __setup__(cls):
-        super(ModelFieldAccess, cls).__setup__()
-        cls._error_messages.update({
-            'read': 'You can not read the field! (%s.%s)',
-            'write': 'You can not write on the field! (%s.%s)',
-            })
 
     @staticmethod
     def check_xml_record(field_accesses, values):
@@ -677,11 +669,13 @@ class ModelFieldAccess(ModelSQL, ModelView):
         Model = pool.get('ir.model')
         ModelField = pool.get('ir.model.field')
         UserGroup = pool.get('res.user-res.group')
+        Group = pool.get('res.group')
         user = Transaction().user
         field_access = cls.__table__()
         ir_model = Model.__table__()
         model_field = ModelField.__table__()
         user_group = UserGroup.__table__()
+        group = Group.__table__()
 
         accesses = {}
         for model in models:
@@ -701,6 +695,8 @@ class ModelFieldAccess(ModelSQL, ModelView):
                 condition=model_field.model == ir_model.id
                 ).join(user_group, 'LEFT',
                 condition=user_group.group == field_access.group
+                ).join(group, 'LEFT',
+                condition=field_access.group == group.id
                 ).select(
                 ir_model.model,
                 model_field.name,
@@ -709,7 +705,10 @@ class ModelFieldAccess(ModelSQL, ModelView):
                 Max(Case((field_access.perm_create == True, 1), else_=0)),
                 Max(Case((field_access.perm_delete == True, 1), else_=0)),
                 where=ir_model.model.in_(models)
-                & ((user_group.user == user) | (field_access.group == Null)),
+                & (field_access.active == True)
+                & (((user_group.user == user)
+                        & (group.active == True))
+                    | (field_access.group == Null)),
                 group_by=[ir_model.model, model_field.name]))
         for m, f, r, w, c, d in cursor.fetchall():
             accesses[m][f] = {'read': r, 'write': w, 'create': c, 'delete': d}
@@ -741,9 +740,9 @@ class ModelFieldAccess(ModelSQL, ModelView):
         for field in fields:
             if not accesses.get(field, True):
                 if raise_exception:
-                    names = Model.__names__(field)
-                    cls.raise_user_error(
-                        mode, (names['model'], names['field']))
+                    raise AccessError(
+                        gettext('ir.msg_access_rule_field_error',
+                            **Model.__names__(field)))
                 else:
                     return False
         return True
@@ -951,14 +950,6 @@ class ModelButtonRule(ModelSQL, ModelView):
         '"self"\nIt activate the rule if true.')
 
     @classmethod
-    def __setup__(cls):
-        super(ModelButtonRule, cls).__setup__()
-        cls._error_messages.update({
-                'invalid_condition': ('Condition "%(condition)s" is not a '
-                    'valid PYSON expression on button rule "%(rule)s".'),
-                })
-
-    @classmethod
     def default_number_user(cls):
         return 1
 
@@ -975,10 +966,10 @@ class ModelButtonRule(ModelSQL, ModelView):
             try:
                 PYSONDecoder(noeval=True).decode(rule.condition)
             except Exception:
-                cls.raise_user_error('invalid_condition', {
-                        'condition': rule.condition,
-                        'rule': rule.rec_name,
-                        })
+                raise ConditionError(
+                    gettext('ir.msg_model_invalid_condition',
+                        condition=rule.condition,
+                        rule=rule.rec_name))
 
     def test(self, record, clicks):
         "Test if the rule passes for the record"
@@ -1106,9 +1097,12 @@ class ModelData(ModelSQL, ModelView):
         select=True)
     model = fields.Char('Model', required=True, select=True)
     module = fields.Char('Module', required=True, select=True)
-    db_id = fields.Integer('Resource ID',
-        help="The id of the record in the database.", select=True,
-        required=True)
+    db_id = fields.Integer(
+        "Resource ID", select=True,
+        states={
+            'required': ~Eval('noupdate', False),
+            },
+        help="The id of the record in the database.")
     values = fields.Text('Values')
     fs_values = fields.Text('Values on File System')
     noupdate = fields.Boolean('No Update')
@@ -1132,6 +1126,10 @@ class ModelData(ModelSQL, ModelView):
                     'depends': ['out_of_sync'],
                     },
                 })
+        cls.__rpc__.update({
+                'sync': RPC(
+                    readonly=False, instantiate=0, fresh_session=True),
+                })
 
     @classmethod
     def __register__(cls, module_name):
@@ -1140,11 +1138,16 @@ class ModelData(ModelSQL, ModelView):
 
         super(ModelData, cls).__register__(module_name)
 
+        table_h = cls.__table_handler__(module_name)
+
         # Migration from 4.6: register buttons on ir module
         cursor.execute(*model_data.update(
                 [model_data.module], ['ir'],
                 where=((model_data.module == 'res')
                     & (model_data.fs_id == 'model_data_sync_button'))))
+
+        # Migration from 5.0: remove required on db_id
+        table_h.not_null_action('db_id', action='remove')
 
     @staticmethod
     def default_noupdate():
@@ -1217,7 +1220,8 @@ class ModelData(ModelSQL, ModelView):
     @classmethod
     def dump_values(cls, values):
         return json.dumps(
-            sorted(values.items()), cls=JSONEncoder, separators=(',', ':'))
+            sorted(values.items()), cls=JSONEncoder, separators=(',', ':'),
+            sort_keys=True)
 
     @classmethod
     def load_values(cls, values):
@@ -1235,25 +1239,32 @@ class ModelData(ModelSQL, ModelView):
     @classmethod
     @ModelView.button
     def sync(cls, records):
-        pool = Pool()
-        to_write = []
-        models_to_write = defaultdict(list)
-        for data in records:
-            Model = pool.get(data.model)
-            values = cls.load_values(data.values)
-            fs_values = cls.load_values(data.fs_values)
-            # values could be the same once loaded
-            # if they come from version < 3.2
-            if values != fs_values:
-                record = Model(data.db_id)
-                models_to_write[Model].extend(([record], fs_values))
-            to_write.extend([[data], {
-                        'values': cls.dump_values(fs_values),
-                        }])
-        for Model, values_to_write in models_to_write.items():
-            Model.write(*values_to_write)
-        if to_write:
-            cls.write(*to_write)
+        with Transaction().set_user(0):
+            pool = Pool()
+            to_write = []
+            models_to_write = defaultdict(list)
+            for data in records:
+                try:
+                    Model = pool.get(data.model)
+                except KeyError:
+                    continue
+                values = cls.load_values(data.values)
+                fs_values = cls.load_values(data.fs_values)
+                # values could be the same once loaded
+                # if they come from version < 3.2
+                if values != fs_values:
+                    values = {f: v for f, v in fs_values.items()
+                        if f in Model._fields}
+                    record = Model(data.db_id)
+                    models_to_write[Model].extend(([record], values))
+                to_write.extend([[data], {
+                            'values': cls.dump_values(fs_values),
+                            'fs_values': cls.dump_values(fs_values),
+                            }])
+            for Model, values_to_write in models_to_write.items():
+                Model.write(*values_to_write)
+            if to_write:
+                cls.write(*to_write)
 
 
 class PrintModelGraphStart(ModelView):

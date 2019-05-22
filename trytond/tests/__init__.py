@@ -10,10 +10,10 @@ except ImportError:
 from ..pool import Pool
 from .modelview import *
 from .mptt import *
-from .import_data import *
+from . import import_data
 from .export_data import *
 from .trigger import *
-from .access import *
+from . import access
 from .wizard import *
 from .workflow import *
 from .history import *
@@ -56,34 +56,12 @@ def register():
         ModelViewEmptyPage,
         ModelViewCircularDepends,
         MPTT,
-        ImportDataBoolean,
-        ImportDataInteger,
-        ImportDataIntegerRequired,
-        ImportDataFloat,
-        ImportDataFloatRequired,
-        ImportDataNumeric,
-        ImportDataNumericRequired,
-        ImportDataChar,
-        ImportDataText,
-        ImportDataDate,
-        ImportDataDateTime,
-        ImportDataSelection,
-        ImportDataMany2OneTarget,
-        ImportDataMany2One,
-        ImportDataMany2ManyTarget,
-        ImportDataMany2Many,
-        ImportDataMany2ManyRelation,
-        ImportDataOne2Many,
-        ImportDataOne2ManyTarget,
-        ImportDataReferenceSelection,
-        ImportDataReference,
         ExportDataTarget,
         ExportData,
         ExportDataTarget2,
         ExportDataRelation,
         Triggered,
         TriggerAction,
-        TestAccess,
         TestWizardStart,
         WorkflowedModel,
         TestHistory,
@@ -95,6 +73,8 @@ def register():
         TestWizard,
         module='tests', type_='wizard')
 
+    import_data.register('tests')
+    access.register('tests')
     model.register('tests')
     modelstorage.register('tests')
     modelsql.register('tests')

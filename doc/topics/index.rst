@@ -21,6 +21,7 @@ Introduction to all the key parts of trytond:
     domain
     pyson
     access_rights
+    user_errors_warnings
     triggers
     actions
     views/index
@@ -29,6 +30,7 @@ Introduction to all the key parts of trytond:
     reports/index
     rpc
     task_queue
+    cron
     user_application
     bus
     modules/index

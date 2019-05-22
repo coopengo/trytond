@@ -288,14 +288,6 @@ this repository contains the full copyright notices and license terms. -->
             <field name="perm_create" eval="False"/>
             <field name="perm_delete" eval="False"/>
         </record>
-        <record model="ir.model.access" id="access_ir_model_data_admin">
-            <field name="model" search="[('model', '=', 'ir.model.data')]"/>
-            <field name="group" ref="group_admin"/>
-            <field name="perm_read" eval="True"/>
-            <field name="perm_write" eval="True"/>
-            <field name="perm_create" eval="False"/>
-            <field name="perm_delete" eval="False"/>
-        </record>
         <record model="ir.model.access" id="access_ir_cron">
             <field name="model" search="[('model', '=', 'ir.cron')]"/>
             <field name="perm_read" eval="True"/>
@@ -447,6 +439,7 @@ this repository contains the full copyright notices and license terms. -->
             <field name="perm_delete" eval="True"/>
         </record>
         <record model="ir.rule.group" id="rule_group_menu">
+            <field name="name">User in groups</field>
             <field name="model" search="[('model', '=', 'ir.ui.menu')]"/>
             <field name="global_p" eval="True"/>
         </record>
@@ -461,6 +454,7 @@ this repository contains the full copyright notices and license terms. -->
             <field name="rule_group" ref="rule_group_menu"/>
         </record>
         <record model="ir.rule.group" id="rule_group_action">
+            <field name="name">User in groups</field>
             <field name="model" search="[('model', '=', 'ir.action')]"/>
             <field name="global_p" eval="True"/>
         </record>
@@ -475,6 +469,7 @@ this repository contains the full copyright notices and license terms. -->
             <field name="rule_group" ref="rule_group_action"/>
         </record>
         <record model="ir.rule.group" id="rule_group_action_keyword">
+            <field name="name">User in groups</field>
             <field name="model" search="[('model', '=', 'ir.action.keyword')]"/>
             <field name="global_p" eval="True"/>
         </record>
@@ -490,6 +485,7 @@ this repository contains the full copyright notices and license terms. -->
         </record>
 
         <record model="ir.rule.group" id="rule_group_action_report">
+            <field name="name">User in groups</field>
             <field name="model" search="[('model', '=', 'ir.action.report')]"/>
             <field name="global_p" eval="True"/>
         </record>
@@ -505,6 +501,7 @@ this repository contains the full copyright notices and license terms. -->
         </record>
 
         <record model="ir.rule.group" id="rule_group_action_act_window">
+            <field name="name">User in groups</field>
             <field name="model" search="[('model', '=', 'ir.action.act_window')]"/>
             <field name="global_p" eval="True"/>
         </record>
@@ -520,6 +517,7 @@ this repository contains the full copyright notices and license terms. -->
         </record>
 
         <record model="ir.rule.group" id="rule_group_action_wizard">
+            <field name="name">User in groups</field>
             <field name="model" search="[('model', '=', 'ir.action.wizard')]"/>
             <field name="global_p" eval="True"/>
         </record>
@@ -535,6 +533,7 @@ this repository contains the full copyright notices and license terms. -->
         </record>
 
         <record model="ir.rule.group" id="rule_group_action_url">
+            <field name="name">User in groups</field>
             <field name="model" search="[('model', '=', 'ir.action.url')]"/>
             <field name="global_p" eval="True"/>
         </record>
@@ -768,6 +767,7 @@ this repository contains the full copyright notices and license terms. -->
         </record>
 
         <record model="ir.rule.group" id="rule_group_sequence">
+            <field name="name">User in groups</field>
             <field name="model" search="[('model', '=', 'ir.sequence')]"/>
             <field name="global_p" eval="True"/>
             <field name="perm_read" eval="False"/>
@@ -780,6 +780,7 @@ this repository contains the full copyright notices and license terms. -->
         </record>
 
         <record model="ir.rule.group" id="rule_group_sequence_strict">
+            <field name="name">User in groups</field>
             <field name="model" search="[('model', '=', 'ir.sequence.strict')]"/>
             <field name="global_p" eval="True"/>
             <field name="perm_read" eval="False"/>
@@ -791,27 +792,10 @@ this repository contains the full copyright notices and license terms. -->
             <field name="rule_group" ref="rule_group_sequence_strict"/>
         </record>
 
-        <record model="res.user" id="user_trigger">
-            <field name="login">user_cron_trigger</field>
-            <field name="name">Cron Trigger</field>
-            <field name="active" eval="False"/>
-        </record>
-        <record model="res.user-res.group" id="user_trigger_group_admin">
-            <field name="user" ref="user_trigger"/>
-            <field name="group" ref="group_admin"/>
-        </record>
-
         <record model="ir.cron" id="cron_trigger_time">
-            <field name="name">Run On Time Triggers</field>
-            <field name="request_user" ref="user_admin"/>
-            <field name="user" ref="user_trigger"/>
-            <field name="active" eval="True"/>
+            <field name="method">ir.trigger|trigger_time</field>
             <field name="interval_number" eval="5"/>
             <field name="interval_type">minutes</field>
-            <field name="number_calls" eval="-1"/>
-            <field name="repeat_missed" eval="False"/>
-            <field name="model">ir.trigger</field>
-            <field name="function">trigger_time</field>
         </record>
 
         <record model="ir.model.access" id="rule_default_view_tree_state">
@@ -831,6 +815,7 @@ this repository contains the full copyright notices and license terms. -->
         </record>
 
         <record model="ir.rule.group" id="rule_group_view_search">
+            <field name="name">Own view search</field>
             <field name="model"
                 search="[('model', '=', 'ir.ui.view_search')]"/>
             <field name="global_p" eval="False"/>
@@ -848,6 +833,7 @@ this repository contains the full copyright notices and license terms. -->
         </record>
 
         <record model="ir.rule.group" id="rule_group_view_search_admin">
+            <field name="name">Any view search</field>
             <field name="model"
                 search="[('model', '=', 'ir.ui.view_search')]"/>
             <field name="global_p" eval="False"/>
@@ -864,6 +850,7 @@ this repository contains the full copyright notices and license terms. -->
         </record>
 
         <record model="ir.rule.group" id="rule_group_session">
+            <field name="name">Own session</field>
             <field name="model"
                 search="[('model', '=', 'ir.session')]"/>
             <field name="global_p" eval="True"/>
@@ -876,6 +863,7 @@ this repository contains the full copyright notices and license terms. -->
         </record>
 
         <record model="ir.rule.group" id="rule_group_session_wizard">
+            <field name="name">Own session</field>
             <field name="model"
                 search="[('model', '=', 'ir.session.wizard')]"/>
             <field name="global_p" eval="True"/>
@@ -888,6 +876,7 @@ this repository contains the full copyright notices and license terms. -->
         </record>
 
         <record model="ir.rule.group" id="rule_group_ui_menu_favorite">
+            <field name="name">Own favorite</field>
             <field name="model"
                 search="[('model', '=', 'ir.ui.menu.favorite')]"/>
             <field name="global_p" eval="True"/>
@@ -897,6 +886,22 @@ this repository contains the full copyright notices and license terms. -->
                 eval="[('create_uid', '=', Eval('user', {}).get('id', -1))]"
                 pyson="1"/>
             <field name="rule_group" ref="rule_group_ui_menu_favorite"/>
+        </record>
+
+        <record model="ir.model.access" id="access_message">
+            <field name="model" search="[('model', '=', 'ir.message')]"/>
+            <field name="perm_read" eval="True"/>
+            <field name="perm_write" eval="False"/>
+            <field name="perm_create" eval="False"/>
+            <field name="perm_delete" eval="False"/>
+        </record>
+        <record model="ir.model.access" id="access_message_group_admin">
+            <field name="model" search="[('model', '=', 'ir.message')]"/>
+            <field name="group" ref="res.group_admin"/>
+            <field name="perm_read" eval="True"/>
+            <field name="perm_write" eval="True"/>
+            <field name="perm_create" eval="True"/>
+            <field name="perm_delete" eval="True"/>
         </record>
 
     </data>

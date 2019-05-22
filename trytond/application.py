@@ -20,6 +20,10 @@ if not log_file:
     if logging_config:
         logging.config.fileConfig(logging_config)
 
+if os.environ.get('TRYTOND_COROUTINE'):
+    from gevent import monkey
+    monkey.patch_all()
+
 from trytond.pool import Pool
 from trytond.wsgi import app
 

@@ -1,29 +1,41 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
 import datetime
-from itertools import islice, chain
-from collections import OrderedDict
+from itertools import islice, chain, product, groupby
+from collections import OrderedDict, defaultdict
 from functools import wraps
 
 from sql import (Table, Column, Literal, Desc, Asc, Expression, Null,
-    NullsFirst, NullsLast)
+    NullsFirst, NullsLast, For)
 from sql.functions import CurrentTimestamp, Extract
 from sql.conditionals import Coalesce
 from sql.operators import Or, And, Operator, Equal
 from sql.aggregate import Count, Max
 
+from trytond.i18n import gettext
 from trytond.model import ModelStorage, ModelView
 from trytond.model import fields
 from trytond import backend
 from trytond.tools import reduce_ids, grouped_slice, cursor_dict
 from trytond.transaction import Transaction
 from trytond.pool import Pool
-from trytond.cache import LRUDict
+from trytond.pyson import PYSONEncoder, PYSONDecoder
+from trytond.cache import LRUDict, freeze
 from trytond.exceptions import ConcurrencyException
 from trytond.rpc import RPC
 from trytond.config import config
 
-from .modelstorage import cache_size, is_leaf
+from .modelstorage import (cache_size, is_leaf,
+    ValidationError, RequiredValidationError, AccessError)
+from .descriptors import dualmethod
+
+
+class ForeignKeyError(ValidationError):
+    pass
+
+
+class SQLConstraintError(ValidationError):
+    pass
 
 
 class Constraint(object):
@@ -160,21 +172,26 @@ class ModelSQL(ModelStorage):
 
     @classmethod
     def __setup__(cls):
-        super(ModelSQL, cls).__setup__()
-        cls._sql_constraints = []
-        cls._order = [('id', 'ASC')]
-        cls._sql_error_messages = {}
-        if issubclass(cls, ModelView):
-            cls.__rpc__.update({
-                    'history_revisions': RPC(),
-                    })
-
         cls._table = config.get('table', cls.__name__, default=cls._table)
         if not cls._table:
             cls._table = cls.__name__.replace('.', '_')
 
         assert cls._table[-9:] != '__history', \
             'Model _table %s cannot end with "__history"' % cls._table
+
+        super(ModelSQL, cls).__setup__()
+
+        cls._sql_constraints = []
+        if not callable(cls.table_query):
+            table = cls.__table__()
+            cls._sql_constraints.append(
+                ('id_positive', Check(table, table.id >= 0),
+                    'ir.msg_id_positive'))
+        cls._order = [('id', 'ASC')]
+        if issubclass(cls, ModelView):
+            cls.__rpc__.update({
+                    'history_revisions': RPC(),
+                    })
 
     @classmethod
     def __table__(cls):
@@ -317,14 +334,6 @@ class ModelSQL(ModelStorage):
                 history_table.add_column(field_name, field._sql_type)
 
     @classmethod
-    def _get_error_messages(cls):
-        res = super(ModelSQL, cls)._get_error_messages()
-        res += list(cls._sql_error_messages.values())
-        for _, _, error in cls._sql_constraints:
-            res.append(error)
-        return res
-
-    @classmethod
     def __raise_integrity_error(
             cls, exception, values, field_names=None, transaction=None):
         pool = Pool()
@@ -342,8 +351,18 @@ class ModelSQL(ModelStorage):
                     and field.sql_type()
                     and field_name not in ('create_uid', 'create_date')):
                 if values.get(field_name) is None:
-                    cls.raise_user_error('required_field',
-                        error_args=cls.__names__(field_name))
+                    raise RequiredValidationError(
+                        gettext('ir.msg_required_validation_record',
+                            **cls.__names__(field_name)))
+        for name, _, error in cls._sql_constraints:
+            if TableHandler.convert_name(name) in str(exception):
+                raise SQLConstraintError(gettext(error))
+        # Check foreign key in last because this can raise false positive
+        # if the target is created during the same transaction.
+        for field_name in field_names:
+            if field_name not in cls._fields:
+                continue
+            field = cls._fields[field_name]
             if isinstance(field, fields.Many2One) and values.get(field_name):
                 Model = pool.get(field.model_name)
                 create_records = transaction.create_records.get(
@@ -358,14 +377,9 @@ class ModelSQL(ModelStorage):
                         and (values[field_name] not in delete_records)):
                     error_args = cls.__names__(field_name)
                     error_args['value'] = values[field_name]
-                    cls.raise_user_error('foreign_model_missing',
-                        error_args=error_args)
-        for name, _, error in cls._sql_constraints:
-            if TableHandler.convert_name(name) in str(exception):
-                cls.raise_user_error(error)
-        for name, error in cls._sql_error_messages.items():
-            if TableHandler.convert_name(name) in str(exception):
-                cls.raise_user_error(error)
+                    raise ForeignKeyError(
+                            gettext('ir.msg_foreign_model_missing',
+                                **error_args))
 
     @classmethod
     def history_revisions(cls, ids):
@@ -561,14 +575,19 @@ class ModelSQL(ModelStorage):
 
             # Get default values
             default = []
-            for f in list(cls._fields.keys()):
-                if (f not in values
-                        and f not in ('create_uid', 'create_date',
-                            'write_uid', 'write_date', 'id')):
-                    if f in defaults_cache:
-                        values[f] = defaults_cache[f]
-                    else:
-                        default.append(f)
+            for fname, field in cls._fields.items():
+                if fname in values:
+                    continue
+                if fname in [
+                        'create_uid', 'create_date',
+                        'write_uid', 'write_date', 'id']:
+                    continue
+                if isinstance(field, fields.Function) and not field.setter:
+                    continue
+                if fname in defaults_cache:
+                    values[fname] = defaults_cache[fname]
+                else:
+                    default.append(fname)
 
             if default:
                 defaults = cls.default_get(default, with_rec_name=False)
@@ -658,17 +677,10 @@ class ModelSQL(ModelStorage):
         return records
 
     @classmethod
-    def read(cls, ids, fields_names=None):
+    def read(cls, ids, fields_names):
         pool = Pool()
         Rule = pool.get('ir.rule')
         Translation = pool.get('ir.translation')
-        ModelAccess = pool.get('ir.model.access')
-        if not fields_names:
-            fields_names = []
-            for field_name in list(cls._fields.keys()):
-                if ModelAccess.check_relation(cls.__name__, field_name,
-                        mode='read'):
-                    fields_names.append(field_name)
         super(ModelSQL, cls).read(ids, fields_names=fields_names)
         transaction = Transaction()
         cursor = Transaction().connection.cursor()
@@ -679,19 +691,21 @@ class ModelSQL(ModelStorage):
         # construct a clause for the rules :
         domain = Rule.domain_get(cls.__name__, mode='read')
 
-        fields_related = {}
-        datetime_fields = []
+        fields_related = defaultdict(set)
+        extra_fields = set()
         for field_name in fields_names:
             if field_name == '_timestamp':
                 continue
             if '.' in field_name:
-                field, field_related = field_name.split('.', 1)
-                fields_related.setdefault(field, [])
-                fields_related[field].append(field_related)
-            else:
-                field = cls._fields[field_name]
+                field_name, field_related = field_name.split('.', 1)
+                fields_related[field_name].add(field_related)
+            field = cls._fields[field_name]
             if hasattr(field, 'datetime_field') and field.datetime_field:
-                datetime_fields.append(field.datetime_field)
+                extra_fields.add(field.datetime_field)
+            if field.context:
+                extra_fields.update(fields.get_eval_fields(field.context))
+        all_fields = (
+            set(fields_names) | set(fields_related.keys()) | extra_fields)
 
         result = []
         table = cls.__table__()
@@ -714,7 +728,7 @@ class ModelSQL(ModelStorage):
             history_limit = 1
 
         columns = []
-        for f in fields_names + list(fields_related.keys()) + datetime_fields:
+        for f in all_fields:
             field = cls._fields.get(f)
             if field and field.sql_type():
                 columns.append(field.sql_column(table).as_(f))
@@ -745,19 +759,10 @@ class ModelSQL(ModelStorage):
                         order_by=history_order, limit=history_limit))
                 fetchall = list(cursor_dict(cursor))
                 if not len(fetchall) == len({}.fromkeys(sub_ids)):
-                    if domain:
-                        where = red_sql
-                        if history_clause:
-                            where &= history_clause
-                        where &= dom_exp
-                        cursor.execute(*from_.select(table.id, where=where,
-                                order_by=history_order, limit=history_limit))
-                        rowcount = cursor.rowcount
-                        if rowcount == -1 or rowcount is None:
-                            rowcount = len(cursor.fetchall())
-                        if rowcount == len({}.fromkeys(sub_ids)):
-                            cls.raise_user_error('access_error', cls.__name__)
-                    cls.raise_user_error('read_error', cls.__name__)
+                    cls.__check_domain_rule(
+                        ids, 'read', nodomain='ir.msg_read_error')
+                    cls.__check_domain_rule(ids, 'read')
+                    raise RuntimeError("Undetected access error")
                 result.extend(fetchall)
         else:
             result = [{'id': x} for x in ids]
@@ -780,8 +785,7 @@ class ModelSQL(ModelStorage):
                     cachable_fields.append(fname)
 
         # all fields for which there is a get attribute
-        getter_fields = [f for f in
-            fields_names + list(fields_related.keys()) + datetime_fields
+        getter_fields = [f for f in all_fields
             if f in cls._fields and hasattr(cls._fields[f], 'get')]
 
         if getter_fields and cachable_fields:
@@ -834,82 +838,90 @@ class ModelSQL(ModelStorage):
                     for row in result:
                         row[fname] = getter_result[row['id']]
 
+        def read_related(field, Target, rows, fields):
+            name = field.name
+            target_ids = []
+            if field._type.endswith('2many'):
+                add = target_ids.extend
+            elif field._type == 'reference':
+                def add(value):
+                    id_ = int(value.split(',', 1)[1])
+                    if id_ >= 0:
+                        target_ids.append(id_)
+            else:
+                add = target_ids.append
+            for row in rows:
+                value = row[name]
+                if value is not None:
+                    add(value)
+            return Target.read(target_ids, fields)
+
+        def add_related(field, rows, targets):
+            name = field.name
+            key = name + '.'
+            if field._type.endswith('2many'):
+                for row in rows:
+                    row[key] = values = list()
+                    for target in row[name]:
+                        if target is not None:
+                            values.append(targets[target])
+            else:
+                for row in rows:
+                    value = row[name]
+                    if isinstance(value, str):
+                        value = int(value.split(',', 1)[1])
+                    if value is not None and value >= 0:
+                        row[key] = targets[value]
+                    else:
+                        row[key] = None
+
         to_del = set()
-        fields_related2values = {}
-        for fname in list(fields_related.keys()) + datetime_fields:
+        for fname in set(fields_related.keys()) | extra_fields:
             if fname not in fields_names:
                 to_del.add(fname)
             if fname not in cls._fields:
                 continue
             if fname not in fields_related:
                 continue
-            fields_related2values.setdefault(fname, {})
             field = cls._fields[fname]
-            if field._type in ('many2one', 'one2one'):
-                if hasattr(field, 'model_name'):
-                    Target = pool.get(field.model_name)
+            datetime_field = getattr(field, 'datetime_field', None)
+
+            def groupfunc(row):
+                ctx = {}
+                if field.context:
+                    pyson_context = PYSONEncoder().encode(field.context)
+                    ctx.update(PYSONDecoder(row).decode(pyson_context))
+                if datetime_field:
+                    ctx['_datetime'] = row.get(datetime_field)
+                if field._type == 'reference':
+                    value = row[fname]
+                    if not value:
+                        Target = None
+                    else:
+                        model, _ = value.split(',', 1)
+                        Target = pool.get(model)
                 else:
                     Target = field.get_target()
-                if getattr(field, 'datetime_field', None):
-                    for row in result:
-                        if row[fname] is None:
-                            continue
-                        with Transaction().set_context(
-                                _datetime=row[field.datetime_field]):
-                            date_target, = Target.read([row[fname]],
-                                fields_related[fname])
-                        target_id = date_target.pop('id')
-                        fields_related2values[fname].setdefault(target_id, {})
-                        fields_related2values[
-                            fname][target_id][row['id']] = date_target
-                else:
-                    for target in Target.read(
-                            [r[fname] for r in result if r[fname]],
-                            fields_related[fname]):
-                        target_id = target.pop('id')
-                        fields_related2values[fname].setdefault(target_id, {})
-                        for row in result:
-                            fields_related2values[
-                                fname][target_id][row['id']] = target
-            elif field._type == 'reference':
-                for row in result:
-                    if not row[fname]:
-                        continue
-                    model_name, record_id = row[fname].split(',', 1)
-                    if not model_name:
-                        continue
-                    record_id = int(record_id)
-                    if record_id < 0:
-                        continue
-                    Target = pool.get(model_name)
-                    target, = Target.read([record_id], fields_related[fname])
-                    del target['id']
-                    fields_related2values[fname][row[fname]] = target
+                return Target, ctx
 
-        if to_del or fields_related or datetime_fields:
-            for row in result:
-                for fname in fields_related:
-                    if fname not in cls._fields:
-                        continue
-                    field = cls._fields[fname]
-                    for related in fields_related[fname]:
-                        related_name = '%s.%s' % (fname, related)
-                        value = None
-                        if row[fname]:
-                            if field._type in ('many2one', 'one2one'):
-                                value = fields_related2values[fname][
-                                    row[fname]][row['id']][related]
-                            elif field._type == 'reference':
-                                model_name, record_id = row[fname
-                                    ].split(',', 1)
-                                if model_name:
-                                    record_id = int(record_id)
-                                    if record_id >= 0:
-                                        value = fields_related2values[fname][
-                                            row[fname]][related]
-                        row[related_name] = value
-                for field in to_del:
-                    del row[field]
+            def orderfunc(row):
+                Target, ctx = groupfunc(row)
+                return (Target.__name__ if Target else '', freeze(ctx))
+
+            for (Target, ctx), rows in groupby(
+                    sorted(result, key=orderfunc), key=groupfunc):
+                rows = list(rows)
+                with Transaction().set_context(ctx):
+                    if Target:
+                        targets = read_related(
+                            field, Target, rows, list(fields_related[fname]))
+                        targets = {t['id']: t for t in targets}
+                    else:
+                        targets = {}
+                    add_related(field, rows, targets)
+
+        for row, field in product(result, to_del):
+            del row[field]
 
         return result
 
@@ -938,7 +950,8 @@ class ModelSQL(ModelStorage):
         table = cls.__table__()
 
         cls.__check_timestamp(all_ids)
-        cls.__check_domain_rule(all_ids, 'write', nodomain='write_error')
+        cls.__check_domain_rule(
+            all_ids, 'write', nodomain='ir.msg_write_error')
 
         fields_to_set = {}
         actions = iter((records, values) + args)
@@ -1112,8 +1125,9 @@ class ModelSQL(ModelStorage):
                                 (field_name, 'in', sub_ids),
                                 ], order=[]):
                         error_args = Model.__names__(field_name)
-                        cls.raise_user_error('foreign_model_exist',
-                            error_args=error_args)
+                        raise ForeignKeyError(
+                            gettext('ir.msg_foreign_model_exist',
+                                **error_args))
 
             super(ModelSQL, cls).delete(list(sub_records))
 
@@ -1137,30 +1151,85 @@ class ModelSQL(ModelStorage):
     def __check_domain_rule(cls, ids, mode, nodomain=None):
         pool = Pool()
         Rule = pool.get('ir.rule')
+        Model = pool.get('ir.model')
         table = cls.__table__()
-        cursor = Transaction().connection.cursor()
+        transaction = Transaction()
+        in_max = transaction.database.IN_MAX
+        history_clause = None
+        limit = None
+        if (mode == 'read'
+                and cls._history
+                and transaction.context.get('_datetime')
+                and not callable(cls.table_query)):
+            in_max = 1
+            table = cls.__table_history__()
+            column = Coalesce(table.write_date, table.create_date)
+            history_clause = (column <= Transaction().context['_datetime'])
+            limit = 1
+        cursor = transaction.connection.cursor()
+        assert mode in Rule.modes
 
-        domain = Rule.domain_get(cls.__name__, mode=mode)
-        tables = {None: (table, None)}
-        if domain or nodomain:
+        def test_domain(ids, domain):
+            result = []
+            tables = {None: (table, None)}
             if domain:
                 tables, dom_exp = cls.search_domain(
                     domain, active_test=False, tables=tables)
             from_ = convert_from(None, tables)
-            for sub_ids in grouped_slice(ids):
-                sub_ids = list(set(sub_ids))
+            for sub_ids in grouped_slice(ids, in_max):
+                sub_ids = set(sub_ids)
                 where = reduce_ids(table.id, sub_ids)
+                if history_clause:
+                    where &= history_clause
                 if domain:
                     where &= dom_exp
-                cursor.execute(*from_.select(table.id, where=where))
+                cursor.execute(
+                    *from_.select(table.id, where=where, limit=limit))
                 rowcount = cursor.rowcount
                 if rowcount == -1 or rowcount is None:
                     rowcount = len(cursor.fetchall())
                 if rowcount != len(sub_ids):
-                    if domain:
-                        cls.raise_user_error('access_error', cls.__name__)
-                    else:
-                        cls.raise_user_error(nodomain, cls.__name__)
+                    cursor.execute(
+                        *from_.select(table.id, where=where, limit=limit))
+                    result.extend(
+                        sub_ids.difference([x for x, in cursor]))
+            return result
+
+        domain = Rule.domain_get(cls.__name__, mode=mode)
+        if not domain and not nodomain:
+            return
+        wrong_ids = test_domain(ids, domain)
+        if wrong_ids:
+            model = cls.__name__
+            if Model:
+                models = Model.search([
+                        ('model', '=', cls.__name__),
+                        ], limit=1)
+                if models:
+                    model, = models
+                    model = model.name
+            ids = ', '.join(map(str, ids[:5]))
+            if len(wrong_ids) > 5:
+                ids += '...'
+            if domain:
+                rules = []
+                clause, clause_global = Rule.get(cls.__name__, mode=mode)
+                if clause:
+                    dom = list(clause.values())
+                    dom.insert(0, 'OR')
+                    if test_domain(wrong_ids, dom):
+                        rules.extend(clause.keys())
+
+                for rule, dom in clause_global.items():
+                    if test_domain(wrong_ids, dom):
+                        rules.append(rule)
+
+                msg = gettext(
+                    'ir.msg_%s_rule_error' % mode, ids=ids, model=model,
+                    rules='\n'.join(r.name for r in rules))
+            else:
+                msg = gettext(nodomain, ids=ids, model=model)
+            raise AccessError(msg)
 
     @classmethod
     def search(cls, domain, offset=0, limit=None, order=None, count=False,
@@ -1532,7 +1601,7 @@ class ModelSQL(ModelStorage):
                     cursor.execute(
                         *table.select(table.id, where=where, limit=1))
                     if cursor.fetchone():
-                        cls.raise_user_error(error)
+                        raise SQLConstraintError(gettext(error))
             elif isinstance(sql, Check):
                 for sub_ids in grouped_slice(ids):
                     red_sql = reduce_ids(table.id, sub_ids)
@@ -1540,7 +1609,24 @@ class ModelSQL(ModelStorage):
                             where=~sql.expression & red_sql,
                             limit=1))
                     if cursor.fetchone():
-                        cls.raise_user_error(error)
+                        raise SQLConstraintError(gettext(error))
+
+    @dualmethod
+    def lock(cls, records):
+        transaction = Transaction()
+        database = transaction.database
+        connection = transaction.connection
+        table = cls.__table__()
+
+        if database.has_select_for():
+            for sub_records in grouped_slice(records):
+                where = reduce_ids(table.id, sub_records)
+                query = table.select(
+                    Literal(1), where=where, for_=For('UPDATE', nowait=True))
+                with connection.cursor() as cursor:
+                    cursor.execute(*query)
+        else:
+            database.lock(connection, cls._table)
 
 
 def convert_from(table, tables):

@@ -3,7 +3,8 @@
 
 import unittest
 
-from trytond.error import UserError
+from trytond.model.exceptions import (
+    RequiredValidationError, DomainValidationError)
 from trytond.pool import Pool
 from trytond.transaction import Transaction
 from trytond.tests.test_tryton import activate_module, with_transaction
@@ -99,18 +100,40 @@ class ModelStorageTestCase(unittest.TestCase):
         with Transaction().set_context(bar=True):
             bar = ModelStorage(name='bar')
         ModelStorage.save([foo, bar])
+
         self.assertNotEqual(foo._context, bar._context)
 
+    @with_transaction()
+    def test_fail_saving_mixed_context1(self):
+        'Test fail saving with mixed context '
+        pool = Pool()
+        ModelStorage = pool.get('test.modelstorage.required')
+
+        foo = ModelStorage(name='foo')
+        with Transaction().set_context(bar=True):
+            bar = ModelStorage(name='bar')
+        ModelStorage.save([foo, bar])
         foo.name = None
-        with self.assertRaises(UserError):
+        with self.assertRaises(RequiredValidationError):
             ModelStorage.save([foo, bar])
+
         self.assertIsNone(foo.name)
         self.assertEqual(bar.name, 'bar')
 
-        Transaction().rollback()
+    @with_transaction()
+    def test_fail_saving_mixed_context2(self):
+        'Test fail saving with mixed context '
+        pool = Pool()
+        ModelStorage = pool.get('test.modelstorage.required')
+
+        foo = ModelStorage(name='foo')
+        with Transaction().set_context(bar=True):
+            bar = ModelStorage(name='bar')
+        ModelStorage.save([foo, bar])
+
         bar.name = None
         foo.name = 'foo'
-        with self.assertRaises(UserError):
+        with self.assertRaises(RequiredValidationError):
             ModelStorage.save([foo, bar])
         self.assertEqual(foo.name, 'foo')
         self.assertIsNone(bar.name)
@@ -151,7 +174,7 @@ class ModelStorageTestCase(unittest.TestCase):
 
         Model.create([{'constraint': 'foo', 'value': 'foo'}] * 10)
 
-        with self.assertRaises(UserError):
+        with self.assertRaises(DomainValidationError):
             Model.create([{'constraint': 'foo', 'value': 'bar'}] * 10)
 
     @with_transaction()
@@ -163,7 +186,7 @@ class ModelStorageTestCase(unittest.TestCase):
         Model.create(
             [{'constraint': str(i), 'value': str(i)} for i in range(10)])
 
-        with self.assertRaises(UserError):
+        with self.assertRaises(DomainValidationError):
             Model.create(
                 [{'constraint': str(i), 'value': str(i + 1)}
                     for i in range(10)])
@@ -176,7 +199,7 @@ class ModelStorageTestCase(unittest.TestCase):
 
         Model.create([{'constraint': 'foo', 'value': 'foo'}])
 
-        with self.assertRaises(UserError):
+        with self.assertRaises(DomainValidationError):
             Model.create([{'constraint': 'foo', 'value': 'bar'}])
 
     @with_transaction()
@@ -269,6 +292,84 @@ class ModelStorageTestCase(unittest.TestCase):
         result = Model.check_xml_record([record], {'name': "Bar"})
 
         self.assertTrue(result)
+
+    @with_transaction()
+    def test_check_xml_record_with_record_no_values(self):
+        "Test check_xml_record with record and no values"
+        pool = Pool()
+        Model = pool.get('test.modelstorage')
+        ModelData = pool.get('ir.model.data')
+        record, = Model.create([{'name': "Foo"}])
+        ModelData.create([{
+                    'fs_id': 'test',
+                    'model': 'test.modelstorage',
+                    'module': 'tests',
+                    'db_id': record.id,
+                    'values': None,
+                    'noupdate': False,
+                    }])
+
+        result = Model.check_xml_record([record], None)
+
+        self.assertFalse(result)
+
+    @with_transaction()
+    def test_check_xml_record_with_record_no_values_noupdate(self):
+        "Test check_xml_record with record and no values but noupdate"
+        pool = Pool()
+        Model = pool.get('test.modelstorage')
+        ModelData = pool.get('ir.model.data')
+        record, = Model.create([{'name': "Foo"}])
+        ModelData.create([{
+                    'fs_id': 'test',
+                    'model': 'test.modelstorage',
+                    'module': 'tests',
+                    'db_id': record.id,
+                    'values': None,
+                    'noupdate': True,
+                    }])
+
+        result = Model.check_xml_record([record], None)
+
+        self.assertTrue(result)
+
+    @with_transaction()
+    def test_delete_clear_db_id_model_data_noupdate(self):
+        "Test delete record clear DB id from model data"
+        pool = Pool()
+        Model = pool.get('test.modelstorage')
+        ModelData = pool.get('ir.model.data')
+        record, = Model.create([{'name': "Foo"}])
+        data, = ModelData.create([{
+                    'fs_id': 'test',
+                    'model': 'test.modelstorage',
+                    'module': 'tests',
+                    'db_id': record.id,
+                    'values': None,
+                    'noupdate': True,
+                    }])
+
+        Model.delete([record])
+
+        self.assertIsNone(data.db_id)
+
+    @with_transaction(user=0)
+    def test_delete_model_data_without_noupdate(self):
+        "Test delete record from model data without noupdate"
+        pool = Pool()
+        Model = pool.get('test.modelstorage')
+        ModelData = pool.get('ir.model.data')
+        record, = Model.create([{'name': "Foo"}])
+        data, = ModelData.create([{
+                    'fs_id': 'test',
+                    'model': 'test.modelstorage',
+                    'module': 'tests',
+                    'db_id': record.id,
+                    'values': None,
+                    'noupdate': False,
+                    }])
+
+        Model.delete([record])
 
 
 def suite():

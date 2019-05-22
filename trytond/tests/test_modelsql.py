@@ -7,7 +7,9 @@ import time
 from unittest.mock import patch, call
 
 from trytond import backend
-from trytond.exceptions import UserError, ConcurrencyException
+from trytond.exceptions import ConcurrencyException
+from trytond.model.exceptions import (
+    RequiredValidationError, SQLConstraintError)
 from trytond.transaction import Transaction
 from trytond.pool import Pool
 from trytond.tests.test_tryton import activate_module, with_transaction
@@ -19,6 +21,221 @@ class ModelSQLTestCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         activate_module('tests')
+
+    @with_transaction()
+    def test_read(self):
+        "Test simple read"
+        pool = Pool()
+        Model = pool.get('test.modelsql.read')
+
+        foo, bar = Model.create([{'name': "Foo"}, {'name': "Bar"}])
+        values = Model.read([foo.id, bar.id], ['name'])
+
+        self.assertEqual(
+            sorted(values, key=lambda v: v['id']),
+            [{'id': foo.id, 'name': "Foo"}, {'id': bar.id, 'name': "Bar"}])
+
+    @with_transaction()
+    def test_read_related_2one(self):
+        "Test read with related Many2One"
+        pool = Pool()
+        Model = pool.get('test.modelsql.read')
+        Target = pool.get('test.modelsql.read.target')
+
+        target, = Target.create([{'name': "Target"}])
+        record, = Model.create([{'target': target.id}])
+        values = Model.read([record.id], ['target.name'])
+
+        self.assertEqual(values, [{
+                    'id': record.id,
+                    'target.': {
+                        'id': target.id,
+                        'name': "Target",
+                        },
+                    }])
+
+    @with_transaction()
+    def test_read_related_2one_empty(self):
+        "Test read with empty related Many2One"
+        pool = Pool()
+        Model = pool.get('test.modelsql.read')
+
+        record, = Model.create([{'target': None}])
+        values = Model.read([record.id], ['target.name'])
+
+        self.assertEqual(values, [{
+                    'id': record.id,
+                    'target.': None,
+                    }])
+
+    @with_transaction()
+    def test_read_related_reference(self):
+        "Test read with related Reference"
+        pool = Pool()
+        Model = pool.get('test.modelsql.read')
+        Target = pool.get('test.modelsql.read.target')
+
+        target, = Target.create([{'name': "Target"}])
+        record, = Model.create([{'reference': str(target)}])
+        values = Model.read([record.id], ['reference.name'])
+
+        self.assertEqual(values, [{
+                    'id': record.id,
+                    'reference.': {
+                        'id': target.id,
+                        'name': "Target",
+                        },
+                    }])
+
+    @with_transaction()
+    def test_read_related_reference_empty(self):
+        "Test read with empty related Reference"
+        pool = Pool()
+        Model = pool.get('test.modelsql.read')
+
+        record, = Model.create([{'name': "Foo", 'reference': None}])
+        values = Model.read([record.id], ['reference.name'])
+
+        self.assertEqual(values, [{
+                    'id': record.id,
+                    'reference.': None,
+                    }])
+
+    @with_transaction()
+    def test_read_related_2many(self):
+        "Test read with related One2Many"
+        pool = Pool()
+        Model = pool.get('test.modelsql.read')
+        Target = pool.get('test.modelsql.read.target')
+
+        target, = Target.create([{'name': "Target"}])
+        record, = Model.create(
+            [{'targets': [('add', [target.id])]}])
+        values = Model.read([record.id], ['targets.name'])
+
+        self.assertEqual(values, [{
+                    'id': record.id,
+                    'targets.': [{
+                            'id': target.id,
+                            'name': "Target",
+                            }],
+                    }])
+
+    @with_transaction()
+    def test_read_related_2many_empty(self):
+        "Test read with empty related One2Many"
+        pool = Pool()
+        Model = pool.get('test.modelsql.read')
+
+        record, = Model.create(
+            [{'targets': None}])
+        values = Model.read([record.id], ['targets.name'])
+
+        self.assertEqual(values, [{
+                    'id': record.id,
+                    'targets.': [],
+                    }])
+
+    @with_transaction()
+    def test_read_related_2many_multiple(self):
+        "Test read with multiple related One2Many"
+        pool = Pool()
+        Model = pool.get('test.modelsql.read')
+        Target = pool.get('test.modelsql.read.target')
+
+        target1, target2 = Target.create([
+                {'name': "Target 1"},
+                {'name': "Target 2"}])
+        record, = Model.create(
+            [{'targets': [('add', [target1.id, target2.id])]}])
+        values = Model.read([record.id], ['targets.name'])
+
+        self.assertEqual(values, [{
+                    'id': record.id,
+                    'targets.': [{
+                            'id': target1.id,
+                            'name': "Target 1",
+                            }, {
+                            'id': target2.id,
+                            'name': "Target 2",
+                            }],
+                    }])
+
+    @with_transaction()
+    def test_read_related_mixed(self):
+        "Test read mixed related"
+        pool = Pool()
+        Model = pool.get('test.modelsql.read')
+        Target = pool.get('test.modelsql.read.target')
+
+        target1, target2, target3 = Target.create([
+                {'name': "Target 1"},
+                {'name': "Target 2"},
+                {'name': "Target 3"}])
+        record1, record2 = Model.create([{
+                    'name': "Foo",
+                    'target': target1.id,
+                    'targets': [('add', [target1.id, target2.id])],
+                    }, {
+                    'name': "Bar",
+                    'reference': str(target2),
+                    'targets': [('add', [target3.id])],
+                    }])
+        values = Model.read(
+            [record1.id, record2.id],
+            ['name', 'target', 'target.name', 'targets', 'targets.name'])
+
+        self.assertEqual(
+            sorted(values, key=lambda v: v['id']), [{
+                    'id': record1.id,
+                    'name': "Foo",
+                    'target': target1.id,
+                    'target.': {
+                        'id': target1.id,
+                        'name': "Target 1",
+                        },
+                    'targets': (target1.id, target2.id),
+                    'targets.': [{
+                            'id': target1.id,
+                            'name': "Target 1",
+                            }, {
+                            'id': target2.id,
+                            'name': "Target 2",
+                            }],
+                    }, {
+                    'id': record2.id,
+                    'name': "Bar",
+                    'target': None,
+                    'target.': None,
+                    'targets': (target3.id,),
+                    'targets.': [{
+                            'id': target3.id,
+                            'name': "Target 3",
+                            }],
+                    }])
+
+    @with_transaction()
+    def test_read_related_nested(self):
+        "Test read with nested related"
+        pool = Pool()
+        Model = pool.get('test.modelsql.read')
+        Target = pool.get('test.modelsql.read.target')
+
+        target, = Target.create([{'name': "Target"}])
+        record, = Model.create(
+            [{'name': "Record", 'targets': [('add', [target.id])]}])
+        values = Model.read([record.id], ['targets.parent.name'])
+
+        self.assertEqual(values, [{
+                    'id': record.id,
+                    'targets.': [{
+                            'id': target.id,
+                            'parent.': {
+                                'id': record.id,
+                                'name': "Record",
+                                },
+                            }],
+                    }])
 
     @unittest.skipIf(backend.name() == 'sqlite',
         'SQLite not concerned because tryton don\'t set "NOT NULL"'
@@ -38,13 +255,13 @@ class ModelSQLTestCase(unittest.TestCase):
         for key, value in fields.items():
             try:
                 Modelsql.create([{key: value}])
-            except UserError as err:
+            except RequiredValidationError as err:
                 # message must not quote key
                 msg = "'%s' not missing but quoted in error: '%s'" % (key,
                         err.message)
                 self.assertTrue(key not in err.message, msg)
             else:
-                self.fail('UserError should be caught')
+                self.fail('RequiredValidationError should be caught')
             transaction.rollback()
 
     @with_transaction()
@@ -125,12 +342,11 @@ class ModelSQLTestCase(unittest.TestCase):
         # foreign_model_missing
         record = ParentModel(name="test")
         record.targets = [TargetModel()]
-        with self.assertRaises(UserError) as cm:
+        with self.assertRaises(RequiredValidationError) as cm:
             record.save()
         err = cm.exception
-        msg = 'The field "%s" on "%s" is required.' % (
-            TargetModel.name.string, TargetModel.__doc__)
-        self.assertEqual(err.message, msg)
+        self.assertIn(TargetModel.name.string, err.message)
+        self.assertIn(TargetModel.__doc__, err.message)
 
     @with_transaction()
     def test_null_ordering(self):
@@ -198,7 +414,7 @@ class ModelSQLTestCase(unittest.TestCase):
         pool = Pool()
         Model = pool.get('test.modelsql.check')
 
-        with self.assertRaises(UserError):
+        with self.assertRaises(SQLConstraintError):
             Model.create([{'value': 10}])
 
     @with_transaction()
@@ -227,7 +443,7 @@ class ModelSQLTestCase(unittest.TestCase):
         pool = Pool()
         Model = pool.get('test.modelsql.unique')
 
-        with self.assertRaises(UserError):
+        with self.assertRaises(SQLConstraintError):
             Model.create([{'value': 42}, {'value': 42}])
 
     @with_transaction()
@@ -256,8 +472,28 @@ class ModelSQLTestCase(unittest.TestCase):
         pool = Pool()
         Model = pool.get('test.modelsql.exclude')
 
-        with self.assertRaises(UserError):
+        with self.assertRaises(SQLConstraintError):
             Model.create([{'value': 42}, {'value': 42}])
+
+    @unittest.skipIf(backend.name() == 'sqlite',
+        'SQLite does not have lock at table level but on file')
+    @with_transaction()
+    def test_lock(self):
+        "Test lock"
+        pool = Pool()
+        Model = pool.get('test.modelsql.lock')
+        DatabaseOperationalError = backend.get('DatabaseOperationalError')
+        transaction = Transaction()
+        record_id = Model.create([{}])[0].id
+        transaction.commit()
+
+        with transaction.new_transaction():
+            record = Model(record_id)
+            record.lock()
+            with transaction.new_transaction():
+                record = Model(record_id)
+                with self.assertRaises(DatabaseOperationalError):
+                    record.lock()
 
 
 def suite():

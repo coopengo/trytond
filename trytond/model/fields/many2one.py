@@ -5,8 +5,9 @@ from sql.aggregate import Max
 from sql.conditionals import Coalesce
 from sql.operators import Or
 
+from trytond.pyson import PYSONEncoder
 from .field import (Field, search_order_validate, context_validate,
-    with_inactive_records)
+    with_inactive_records, instantiate_context)
 from ...pool import Pool
 from ...tools import reduce_ids
 from ...transaction import Transaction
@@ -99,10 +100,13 @@ class Many2One(Field):
 
     def __set__(self, inst, value):
         Target = self.get_target()
-        if isinstance(value, dict):
-            value = Target(**value)
-        elif isinstance(value, int):
-            value = Target(value)
+        if isinstance(value, (dict, int)):
+            ctx = instantiate_context(self, inst)
+            with Transaction().set_context(ctx):
+                if isinstance(value, dict):
+                    value = Target(**value)
+                elif isinstance(value, int):
+                    value = Target(value)
         assert isinstance(value, (Target, type(None)))
         super(Many2One, self).__set__(inst, value)
 
@@ -289,3 +293,21 @@ class Many2One(Field):
                 }
             tables[self.name] = target_tables
         return target_tables
+
+    def definition(self, model, language):
+        encoder = PYSONEncoder()
+
+        target = self.get_target()
+        relation_fields = [fname for fname, field in target._fields.items()
+            if field._type == 'one2many'
+            and field.model_name == model.__name__
+            and field.field == self.name]
+
+        definition = super().definition(model, language)
+        definition['datetime_field'] = self.datetime_field
+        definition['relation'] = target.__name__
+        if len(relation_fields) == 1:
+            definition['relation_field'], = relation_fields
+        definition['search_context'] = encoder.encode(self.search_context)
+        definition['search_order'] = encoder.encode(self.search_order)
+        return definition

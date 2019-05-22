@@ -2,7 +2,8 @@
 # this repository contains the full copyright notices and license terms.
 import unittest
 
-from trytond.exceptions import UserError
+from trytond.model.exceptions import (
+    SelectionValidationError, RequiredValidationError)
 from trytond.pool import Pool
 from trytond.tests.test_tryton import activate_module, with_transaction
 
@@ -33,7 +34,7 @@ class FieldSelectionTestCase(unittest.TestCase):
         "Test create selection not in selection"
         Selection = Pool().get('test.selection')
 
-        with self.assertRaises(UserError):
+        with self.assertRaises(SelectionValidationError):
             Selection.create([{
                         'select': 'chinese',
                         }])
@@ -82,7 +83,7 @@ class FieldSelectionTestCase(unittest.TestCase):
         "Test create selection not in"
         Selection = Pool().get('test.selection')
 
-        with self.assertRaises(UserError):
+        with self.assertRaises(SelectionValidationError):
             Selection.create([{
                         'select': 'arabic',
                         'dyn_select': '0x3',
@@ -104,7 +105,7 @@ class FieldSelectionTestCase(unittest.TestCase):
         "Test create selection required without value"
         Selection = Pool().get('test.selection_required')
 
-        with self.assertRaises(UserError):
+        with self.assertRaises(RequiredValidationError):
             Selection.create([{}])
 
     @with_transaction()
@@ -112,10 +113,64 @@ class FieldSelectionTestCase(unittest.TestCase):
         "Test create selection required without value"
         Selection = Pool().get('test.selection_required')
 
-        with self.assertRaises(UserError):
+        with self.assertRaises(RequiredValidationError):
             Selection.create([{
                         'select': None,
                         }])
+
+    @with_transaction()
+    def test_search_order_label(self):
+        "Test search order by label"
+        pool = Pool()
+        Selection = pool.get('test.selection_label')
+
+        Selection.create([{'select': v} for v in ['a', 'b', 'c']])
+        records = Selection.search([], order=[('select', 'ASC')])
+        values = [r.select for r in records]
+
+        self.assertListEqual(values, ['c', 'b', 'a'])
+
+    @with_transaction()
+    def test_search_order_fixed_selection(self):
+        "Test search order by fixed selection"
+        pool = Pool()
+        Selection = pool.get('test.selection')
+
+        Selection.create([{'select': v} for v in ['', 'arabic', 'hexa']])
+        records = Selection.search([], order=[('select', 'DESC')])
+        values = [r.select for r in records]
+
+        self.assertListEqual(values, ['hexa', 'arabic', ''])
+
+    @with_transaction()
+    def test_search_order_static_selection(self):
+        "Test search order by static selection"
+        pool = Pool()
+        Selection = pool.get('test.selection')
+
+        Selection.create([
+                {'dyn_select_static': str(i)} for i in range(1, 4)])
+        records = Selection.search([], order=[('dyn_select_static', 'DESC')])
+        values = [r.dyn_select_static for r in records]
+
+        self.assertListEqual(values, ['3', '2', '1'])
+
+    @with_transaction()
+    def test_search_order_dynamic_selection(self):
+        "Test search order by dynamic selection"
+        pool = Pool()
+        Selection = pool.get('test.selection')
+
+        Selection.create([
+                {'select': 'arabic', 'dyn_select': str(i)}
+                for i in range(1, 4)])
+        Selection.create([
+                {'select': 'hexa', 'dyn_select': hex(i)}
+                for i in range(1, 4)])
+        records = Selection.search([], order=[('dyn_select', 'DESC')])
+        values = [r.dyn_select for r in records]
+
+        self.assertListEqual(values, ['3', '2', '1', '0x3', '0x2', '0x1'])
 
     @with_transaction()
     def test_string(self):

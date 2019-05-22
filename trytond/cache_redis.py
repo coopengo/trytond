@@ -9,12 +9,19 @@ from trytond.transaction import Transaction
 from trytond.cache import BaseCache
 from trytond.cache_serializer import pack, unpack
 
+# PKUNK 9502 Redis ttl
+_ttl = config.getint('cache', 'redis_ttl') or 60 * 60 * 12
+
 
 class RedisCache(BaseCache):
+    _instances = {}
     _client = None
     _client_check_lock = Lock()
-    #PKUNK 9502 Redis ttl
-    _ttl = config.getint('cache', 'redis_ttl') or 60 * 60 * 12
+
+    def __init__(self, name, size_limit=1024, duration=_ttl, context=True):
+        super().__init__(
+            name, size_limit=size_limit, duration=duration, context=context)
+        self.ensure_client()
 
     @classmethod
     def ensure_client(cls):
@@ -29,10 +36,6 @@ class RedisCache(BaseCache):
                 db = url.path.strip('/')
                 cls._client = redis.StrictRedis(host=host, port=port, db=db)
 
-    def __init__(self, name, size_limit=1024, context=True):
-        super(RedisCache, self).__init__(name, size_limit, context)
-        self.ensure_client()
-
     def _namespace(self, dbname=None):
         if dbname is None:
             dbname = Transaction().database.name
@@ -45,38 +48,40 @@ class RedisCache(BaseCache):
     def get(self, key, default=None):
         namespace = self._namespace()
         key = self._key(key)
-        #PKUNK 9502 normal get 
+        # PKUNK 9502 normal get
         result = self._client.get('%s:%s' % (namespace, key))
         if result is None:
             return default
         else:
             return unpack(result)
 
-    #PKUNK 9502 add ttl on set
-    def set(self, key, value, ttl=None):
-        if ttl:
-            assert isinstance(ttl, int)
+    def set(self, key, value):
         namespace = self._namespace()
         key = self._key(key)
         value = pack(value)
-        #PKUNK 9502 change method hset to setex
-        self._client.setex(name='%s:%s' % (namespace, key), value=value, time=ttl or self._ttl)
+        # PKUNK 9502 change method hset to setex
+        self._client.setex(
+            name='%s:%s' % (namespace, key), value=value, time=self.duration)
 
     def clear(self):
         namespace = self._namespace()
-        #PKUNK 9502 Add loop to clean all key
+        # PKUNK 9502 Add loop to clean all key
         for key in self._client.scan_iter(match='%s:*' % (namespace)):
             self._client.delete(key)
 
-    @staticmethod
-    def clean(dbname):
+    @classmethod
+    def sync(cls, transaction):
         pass
 
-    @staticmethod
-    def resets(dbname):
+    @classmethod
+    def commit(cls, transaction):
+        pass
+
+    @classmethod
+    def rollback(cls, transaction):
         pass
 
     @classmethod
     def drop(cls, dbname):
-        for inst in cls._cache_instance:
-            cls._client.delete(inst._namespace(dbname))
+        for inst in cls._instances.values():
+            inst.clear()

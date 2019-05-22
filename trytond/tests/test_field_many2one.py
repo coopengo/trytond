@@ -2,7 +2,7 @@
 # this repository contains the full copyright notices and license terms.
 import unittest
 
-from trytond.exceptions import UserError
+from trytond.model.exceptions import DomainValidationError
 from trytond.pool import Pool
 from trytond.tests.test_tryton import activate_module, with_transaction
 
@@ -76,7 +76,7 @@ class FieldMany2OneTestCase(unittest.TestCase):
         Many2One = pool.get('test.many2one_domainvalidation')
         target, = Target.create([{'value': 1}])
 
-        with self.assertRaises(UserError):
+        with self.assertRaises(DomainValidationError):
             Many2One.create([{
                         'many2one': target.id,
                         }])
@@ -466,6 +466,47 @@ class FieldMany2OneTestCase(unittest.TestCase):
     def test_search_mptt_not_parent_of_empty(self):
         "Test search many2one mptt not parent of empty"
         self._test_search_not_parent_of_empty('test.many2one_mptt')
+
+    @with_transaction()
+    def test_context_attribute(self):
+        "Test context on many2one attribute"
+        pool = Pool()
+        Many2One = pool.get('test.many2one_context')
+        Target = pool.get('test.many2one_context.target')
+
+        target, = Target.create([{}])
+        record, = Many2One.create([{
+                    'target': target.id,
+                    }])
+
+        self.assertEqual(record.target.context, 'foo')
+
+    @with_transaction()
+    def test_context_read(self):
+        "Test context on many2one read"
+        pool = Pool()
+        Many2One = pool.get('test.many2one_context')
+        Target = pool.get('test.many2one_context.target')
+
+        target, = Target.create([{}])
+        record, = Many2One.create([{
+                    'target': target.id,
+                    }])
+        data, = Many2One.read([record.id], ['target.context'])
+
+        self.assertEqual(data['target.']['context'], 'foo')
+
+    @with_transaction()
+    def test_context_set(self):
+        "Test context on many2one set"
+        pool = Pool()
+        Many2One = pool.get('test.many2one_context')
+        Target = pool.get('test.many2one_context.target')
+
+        target, = Target.create([{}])
+        record = Many2One(target=target.id)
+
+        self.assertEqual(record.target.context, 'foo')
 
 
 def suite():

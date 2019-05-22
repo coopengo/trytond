@@ -6,6 +6,24 @@ from trytond.model import ModelSQL, fields, Check, Unique, Exclude
 from trytond.pool import Pool
 
 
+class ModelSQLRead(ModelSQL):
+    "ModelSQL to test read"
+    __name__ = 'test.modelsql.read'
+    name = fields.Char("Name")
+    target = fields.Many2One('test.modelsql.read.target', "Target")
+    targets = fields.One2Many('test.modelsql.read.target', 'parent', "Targets")
+    reference = fields.Reference(
+        "Reference", [(None, ""), ('test.modelsql.read.target', "Target")])
+
+
+class ModelSQLReadTarget(ModelSQL):
+    "ModelSQL Target to test read"
+    __name__ = 'test.modelsql.read.target'
+    name = fields.Char("Name")
+    parent = fields.Many2One('test.modelsql.read', "Parent")
+    target = fields.Many2One('test.modelsql.read.target', "Target")
+
+
 class ModelSQLRequiredField(ModelSQL):
     'model with a required field'
     __name__ = 'test.modelsql'
@@ -104,8 +122,15 @@ class ModelExclude(ModelSQL):
             ]
 
 
+class ModelLock(ModelSQL):
+    'Model to test lock'
+    __name__ = 'test.modelsql.lock'
+
+
 def register(module):
     Pool.register(
+        ModelSQLRead,
+        ModelSQLReadTarget,
         ModelSQLRequiredField,
         ModelSQLTimestamp,
         ModelSQLFieldSet,
@@ -116,4 +141,5 @@ def register(module):
         ModelCheck,
         ModelUnique,
         ModelExclude,
+        ModelLock,
         module=module, type_='model')

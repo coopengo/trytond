@@ -64,6 +64,19 @@ The number of proxy servers in front of `trytond`.
 
 Default: 0
 
+cache_timeout
+~~~~~~~~~~~~~
+
+The cache timeout in seconds.
+
+Default: 12h
+
+cors
+~~~~
+
+The list (one per line) of origins allowed for `Cross-Origin Resource sharing
+<https://en.wikipedia.org/wiki/Cross-origin_resource_sharing>`_.
+
 database
 --------
 
@@ -179,6 +192,8 @@ clean_timeout
 ~~~~~~~~~~~~~
 
 The minimum number of seconds between two cleanings of the cache.
+If the value is 0, the notification between processes will be done using
+channels if the back-end supports them.
 
 Default: `300`
 
@@ -382,6 +397,11 @@ A boolean value to allow clients to subscribe to bus channels.
 
 Default: `False`
 
+url_host
+~~~~~~~~
+
+If set redirects bus requests to the host URL.
+
 long_polling_timeout
 ~~~~~~~~~~~~~~~~~~~~
 
@@ -404,6 +424,44 @@ select_timeout
 The timeout duration of the select call when listening on a channel.
 
 Default: `5`
+
+html
+----
+
+src
+~~~
+
+The URL pointing to `TinyMCE <https://www.tiny.cloud/>`_ editor.
+
+Default: `https://cloud.tinymce.com/stable/tinymce.min.js`
+
+plugins
+~~~~~~~
+
+The space separated list of TinyMCE plugins to load.
+It can be overridden for specific models and fields using the names:
+`plugins-<model>-<field>` or `plugins-<model>`.
+
+Default: ``
+
+css
+~~~
+
+The JSON list of CSS files to load.
+It can be overridden for specific models and fields using the names:
+`css-<model>-<field>` or `css-<model>`.
+
+Default: `[]`
+
+class
+~~~~~
+
+The class to add on the body.
+It can be overridden for specific models and fields using the names:
+`class-<model>-<field>` or `class-<model>`.
+
+Default: `''`
+
 
 .. _JSON-RPC: http://en.wikipedia.org/wiki/JSON-RPC
 .. _XML-RPC: http://en.wikipedia.org/wiki/XML-RPC

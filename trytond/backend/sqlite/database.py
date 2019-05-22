@@ -18,7 +18,8 @@ except ImportError:
     import sqlite3 as sqlite
     from sqlite3 import IntegrityError as DatabaseIntegrityError
     from sqlite3 import OperationalError as DatabaseOperationalError
-from sql import Flavor, Table, Query, Expression, Literal
+from sql import Flavor, Table, Query, Expression, Literal, Null
+from sql.conditionals import NullIf
 from sql.functions import (Function, Extract, Position, Substring,
     Overlay, CharLength, CurrentTimestamp, Trim)
 
@@ -215,6 +216,16 @@ MAPPING = {
     }
 
 
+class JSONExtract(Function):
+    __slots__ = ()
+    _function = 'JSON_EXTRACT'
+
+
+class JSONQuote(Function):
+    __slots__ = ()
+    _function = 'JSON_QUOTE'
+
+
 class SQLiteCursor(sqlite.Cursor):
 
     def __enter__(self):
@@ -254,6 +265,9 @@ class Database(DatabaseInterface):
         super(Database, self).__init__(name=name)
         if name == ':memory:':
             Database._local.memory_database = self
+
+    def _kill_session_query(self, database_name):
+        return 'SELECT 1'
 
     def connect(self):
         if self.name == ':memory:':
@@ -351,6 +365,7 @@ class Database(DatabaseInterface):
 
     def init(self):
         from trytond.modules import get_module_info
+        Flavor.set(self.flavor)
         with self.get_connection() as conn:
             cursor = conn.cursor()
             sql_file = os.path.join(os.path.dirname(__file__), 'init.sql')
@@ -385,6 +400,7 @@ class Database(DatabaseInterface):
             conn.commit()
 
     def test(self, hostname=None):
+        Flavor.set(self.flavor)
         tables = ['ir_model', 'ir_model_field', 'ir_ui_view', 'ir_ui_menu',
             'res_user', 'res_group', 'ir_module', 'ir_module_dependency',
             'ir_translation', 'ir_lang', 'ir_configuration']
@@ -441,6 +457,11 @@ class Database(DatabaseInterface):
                     and not isinstance(value, (Query, Expression))):
                 value = int(value)
         return value
+
+    def json_get(self, column, key):
+        if key:
+            column = JSONExtract(column, '$.%s' % key)
+        return NullIf(JSONQuote(column), JSONQuote(Null))
 
 sqlite.register_converter('NUMERIC', lambda val: Decimal(val.decode('utf-8')))
 sqlite.register_adapter(Decimal, lambda val: str(val).encode('utf-8'))

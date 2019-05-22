@@ -12,6 +12,7 @@ except ImportError:
     from http import client as HTTPStatus
 
 from werkzeug.exceptions import abort
+from werkzeug.wrappers import Response
 from sql import Table
 
 from trytond import security
@@ -105,6 +106,11 @@ def root(request, *args):
     return methods[request.rpc_method](request, *request.rpc_params)
 
 
+@app.route('/<path:path>', methods=['OPTIONS'])
+def options(request, path):
+    return Response(status=HTTPStatus.NO_CONTENT)
+
+
 def db_exist(request, database_name):
     Database = backend.get('Database')
     try:
@@ -120,7 +126,7 @@ def db_list(request, *args):
     context = {'_request': request.context}
     hostname = get_hostname(request.host)
     with Transaction().start(
-            None, 0, context=context, close=True, _nocache=True
+            None, 0, context=context, readonly=True, close=True,
             ) as transaction:
         return transaction.database.list(hostname=hostname)
 
@@ -198,11 +204,9 @@ def _dispatch(request, pool, *args, **kwargs):
 
     user = request.user_id
 
-    # AKE: add session to transaction context
-    token, session = None, None
-    if request.authorization.type == 'session':
-        session = request.authorization.get('session')
-    elif request.authorization.type == 'token':
+    # AKE: add session and token to transaction context
+    token = None
+    if request.authorization.type == 'token':
         token = {
             'key': request.authorization.get('token'),
             'user': user,
@@ -215,7 +219,10 @@ def _dispatch(request, pool, *args, **kwargs):
     except Exception:
         perf_logger.exception('on_execute failed')
 
-    for count in range(config.getint('database', 'retry'), -1, -1):
+    retry = config.getint('database', 'retry')
+    for count in range(retry, -1, -1):
+        if count != retry:
+            time.sleep(0.02 * (retry - count))
         with Transaction().start(pool.database_name, user,
                 readonly=rpc.readonly) as transaction:
             try:
@@ -308,4 +315,7 @@ def _dispatch(request, pool, *args, **kwargs):
         except Exception:
             perf_logger.exception('on_leave failed')
 
-        return result
+        response = app.make_response(request, result)
+        if rpc.readonly and rpc.cache:
+            response.headers.extend(rpc.cache.headers())
+        return response

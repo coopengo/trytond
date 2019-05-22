@@ -2,7 +2,7 @@
 # this repository contains the full copyright notices and license terms.
 import unittest
 
-from trytond.exceptions import UserError
+from trytond.model.exceptions import RequiredValidationError
 from trytond.pool import Pool
 from trytond.tests.test_tryton import activate_module, with_transaction
 
@@ -58,8 +58,20 @@ class FieldReferenceTestCase(unittest.TestCase):
         pool = Pool()
         Reference = pool.get('test.reference_required')
 
-        with self.assertRaises(UserError):
+        with self.assertRaises(RequiredValidationError):
             Reference.create([{}])
+
+    @with_transaction()
+    def test_create_required_with_none(self):
+        "Test create reference required with none"
+        pool = Pool()
+        Target = pool.get('test.reference.target')
+        Reference = pool.get('test.reference_required')
+
+        with self.assertRaises(RequiredValidationError):
+            Reference.create([{
+                        'reference': str(Target()),
+                        }])
 
     @with_transaction()
     def test_create_required_with_negative(self):
@@ -68,9 +80,9 @@ class FieldReferenceTestCase(unittest.TestCase):
         Target = pool.get('test.reference.target')
         Reference = pool.get('test.reference_required')
 
-        with self.assertRaises(UserError):
+        with self.assertRaises(RequiredValidationError):
             Reference.create([{
-                        'reference': str(Target()),
+                        'reference': str(Target(id=-1)),
                         }])
 
     @with_transaction()
@@ -385,6 +397,65 @@ class FieldReferenceTestCase(unittest.TestCase):
                 })
 
         self.assertEqual(reference.reference, None)
+
+    @with_transaction()
+    def test_context_attribute(self):
+        "Test context on reference attribute"
+        pool = Pool()
+        Reference = pool.get('test.reference_context')
+        Target = pool.get('test.reference_context.target')
+
+        target, = Target.create([{}])
+        record, = Reference.create([{
+                    'target': str(target),
+                    }])
+
+        self.assertEqual(record.target.context, 'foo')
+
+    @with_transaction()
+    def test_context_read(self):
+        "Test context on reference read"
+        pool = Pool()
+        Reference = pool.get('test.reference_context')
+        Target = pool.get('test.reference_context.target')
+
+        target, = Target.create([{}])
+        record, = Reference.create([{
+                    'target': str(target),
+                    }])
+        data, = Reference.read([record.id], ['target.context'])
+
+        self.assertEqual(data['target.']['context'], 'foo')
+
+    @with_transaction()
+    def test_context_read_multi(self):
+        "Test context on reference read with value and None"
+        pool = Pool()
+        Reference = pool.get('test.reference_context')
+        Target = pool.get('test.reference_context.target')
+
+        target, = Target.create([{}])
+        records = Reference.create([{
+                    'target': str(target),
+                    }, {
+                    'target': None,
+                    }])
+        data = Reference.read([r.id for r in records], ['target.context'])
+
+        self.assertEqual(data[0]['target.']['context'], 'foo')
+        self.assertEqual(data[1]['target.'], None)
+
+    @with_transaction()
+    def test_context_set(self):
+        "Test context on reference set"
+        pool = Pool()
+        Reference = pool.get('test.reference_context')
+        Target = pool.get('test.reference_context.target')
+
+        target, = Target.create([{}])
+        record = Reference(target=str(target))
+
+        self.assertEqual(record.target.context, 'foo')
 
 
 def suite():

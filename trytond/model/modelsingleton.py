@@ -28,24 +28,18 @@ class ModelSingleton(ModelStorage):
         return [singleton]
 
     @classmethod
-    def read(cls, ids, fields_names=None):
+    def read(cls, ids, fields_names):
         singleton = cls.get_singleton()
         if not singleton:
-            if not fields_names:
-                fields_names = list(cls._fields.keys())
             fname_no_rec_name = [f for f in fields_names if '.' not in f]
             res = cls.default_get(fname_no_rec_name,
                 with_rec_name=len(fname_no_rec_name) != len(fields_names))
             for field_name in fields_names:
                 if field_name not in res:
                     res[field_name] = None
-            for field_name in list(res.keys()):
-                if field_name not in fields_names:
-                    del res[field_name]
             res['id'] = ids[0]
             return [res]
-        res = super(ModelSingleton, cls).read([singleton.id],
-            fields_names=fields_names)
+        res = super(ModelSingleton, cls).read([singleton.id], fields_names)
         res[0]['id'] = ids[0]
         return res
 
@@ -110,6 +104,5 @@ class ModelSingleton(ModelStorage):
                     if cls._fields[field]._type in ('many2one',):
                         fields_names.append(field + '.rec_name')
             default, = cls.read([singleton.id], fields_names=fields_names)
-            for field in (x for x in list(default.keys()) if x not in fields_names):
-                del default[field]
+            del default['id']
         return default

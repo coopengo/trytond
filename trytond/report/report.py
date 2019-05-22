@@ -303,18 +303,18 @@ class Report(URLMixin, PoolBase):
         return data
 
     @classmethod
-    def convert(cls, report, data):
+    def convert(cls, report, data, timeout=5 * 60):
         "converts the report data to another mimetype if necessary"
         # AKE: support printing via external api
         if config.get('report', 'api', default=None):
             return cls.convert_api(report, data)
-        elif config.get('report', 'unoconv', default=None):
-            return cls.convert_unoconv(report, data)
+        elif config.get('report', 'unoconv', default=True):
+            return cls.convert_unoconv(report, data, timeout)
         else:
             raise NotImplementedError
 
     @classmethod
-    def convert_unoconv(cls, report, data):
+    def convert_unoconv(cls, report, data, timeout):
         # AKE: support printing via external api
         input_format = report.template_extension
         output_format = report.extension or report.template_extension
@@ -335,7 +335,7 @@ class Report(URLMixin, PoolBase):
                 '--convert-to', oext, '--outdir', dtemp, path]
             logger = logging.getLogger(__name__)
             output = os.path.splitext(path)[0] + os.extsep + oext
-            subprocess.check_call(cmd)
+            subprocess.check_call(cmd, timeout=timeout)
             # ABDC: Please don't judge me... Soffice makes me do this because
             # its returns before file creation.
             nb_retry = 0
@@ -344,6 +344,9 @@ class Report(URLMixin, PoolBase):
                 if os.path.exists(output):
                     break
                 time.sleep(0.2)
+            if os.path.exists(output):
+                with open(output, 'rb') as fp:
+                    return oext, fp.read()
             else:
                 logger.error(
                     'fail to convert file %s to %s' % (path, output))
@@ -360,7 +363,7 @@ class Report(URLMixin, PoolBase):
                 pass
 
     @classmethod
-    def convert_api(cls, report, data):
+    def convert_api(cls, report, data, timeout):
         # AKE: support printing via external api
         input_format = report.template_extension
         output_format = report.extension or report.template_extension
@@ -372,7 +375,7 @@ class Report(URLMixin, PoolBase):
         url_tpl = config.get('report', 'api')
         url = url_tpl.format(oext=oext)
         files = {'file': ('doc.' + input_format, data)}
-        r = requests.post(url, files=files)
+        r = requests.post(url, files=files, timeout=timeout)
         if r.status_code < 300:
             return oext, r.content
         else:

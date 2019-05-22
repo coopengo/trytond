@@ -3,11 +3,21 @@
 import json
 from collections import OrderedDict
 
+from trytond.i18n import gettext
 from trytond.model import fields
+from trytond.model.exceptions import ValidationError
 from trytond.pyson import Eval, PYSONDecoder
 from trytond.rpc import RPC
 from trytond.transaction import Transaction
 from trytond.pool import Pool
+
+
+class DomainError(ValidationError):
+    pass
+
+
+class SelectionError(ValidationError):
+    pass
 
 
 class DictSchemaMixin(object):
@@ -48,9 +58,6 @@ class DictSchemaMixin(object):
         cls.__rpc__.update({
                 'get_keys': RPC(instantiate=0),
                 })
-        cls._error_messages.update({
-                'invalid_domain': 'Invalid domain in schema "%(schema)s".',
-                })
 
     @staticmethod
     def default_digits():
@@ -64,6 +71,7 @@ class DictSchemaMixin(object):
     def validate(cls, schemas):
         super(DictSchemaMixin, cls).validate(schemas)
         cls.check_domain(schemas)
+        cls.check_selection(schemas)
 
     @classmethod
     def check_domain(cls, schemas):
@@ -73,15 +81,27 @@ class DictSchemaMixin(object):
             try:
                 value = PYSONDecoder().decode(schema.domain)
             except Exception:
-                cls.raise_user_error('invalid_domain', {
-                        'schema': schema.rec_name,
-                        })
+                raise DomainError(
+                    gettext('ir.msg_dict_schema_invalid_domain',
+                        schema=schema.rec_name))
             if not isinstance(value, list):
-                cls.raise_user_error('invalid_domain', {
-                        'schema': schema.rec_name,
-                        })
+                raise DomainError(
+                    gettext('ir.msg_dict_schema_invalid_domain',
+                        schema=schema.rec_name))
 
-    def get_selection_json(self, name):
+    @classmethod
+    def check_selection(cls, schemas):
+        for schema in schemas:
+            if schema.type_ != 'selection':
+                continue
+            try:
+                dict(json.loads(schema.get_selection_json()))
+            except Exception:
+                raise SelectionError(
+                    gettext('ir.msg_dict_schema_invalid_selection',
+                        schema=schema.rec_name))
+
+    def get_selection_json(self, name=None):
         db_selection = self.selection or ''
         selection = [[w.strip() for w in v.split(':', 1)]
             for v in db_selection.splitlines() if v]

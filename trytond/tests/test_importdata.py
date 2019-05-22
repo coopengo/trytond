@@ -1,13 +1,15 @@
 # -*- coding: utf-8 -*-
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
+import datetime
 import unittest
-from decimal import InvalidOperation
+from decimal import InvalidOperation, Decimal
 
+from trytond.model.exceptions import (
+    RequiredValidationError, SelectionValidationError, ImportDataError)
 from trytond.tests.test_tryton import activate_module, with_transaction
 from trytond.transaction import Transaction
 from trytond.pool import Pool
-from trytond.exceptions import UserError
 
 
 class ImportDataTestCase(unittest.TestCase):
@@ -54,6 +56,9 @@ class ImportDataTestCase(unittest.TestCase):
             [['1']]), 1)
 
         self.assertEqual(Integer.import_data(['integer'],
+            [[1]]), 1)
+
+        self.assertEqual(Integer.import_data(['integer'],
             [['-1']]), 1)
 
         self.assertEqual(Integer.import_data(['integer'],
@@ -87,8 +92,8 @@ class ImportDataTestCase(unittest.TestCase):
         self.assertEqual(IntegerRequired.import_data(['integer'],
             [['-1']]), 1)
 
-        self.assertRaises(UserError, IntegerRequired.import_data,
-            ['integer'], [['']])
+        with self.assertRaises(RequiredValidationError):
+            IntegerRequired.import_data(['integer'], [['']])
         transaction.rollback()
 
         self.assertEqual(IntegerRequired.import_data(['integer'],
@@ -114,6 +119,9 @@ class ImportDataTestCase(unittest.TestCase):
 
         self.assertEqual(Float.import_data(['float'],
             [['1.1']]), 1)
+
+        self.assertEqual(Float.import_data(['float'],
+            [[1.1]]), 1)
 
         self.assertEqual(Float.import_data(['float'],
             [['-1.1']]), 1)
@@ -152,8 +160,8 @@ class ImportDataTestCase(unittest.TestCase):
         self.assertEqual(FloatRequired.import_data(['float'],
             [['1']]), 1)
 
-        self.assertRaises(UserError, FloatRequired.import_data,
-            ['float'], [['']])
+        with self.assertRaises(RequiredValidationError):
+            FloatRequired.import_data(['float'], [['']])
         transaction.rollback()
 
         self.assertEqual(FloatRequired.import_data(['float'],
@@ -176,6 +184,9 @@ class ImportDataTestCase(unittest.TestCase):
 
         self.assertEqual(Numeric.import_data(['numeric'],
             [['1.1']]), 1)
+
+        self.assertEqual(Numeric.import_data(['numeric'],
+            [[Decimal('1.1')]]), 1)
 
         self.assertEqual(Numeric.import_data(['numeric'],
             [['-1.1']]), 1)
@@ -214,8 +225,8 @@ class ImportDataTestCase(unittest.TestCase):
         self.assertEqual(NumericRequired.import_data(['numeric'],
             [['1']]), 1)
 
-        self.assertRaises(UserError, NumericRequired.import_data,
-            ['numeric'], [['']])
+        with self.assertRaises(RequiredValidationError):
+            NumericRequired.import_data(['numeric'], [['']])
         transaction.rollback()
 
         self.assertEqual(NumericRequired.import_data(['numeric'],
@@ -270,6 +281,9 @@ class ImportDataTestCase(unittest.TestCase):
             [['2010-01-01']]), 1)
 
         self.assertEqual(Date.import_data(['date'],
+            [[datetime.date(2019, 3, 13)]]), 1)
+
+        self.assertEqual(Date.import_data(['date'],
             [['']]), 1)
 
         self.assertEqual(Date.import_data(['date'],
@@ -286,6 +300,9 @@ class ImportDataTestCase(unittest.TestCase):
 
         self.assertEqual(Datetime.import_data(['datetime'],
             [['2010-01-01 12:00:00']]), 1)
+
+        self.assertEqual(Datetime.import_data(['datetime'],
+            [[datetime.datetime(2019, 3, 13, 12, 0)]]), 1)
 
         self.assertEqual(Datetime.import_data(['datetime'],
             [['']]), 1)
@@ -311,8 +328,8 @@ class ImportDataTestCase(unittest.TestCase):
         self.assertEqual(Selection.import_data(['selection'],
             [['select1'], ['select2']]), 2)
 
-        self.assertRaises(UserError, Selection.import_data,
-            ['selection'], [['foo']])
+        with self.assertRaises(SelectionValidationError):
+            Selection.import_data(['selection'], [['foo']])
 
     @with_transaction()
     def test_many2one(self):
@@ -333,20 +350,20 @@ class ImportDataTestCase(unittest.TestCase):
         self.assertEqual(Many2one.import_data(['many2one'],
             [['Test'], ['Test']]), 2)
 
-        self.assertRaises(UserError, Many2one.import_data,
-            ['many2one'], [['foo']])
+        with self.assertRaises(ImportDataError):
+            Many2one.import_data(['many2one'], [['foo']])
         transaction.rollback()
 
-        self.assertRaises(UserError, Many2one.import_data,
-            ['many2one'], [['Duplicate']])
+        with self.assertRaises(ImportDataError):
+            Many2one.import_data(['many2one'], [['Duplicate']])
         transaction.rollback()
 
-        self.assertRaises(UserError, Many2one.import_data,
-            ['many2one:id'], [['foo']])
+        with self.assertRaises(ImportDataError):
+            Many2one.import_data(['many2one:id'], [['foo']])
         transaction.rollback()
 
-        self.assertRaises(Exception, Many2one.import_data,
-            ['many2one:id'], [['tests.foo']])
+        with self.assertRaises(KeyError):
+            Many2one.import_data(['many2one:id'], [['tests.foo']])
         transaction.rollback()
 
     @with_transaction()
@@ -381,20 +398,20 @@ class ImportDataTestCase(unittest.TestCase):
         self.assertEqual(Many2many.import_data(['many2many'],
             [['Test 1'], ['Test 2']]), 2)
 
-        self.assertRaises(UserError, Many2many.import_data,
-            ['many2many'], [['foo']])
+        with self.assertRaises(ImportDataError):
+            Many2many.import_data(['many2many'], [['foo']])
         transaction.rollback()
 
-        self.assertRaises(UserError, Many2many.import_data,
-            ['many2many'], [['Test 1,foo']])
+        with self.assertRaises(ImportDataError):
+            Many2many.import_data(['many2many'], [['Test 1,foo']])
         transaction.rollback()
 
-        self.assertRaises(UserError, Many2many.import_data,
-            ['many2many'], [['Duplicate']])
+        with self.assertRaises(ImportDataError):
+            Many2many.import_data(['many2many'], [['Duplicate']])
         transaction.rollback()
 
-        self.assertRaises(UserError, Many2many.import_data,
-            ['many2many'], [['Test 1,Duplicate']])
+        with self.assertRaises(ImportDataError):
+            Many2many.import_data(['many2many'], [['Test 1,Duplicate']])
         transaction.rollback()
 
     @with_transaction()
@@ -453,24 +470,75 @@ class ImportDataTestCase(unittest.TestCase):
                 'test.import_data.reference.selection')
         transaction.rollback()
 
-        self.assertRaises(UserError, Reference.import_data,
-            ['reference'], [['test.import_data.reference.selection,foo']])
+        with self.assertRaises(ImportDataError):
+            Reference.import_data(
+                ['reference'], [['test.import_data.reference.selection,foo']])
         transaction.rollback()
 
-        self.assertRaises(UserError, Reference.import_data,
-            ['reference'],
-            [['test.import_data.reference.selection,Duplicate']])
+        with self.assertRaises(ImportDataError):
+            Reference.import_data(
+                ['reference'],
+                [['test.import_data.reference.selection,Duplicate']])
+            transaction.rollback()
+
+        with self.assertRaises(ImportDataError):
+            Reference.import_data(
+                ['reference:id'],
+                [['test.import_data.reference.selection,foo']])
         transaction.rollback()
 
-        self.assertRaises(UserError, Reference.import_data,
-            ['reference:id'],
-            [['test.import_data.reference.selection,foo']])
+        with self.assertRaises(KeyError):
+            Reference.import_data(
+                ['reference:id'],
+                [['test.import_data.reference.selection,test.foo']])
         transaction.rollback()
 
-        self.assertRaises(Exception, Reference.import_data,
-            ['reference:id'],
-            [['test.import_data.reference.selection,test.foo']])
-        transaction.rollback()
+    @with_transaction()
+    def test_update_id(self):
+        "Test update with ID"
+        pool = Pool()
+        Char = pool.get('test.import_data.update')
+        record = Char(name="foo")
+        record.save()
+
+        count = Char.import_data(['id', 'name'], [[str(record.id), "bar"]])
+
+        record, = Char.search([])
+        self.assertEqual(count, 1)
+        self.assertEqual(record.name, "bar")
+
+    @with_transaction()
+    def test_update_rec_name(self):
+        "Test update with rec_name"
+        pool = Pool()
+        Char = pool.get('test.import_data.update')
+        record = Char(name="foo")
+        record.save()
+
+        count = Char.import_data(['id', 'name'], [[record.rec_name, "bar"]])
+
+        record, = Char.search([])
+        self.assertEqual(count, 1)
+        self.assertEqual(record.name, "bar")
+
+    @with_transaction()
+    def test_update_one2many(self):
+        "Test update one2many"
+        pool = Pool()
+        One2many = pool.get('test.import_data.one2many')
+        Target = pool.get('test.import_data.one2many.target')
+        record = One2many(name="test", one2many=[Target(name="foo")])
+        record.save()
+        target, = record.one2many
+
+        count = One2many.import_data(
+            ['id', 'one2many/id', 'one2many/name'],
+            [[record.id, target.id, "bar"],
+                ['', '', "baz"]])
+
+        self.assertEqual(count, 1)
+        self.assertEqual(len(record.one2many), 2)
+        self.assertEqual([t.name for t in record.one2many], ["bar", "baz"])
 
 
 def suite():

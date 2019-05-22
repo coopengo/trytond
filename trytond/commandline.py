@@ -16,16 +16,21 @@ from trytond import iwc
 logger = logging.getLogger(__name__)
 
 
-def get_parser():
+def get_base_parser():
     parser = argparse.ArgumentParser()
-
     parser.add_argument('--version', action='version',
         version='%(prog)s ' + __version__)
     parser.add_argument("-c", "--config", dest="configfile", metavar='FILE',
         nargs='+', default=[os.environ.get('TRYTOND_CONFIG')],
         help='Specify configuration files')
-    parser.add_argument("-v", "--verbose", action="store_true",
-        dest="verbose", help="enable verbose mode")
+    return parser
+
+
+def get_parser():
+    parser = get_base_parser()
+
+    parser.add_argument("-v", "--verbose", action='count',
+        dest="verbose", default=0, help="enable verbose mode")
     parser.add_argument('--dev', dest='dev', action='store_true',
         help='enable development mode')
 
@@ -41,6 +46,8 @@ def get_parser_daemon():
     parser = get_parser()
     parser.add_argument("--pidfile", dest="pidfile", metavar='FILE',
         help="file where the server pid will be stored")
+    parser.add_argument("--coroutine", action="store_true", dest="coroutine",
+        help="use coroutine for concurrency")
     return parser
 
 
@@ -90,6 +97,16 @@ def get_parser_admin():
     return parser
 
 
+def get_parser_console():
+    parser = get_base_parser()
+    parser.add_argument("-d", "--database", dest="database_name",
+        required=True, metavar='DATABASE', help="specify the database name")
+    parser.add_argument("--histsize", dest="histsize", type=int, default=500,
+        help="The number of commands to remember in the command history")
+    parser.epilog = "To store changes, `transaction.commit()` must be called."
+    return parser
+
+
 def config_log(options):
     log_level = os.environ.get('LOG_LEVEL', None)
     if options.logconf:
@@ -104,13 +121,7 @@ def config_log(options):
     else:
         logformat = ('%(process)s %(thread)s [%(asctime)s] '
             '%(levelname)s %(name)s %(message)s')
-        if options.verbose:
-            if options.dev:
-                level = logging.DEBUG
-            else:
-                level = logging.INFO
-        else:
-            level = logging.ERROR
+        level = max(logging.ERROR - options.verbose * 10, logging.NOTSET)
         logging.basicConfig(level=level, format=logformat)
     logging.captureWarnings(True)
 

@@ -46,33 +46,32 @@ DB_CACHE = os.environ.get('DB_CACHE')
 Pool.test = True
 
 
-def activate_module(name, cache_name=None):
+def activate_module(modules):
     '''
-    Activate module for the tested database
+    Activate modules for the tested database
     '''
-    # JCA : Allow multiple modules to be installed in unittests. Should be
-    # removed when upgrading to Tryton 5.2
-    module_names = [name] if isinstance(name, str) else name
-    cache_name = cache_name or '-'.join(module_names)
-    if not db_exist(DB_NAME) and restore_db_cache(cache_name):
+    if isinstance(modules, str):
+        modules = [modules]
+    name = '-'.join(modules)
+    if not db_exist(DB_NAME) and restore_db_cache(name):
         return
     create_db()
     with Transaction().start(DB_NAME, 1, close=True) as transaction:
         pool = Pool()
         Module = pool.get('ir.module')
 
-        modules = Module.search([
-                ('name', 'in', module_names),
+        records = Module.search([
+                ('name', 'in', modules),
                 ])
-        assert modules, "%s not found" % cache_name
+        assert len(records) == len(modules)
 
-        modules = Module.search([
-                ('name', 'in', module_names),
+        records = Module.search([
+                ('name', 'in', modules),
                 ('state', '!=', 'activated'),
                 ])
 
-        if modules:
-            Module.activate(modules)
+        if records:
+            Module.activate(records)
             transaction.commit()
 
             ActivateUpgrade = pool.get('ir.module.activate_upgrade',
@@ -82,7 +81,7 @@ def activate_module(name, cache_name=None):
             ActivateUpgrade(instance_id).transition_upgrade()
             ActivateUpgrade.delete(instance_id)
             transaction.commit()
-    backup_db_cache(cache_name)
+    backup_db_cache(name)
 
 
 def restore_db_cache(name):
@@ -120,7 +119,7 @@ def _db_cache_file(path, name, backend_name):
 def _sqlite_copy(file_, restore=False):
     import sqlite3 as sqlite
 
-    with Transaction().start(DB_NAME, 0, _nocache=True) as transaction, \
+    with Transaction().start(DB_NAME, 0) as transaction, \
             sqlite.connect(file_) as conn2:
         conn1 = transaction.connection
         # sqlitebck does not work with pysqlite2
@@ -156,8 +155,7 @@ def _pg_options():
 
 def _pg_restore(cache_file):
     with Transaction().start(
-            None, 0, close=True, autocommit=True, _nocache=True) \
-            as transaction:
+            None, 0, close=True, autocommit=True) as transaction:
         transaction.database.create(transaction.connection, DB_NAME)
     cmd = ['pg_restore', '-d', DB_NAME]
     options, env = _pg_options()
@@ -169,10 +167,8 @@ def _pg_restore(cache_file):
         cache_name, _ = os.path.splitext(os.path.basename(cache_file))
         database = backend.get('Database')(cache_name)
         with Transaction().start(
-                None, 0, close=True, autocommit=True, _nocache=True) \
-                as transaction:
-            database.kill_other_sessions(transaction.connection,
-                cache_name)
+                None, 0, close=True, autocommit=True) as transaction:
+            database.kill_other_sessions(transaction.connection, DB_NAME)
             transaction.database.drop(transaction.connection, DB_NAME)
             transaction.database.create(
                 transaction.connection, DB_NAME, cache_name)
@@ -192,13 +188,10 @@ def _pg_dump(cache_file):
         database = backend.get('Database')(DB_NAME)
         database.close()
         with Transaction().start(
-                None, 0, close=True, autocommit=True, _nocache=True) \
-                as transaction:
-            database.kill_other_sessions(transaction.connection,
-                DB_NAME)
+                None, 0, close=True, autocommit=True) as transaction:
+            database.kill_other_sessions(transaction.connection, DB_NAME)
         with Transaction().start(
-            None, 0, close=True, autocommit=True, _nocache=True) \
-                as transaction:
+                None, 0, close=True, autocommit=True) as transaction:
             transaction.database.create(
                 transaction.connection, cache_name, DB_NAME)
         open(cache_file, 'a').close()
@@ -225,11 +218,15 @@ def with_transaction(user=1, context=None):
 class ModuleTestCase(unittest.TestCase):
     'Trytond Test Case'
     module = None
+    extras = None
 
     @classmethod
     def setUpClass(cls):
         drop_db()
-        activate_module(cls.module)
+        modules = [cls.module]
+        if cls.extras:
+            modules.extend(cls.extras)
+        activate_module(modules)
         super(ModuleTestCase, cls).setUpClass()
 
     @classmethod
@@ -626,6 +623,25 @@ class ModuleTestCase(unittest.TestCase):
                     'model': model.__name__,
                     })
 
+    @with_transaction()
+    def test_buttons_states(self):
+        "Test the states of buttons"
+        pool = Pool()
+        keys = {'readonly', 'invisible', 'icon', 'pre_validate', 'depends'}
+        for mname, model in pool.iterobject():
+            if not isregisteredby(model, self.module):
+                continue
+            if not issubclass(model, ModelView):
+                continue
+            for button, states in model._buttons.items():
+                assert set(states).issubset(keys), (
+                    'The button "%(button)s" of Model "%(model)s" has extra '
+                    'keys "%(keys)s".' % {
+                        'button': button,
+                        'model': mname,
+                        'keys': set(states) - keys,
+                        })
+
 
 def db_exist(name=DB_NAME):
     Database = backend.get('Database')
@@ -636,21 +652,29 @@ def db_exist(name=DB_NAME):
 def create_db(name=DB_NAME, lang='en'):
     Database = backend.get('Database')
     if not db_exist(name):
-        with Transaction().start(
-                None, 0, close=True, autocommit=True, _nocache=True) \
-                as transaction:
-            transaction.database.create(transaction.connection, name)
+        database = Database()
+        database.connect()
+        connection = database.get_connection(autocommit=True)
+        try:
+            database.create(connection, name)
+        finally:
+            database.put_connection(connection, True)
 
-        with Transaction().start(name, 0, _nocache=True) as transaction,\
-                transaction.connection.cursor() as cursor:
-            Database(name).init()
-            ir_configuration = Table('ir_configuration')
-            cursor.execute(*ir_configuration.insert(
-                    [ir_configuration.language], [[lang]]))
+        database = Database(name)
+        connection = database.get_connection()
+        try:
+            with connection.cursor() as cursor:
+                database.init()
+                ir_configuration = Table('ir_configuration')
+                cursor.execute(*ir_configuration.insert(
+                        [ir_configuration.language], [[lang]]))
+            connection.commit()
+        finally:
+            database.put_connection(connection)
 
         pool = Pool(name)
         pool.init(update=['res', 'ir'], lang=[lang])
-        with Transaction().start(name, 0) as transaction:
+        with Transaction().start(name, 0):
             User = pool.get('res.user')
             Lang = pool.get('ir.lang')
             language, = Lang.search([('code', '=', lang)])
@@ -671,8 +695,7 @@ def drop_db(name=DB_NAME):
         database.close()
 
         with Transaction().start(
-                None, 0, close=True, autocommit=True, _nocache=True) \
-                as transaction:
+                None, 0, close=True, autocommit=True) as transaction:
             database.kill_other_sessions(transaction.connection,
                 name)
             database.drop(transaction.connection, name)

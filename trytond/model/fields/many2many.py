@@ -6,8 +6,9 @@ from sql import Cast, Literal, Null
 from sql.functions import Substring, Position
 from sql.conditionals import Coalesce
 
+from trytond.pyson import PYSONEncoder
 from .field import (Field, size_validate, instanciate_values, domain_validate,
-    search_order_validate, context_validate)
+    search_order_validate, context_validate, instantiate_context)
 from ...pool import Pool
 from ...tools import grouped_slice
 from ...transaction import Transaction
@@ -277,7 +278,10 @@ class Many2Many(Field):
 
     def __set__(self, inst, value):
         Target = self.get_target()
-        super(Many2Many, self).__set__(inst, instanciate_values(Target, value))
+        ctx = instantiate_context(self, inst)
+        with Transaction().set_context(ctx):
+            records = instanciate_values(Target, value)
+        super(Many2Many, self).__set__(inst, records)
 
     def convert_domain_tree(self, domain, tables):
         Target = self.get_target()
@@ -437,3 +441,20 @@ class Many2Many(Field):
         query_table = convert_from(None, relation_tables)
         query = query_table.select(origin, where=expression)
         return table.id.in_(query)
+
+    def definition(self, model, language):
+        encoder = PYSONEncoder()
+        definition = super().definition(model, language)
+        if self.add_remove is not None:
+            definition['add_remove'] = encoder.encode(self.add_remove)
+        definition['datetime_field'] = self.datetime_field
+        if self.filter:
+            definition['domain'] = encoder.encode(
+                ['AND', self.domain, self.filter])
+        definition['relation'] = self.get_target().__name__
+        definition['search_context'] = encoder.encode(self.search_context)
+        definition['search_order'] = encoder.encode(self.search_order)
+        definition['sortable'] &= hasattr(model, 'order_' + self.name)
+        if self.size is not None:
+            definition['size'] = encoder.encode(self.size)
+        return definition

@@ -5,11 +5,13 @@ import time
 
 from sql import Literal, For
 
+from trytond.exceptions import UserError
+from trytond.model.exceptions import ValidationError
 from ..model import ModelView, ModelSQL, DeactivableMixin, fields, Check
-from ..tools import datetime_strftime
 from ..pyson import Eval, And
 from ..transaction import Transaction
 from ..pool import Pool
+from ..i18n import gettext
 from .. import backend
 
 __all__ = [
@@ -17,6 +19,18 @@ __all__ = [
     ]
 
 sql_sequence = backend.get('Database').has_sequence()
+
+
+class AffixError(ValidationError):
+    pass
+
+
+class MissingError(UserError):
+    pass
+
+
+class LastTimestampError(ValidationError):
+    pass
 
 
 class SequenceType(ModelSQL, ModelView):
@@ -89,15 +103,6 @@ class Sequence(DeactivableMixin, ModelSQL, ModelView):
                 Check(table, table.timestamp_rounding > 0),
                 'Timestamp rounding should be greater than 0'),
             ]
-        cls._error_messages.update({
-                'missing': 'Missing sequence.',
-                'invalid_prefix': ('Invalid prefix "%(prefix)s" on sequence '
-                    '"%(sequence)s".'),
-                'invalid_suffix': ('Invalid suffix "%(suffix)s" on sequence '
-                    '"%(sequence)s".'),
-                'future_last_timestamp': ('Last Timestamp cannot be in the '
-                    'future on sequence "%s".'),
-                })
 
     @staticmethod
     def default_type():
@@ -195,23 +200,22 @@ class Sequence(DeactivableMixin, ModelSQL, ModelView):
     @classmethod
     def validate(cls, sequences):
         super(Sequence, cls).validate(sequences)
-        cls.check_prefix_suffix(sequences)
+        cls.check_affixes(sequences)
         cls.check_last_timestamp(sequences)
 
     @classmethod
-    def check_prefix_suffix(cls, sequences):
+    def check_affixes(cls, sequences):
         "Check prefix and suffix"
-
         for sequence in sequences:
-            for fix, error_message in ((sequence.prefix, 'invalid_prefix'),
-                    (sequence.suffix, 'invalid_suffix')):
+            for affix, error_message in [
+                    (sequence.prefix, 'msg_sequence_invalid_prefix'),
+                    (sequence.suffix, 'msg_sequence_invalid_suffix')]:
                 try:
-                    cls._process(fix)
-                except (TypeError, ValueError):
-                    cls.raise_user_error(error_message, {
-                            'prefix': fix,
-                            'sequence': sequence.rec_name,
-                            })
+                    cls._process(affix)
+                except (TypeError, ValueError) as exc:
+                    raise AffixError(gettext('ir.%s' % error_message,
+                            affix=affix,
+                            sequence=sequence.rec_name)) from exc
 
     @classmethod
     def check_last_timestamp(cls, sequences):
@@ -221,8 +225,8 @@ class Sequence(DeactivableMixin, ModelSQL, ModelView):
             next_timestamp = cls._timestamp(sequence)
             if (sequence.last_timestamp is not None
                     and sequence.last_timestamp > next_timestamp):
-                cls.raise_user_error('future_last_timestamp', (
-                        sequence.rec_name,))
+                raise LastTimestampError(
+                    gettext('ir.msg_sequence_last_timestamp_future'))
 
     @property
     def _sql_sequence_name(self):
@@ -283,9 +287,9 @@ class Sequence(DeactivableMixin, ModelSQL, ModelView):
         if not date:
             date = Date.today()
         return {
-            'year': datetime_strftime(date, '%Y'),
-            'month': datetime_strftime(date, '%m'),
-            'day': datetime_strftime(date, '%d'),
+            'year': date.strftime('%Y'),
+            'month': date.strftime('%m'),
+            'day': date.strftime('%d'),
             }
 
     @staticmethod
@@ -339,7 +343,7 @@ class Sequence(DeactivableMixin, ModelSQL, ModelView):
                 try:
                     sequence, = cls.search(domain, limit=1)
                 except TypeError:
-                    cls.raise_user_error('missing')
+                    raise MissingError(gettext('ir.msg_sequence_missing'))
                 if _lock:
                     transaction = Transaction()
                     database = transaction.database

@@ -29,12 +29,14 @@ from psycopg2 import IntegrityError as DatabaseIntegrityError
 from psycopg2 import OperationalError as DatabaseOperationalError
 from psycopg2.extras import register_default_json, register_default_jsonb
 
-from sql import Flavor
+from sql import Flavor, Cast
 from sql.functions import Function
+from sql.operators import BinaryOperator
 
 from trytond.backend.database import DatabaseInterface, SQLType
 from trytond.config import config, parse_uri
 from trytond.protocols.jsonrpc import JSONDecoder
+from trytond.tools.gevent import is_gevent_monkey_patched
 
 # MAB: Performance analyser tools (See [ec1462afd])
 from trytond.perf_analyzer import analyze_before, analyze_after
@@ -113,6 +115,31 @@ class TryAdvisoryLock(Function):
     _function = 'pg_try_advisory_xact_lock'
 
 
+class JSONBExtractPath(Function):
+    __slots__ = ()
+    _function = 'jsonb_extract_path'
+
+
+class JSONKeyExists(BinaryOperator):
+    __slots__ = ()
+    _operator = '?'
+
+
+class JSONAnyKeyExist(BinaryOperator):
+    __slots__ = ()
+    _operator = '?|'
+
+
+class JSONAllKeyExist(BinaryOperator):
+    __slots__ = ()
+    _operator = '?&'
+
+
+class JSONContains(BinaryOperator):
+    __slots__ = ()
+    _operator = '@>'
+
+
 class Database(DatabaseInterface):
 
     _lock = RLock()
@@ -153,7 +180,7 @@ class Database(DatabaseInterface):
                 inst = DatabaseInterface.__new__(cls, name=name)
                 logger.info('connect to "%s"', name)
                 inst._connpool = ThreadedConnectionPool(
-                    minconn, _maxconn, cls.dsn(name),
+                    minconn, _maxconn, **cls._connection_params(name),
                     cursor_factory=PerfCursor)
                 cls._databases[name] = inst
             inst._last_use = datetime.now()
@@ -163,15 +190,20 @@ class Database(DatabaseInterface):
         super(Database, self).__init__(name)
 
     @classmethod
-    def dsn(cls, name):
+    def _connection_params(cls, name):
         uri = parse_uri(config.get('database', 'uri'))
-        host = uri.hostname and "host=%s" % uri.hostname or ''
-        port = uri.port and "port=%s" % uri.port or ''
-        name = "dbname=%s" % name
-        user = uri.username and "user=%s" % uri.username or ''
-        password = ("password=%s" % urllib.parse.unquote_plus(uri.password)
-            if uri.password else '')
-        return '%s %s %s %s %s' % (host, port, name, user, password)
+        params = {
+            'dbname': name,
+            }
+        if uri.username:
+            params['user'] = uri.username
+        if uri.password:
+            params['password'] = urllib.parse.unquote_plus(uri.password)
+        if uri.hostname:
+            params['host'] = uri.hostname
+        if uri.port:
+            params['port'] = uri.port
+        return params
 
     def _kill_session_query(self, database_name):
         return 'SELECT pg_terminate_backend(pg_stat_activity.pid) ' \
@@ -246,7 +278,8 @@ class Database(DatabaseInterface):
             res = []
             for db_name, in cursor:
                 try:
-                    with connect(self.dsn(db_name)) as conn:
+                    with connect(**self._connection_params(db_name)
+                            ) as conn:
                         if self._test(conn, hostname=hostname):
                             res.append(db_name)
                 except Exception:
@@ -517,6 +550,24 @@ class Database(DatabaseInterface):
     def has_channel(self):
         return True
 
+    def json_get(self, column, key=None):
+        column = Cast(column, 'jsonb')
+        if key:
+            column = JSONBExtractPath(column, key)
+        return column
+
+    def json_key_exists(self, column, key):
+        return JSONKeyExists(Cast(column, 'jsonb'), key)
+
+    def json_any_keys_exist(self, column, keys):
+        return JSONAnyKeyExist(Cast(column, 'jsonb'), keys)
+
+    def json_all_keys_exist(self, column, keys):
+        return JSONAllKeyExist(Cast(column, 'jsonb'), keys)
+
+    def json_contains(self, column, json):
+        return JSONContains(Cast(column, 'jsonb'), Cast(json, 'jsonb'))
+
 
 register_type(UNICODE)
 if PYDATE:
@@ -535,3 +586,8 @@ def convert_json(value):
     return json.loads(value, object_hook=JSONDecoder())
 register_default_json(loads=convert_json)
 register_default_jsonb(loads=convert_json)
+
+if is_gevent_monkey_patched():
+    from psycopg2.extensions import set_wait_callback
+    from psycopg2.extras import wait_select
+    set_wait_callback(wait_select)

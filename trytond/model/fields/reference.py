@@ -5,30 +5,33 @@ import warnings
 from sql import Cast, Literal, Query, Expression
 from sql.functions import Substring, Position
 
+from trytond.pyson import PYSONEncoder
 from .field import (Field, search_order_validate, context_validate,
-    with_inactive_records)
+    with_inactive_records, instantiate_context)
 from .selection import SelectionMixin
 from ...transaction import Transaction
 from ...pool import Pool
 from ...rpc import RPC
 
 
-class Reference(Field, SelectionMixin):
+class Reference(SelectionMixin, Field):
     '''
     Define a reference field (``str``).
     '''
     _type = 'reference'
     _sql_type = 'VARCHAR'
 
-    def __init__(self, string='', selection=None, selection_change_with=None,
-            search_order=None, search_context=None, help='', required=False,
-            readonly=False, domain=None, states=None, select=False,
-            on_change=None, on_change_with=None, depends=None, context=None,
-            loading='lazy', datetime_field=None):
+    def __init__(self, string='', selection=None, sort=True,
+            selection_change_with=None, translate=True, search_order=None,
+            search_context=None, help='', required=False, readonly=False,
+            domain=None, states=None, select=False, on_change=None,
+            on_change_with=None, depends=None, context=None, loading='lazy',
+            datetime_field=None):
         '''
         :param selection: A list or a function name that returns a list.
             The list must be a list of tuples. First member is an internal name
             of model and the second is the user name of model.
+        :param sort: A boolean to sort or not the selections.
         :param datetime_field: The name of the field that contains the datetime
             value to read the target records.
         :param search_order: The order to use when searching for a record
@@ -51,6 +54,8 @@ class Reference(Field, SelectionMixin):
                 'use the depends decorator',
                 DeprecationWarning, stacklevel=2)
             self.selection_change_with |= set(selection_change_with)
+        self.sort = sort
+        self.translate_selection = translate
         self.__search_order = None
         self.search_order = search_order
         self.__search_context = None
@@ -143,10 +148,12 @@ class Reference(Field, SelectionMixin):
             else:
                 target, value = value
             Target = Pool().get(target)
-            if isinstance(value, dict):
-                value = Target(**value)
-            else:
-                value = Target(value)
+            ctx = instantiate_context(self, inst)
+            with Transaction().set_context(ctx):
+                if isinstance(value, dict):
+                    value = Target(**value)
+                else:
+                    value = Target(value)
         super(Reference, self).__set__(inst, value)
 
     def sql_format(self, value):
@@ -177,3 +184,11 @@ class Reference(Field, SelectionMixin):
                     Position(',', column) + Literal(1)),
                 Model.id.sql_type().base).in_(query)
             & column.ilike(target + ',%'))
+
+    def definition(self, model, language):
+        encoder = PYSONEncoder()
+        definition = super().definition(model, language)
+        definition['datetime_field'] = self.datetime_field
+        definition['search_context'] = encoder.encode(self.search_context)
+        definition['search_order'] = encoder.encode(self.search_order)
+        return definition

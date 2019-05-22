@@ -12,16 +12,32 @@ from sql import Table
 
 from ..model import ModelView, ModelSQL, DeactivableMixin, fields, Check
 from ..cache import Cache
-from ..tools import datetime_strftime
 from ..transaction import Transaction
 from ..pool import Pool
-from .time_locale import TIME_LOCALE
+from ..exceptions import UserError
+from ..i18n import gettext
 
 Transaction.cache_keys.add('translate_name')
 
 __all__ = [
     'Lang',
     ]
+
+
+class GroupingError(UserError):
+    pass
+
+
+class DateError(UserError):
+    pass
+
+
+class TranslatableError(UserError):
+    pass
+
+
+class DeleteDefaultError(UserError):
+    pass
 
 
 class Lang(DeactivableMixin, ModelSQL, ModelView):
@@ -39,6 +55,9 @@ class Lang(DeactivableMixin, ModelSQL, ModelView):
 
     # date
     date = fields.Char('Date', required=True)
+
+    am = fields.Char("AM")
+    pm = fields.Char("PM")
 
     # number
     grouping = fields.Char('Grouping', required=True)
@@ -71,15 +90,6 @@ class Lang(DeactivableMixin, ModelSQL, ModelView):
                 Check(table, table.decimal_point != table.thousands_sep),
                 'decimal_point and thousands_sep must be different!'),
             ]
-        cls._error_messages.update({
-                'invalid_grouping': ('Invalid grouping "%(grouping)s" on '
-                    '"%(language)s" language.'),
-                'invalid_date': ('Invalid date format "%(format)s" on '
-                    '"%(language)s" language.'),
-                'default_translatable': ('The default language must be '
-                    'translatable.'),
-                'delete_default': ('Default language can not be deleted.'),
-                })
 
     @classmethod
     def search_rec_name(cls, name, clause):
@@ -90,17 +100,17 @@ class Lang(DeactivableMixin, ModelSQL, ModelView):
         return [('name',) + tuple(clause[1:])]
 
     @classmethod
-    def read(cls, ids, fields_names=None):
+    def read(cls, ids, fields_names):
         pool = Pool()
         Translation = pool.get('ir.translation')
         Config = pool.get('ir.configuration')
-        res = super(Lang, cls).read(ids, fields_names=fields_names)
+        res = super(Lang, cls).read(ids, fields_names)
         if (Transaction().context.get('translate_name')
                 and (not fields_names or 'name' in fields_names)):
             with Transaction().set_context(
                     language=Config.get_language(),
                     translate_name=False):
-                res2 = cls.read(ids, fields_names=['id', 'code', 'name'])
+                res2 = cls.read(ids, ['id', 'code', 'name'])
             for record2 in res2:
                 for record in res:
                     if record['id'] == record2['id']:
@@ -199,10 +209,10 @@ class Lang(DeactivableMixin, ModelSQL, ModelView):
                         if not isinstance(i, int):
                             raise
                 except Exception:
-                    cls.raise_user_error('invalid_grouping', {
-                            'grouping': grouping,
-                            'language': lang.rec_name,
-                            })
+                    raise GroupingError(
+                        gettext('ir.msg_language_invalid_grouping',
+                            grouping=grouping,
+                            language=lang.rec_name))
 
     @classmethod
     def check_date(cls, langs):
@@ -212,12 +222,11 @@ class Lang(DeactivableMixin, ModelSQL, ModelView):
         for lang in langs:
             date = lang.date
             try:
-                datetime_strftime(datetime.datetime.now(), date)
+                datetime.datetime.now().strftime(date)
             except Exception:
-                cls.raise_user_error('invalid_date', {
-                        'format': lang.date,
-                        'language': lang.rec_name,
-                        })
+                raise DateError(gettext('ir.msg_language_invalid_date',
+                        format=lang.date,
+                        language=lang.rec_name))
             if (('%Y' not in lang.date)
                     or ('%b' not in lang.date
                         and '%B' not in lang.date
@@ -231,10 +240,10 @@ class Lang(DeactivableMixin, ModelSQL, ModelView):
                         or '%X' in lang.date
                         or '%c' in lang.date
                         or '%Z' in lang.date)):
-                cls.raise_user_error('invalid_date', {
-                        'format': lang.date,
-                        'language': lang.rec_name,
-                        })
+                raise DateError(gettext(
+                        'ir.msg_language_invalid_date',
+                        format=lang.date,
+                        language=lang.rec_name))
 
     @classmethod
     def check_translatable(cls, langs):
@@ -247,7 +256,8 @@ class Lang(DeactivableMixin, ModelSQL, ModelView):
         for lang in langs:
             if (lang.code == Config.get_language()
                     and not lang.translatable):
-                cls.raise_user_error('default_translatable')
+                raise TranslatableError(
+                    gettext('ir.msg_language_default_translatable'))
 
     @staticmethod
     def check_xml_record(langs, values):
@@ -293,7 +303,8 @@ class Lang(DeactivableMixin, ModelSQL, ModelView):
         Translation = pool.get('ir.translation')
         for lang in langs:
             if lang.code == Config.get_language():
-                cls.raise_user_error('delete_default')
+                raise DeleteDefaultError(
+                    gettext('ir.msg_language_delete_default'))
         # Clear cache
         cls._lang_cache.clear()
         cls._code_cache.clear()
@@ -464,21 +475,35 @@ class Lang(DeactivableMixin, ModelSQL, ModelView):
 
         return s.replace('<', '').replace('>', '')
 
-    def strftime(self, datetime, format=None):
+    def strftime(self, value, format=None):
         '''
-        Convert datetime to a string as specified by the format argument.
+        Convert value to a string as specified by the format argument.
         '''
+        pool = Pool()
+        Month = pool.get('ir.calendar.month')
+        Day = pool.get('ir.calendar.day')
         if format is None:
             format = self.date
-        code = self.code[:2]
-        if code in TIME_LOCALE:
-            for f, i in (('%a', 6), ('%A', 6), ('%b', 1), ('%B', 1)):
-                format = format.replace(f,
-                        TIME_LOCALE[code][f][datetime.timetuple()[i]])
-            format = format.replace('%p',
-                TIME_LOCALE[code]['%p'][datetime.timetuple()[3] < 12 and 0
-                    or 1])
-        return datetime_strftime(datetime, format)
+        format = format.replace('%x', self.date)
+        if isinstance(value, datetime.date):
+            for f, i, klass in (('%A', 6, Day), ('%B', 1, Month)):
+                for field, f in [('name', f), ('abbreviation', f.lower())]:
+                    locale = klass.locale(self, field=field)
+                    format = format.replace(f, locale[value.timetuple()[i]])
+        if isinstance(value, datetime.time):
+            time = value
+        else:
+            try:
+                time = value.time()
+            except AttributeError:
+                time = None
+        if time:
+            if time < datetime.time(12):
+                p = self.am or 'AM'
+            else:
+                p = self.pm or 'PM'
+            format = format.replace('%p', p)
+        return value.strftime(format)
 
 
 def get_parent_language(code):

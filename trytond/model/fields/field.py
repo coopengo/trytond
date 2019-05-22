@@ -9,8 +9,9 @@ from sql.conditionals import Coalesce, NullIf
 from sql.operators import Concat
 
 from trytond import backend
-from trytond.pyson import PYSON, PYSONEncoder, Eval
+from trytond.pyson import PYSON, PYSONEncoder, PYSONDecoder, Eval
 from trytond.const import OPERATORS
+from trytond.tools.string_ import StringPartitioned
 from trytond.transaction import Transaction
 from trytond.pool import Pool
 from trytond.cache import LRUDictTransaction
@@ -45,9 +46,11 @@ def domain_validate(value):
 
 def states_validate(value):
     assert isinstance(value, dict), 'states must be a dict'
+    assert set(value).issubset({'required', 'readonly', 'invisible'}), (
+        'extra keys "%(keys)s" in states' % {
+            'keys': set(value) - {'required', 'readonly', 'invisible'},
+            })
     for state in value:
-        if state == 'icon':
-            continue
         assert isinstance(value[state], (bool, PYSON)), \
             'values of states must be PYSON'
         if hasattr(value[state], 'types'):
@@ -163,6 +166,21 @@ def instanciate_values(Target, value):
     return tuple(instance(x) for x in (value or []))
 
 
+def instantiate_context(field, record):
+    from ..modelstorage import EvalEnvironment
+    ctx = {}
+    if field.context:
+        pyson_context = PYSONEncoder().encode(field.context)
+        ctx.update(PYSONDecoder(
+                EvalEnvironment(record, record.__class__)).decode(
+                pyson_context))
+    datetime_ = None
+    if getattr(field, 'datetime_field', None):
+        datetime_ = getattr(record, field.datetime_field, None)
+        ctx = {'_datetime': datetime_}
+    return ctx
+
+
 def on_change_result(record):
     return record._changed_values
 
@@ -254,6 +272,22 @@ class Field(object):
             'loading must be "lazy" or "eager"'
         self.loading = loading
         self.name = None
+
+    @property
+    def string(self):
+        return self.__string
+
+    @string.setter
+    def string(self, value):
+        self.__string = StringPartitioned(value)
+
+    @property
+    def help(self):
+        return self.__help
+
+    @help.setter
+    def help(self, value):
+        self.__help = StringPartitioned(value)
 
     def _get_domain(self):
         return self.__domain
@@ -386,6 +420,52 @@ class Field(object):
             model.__rpc__.setdefault(
                 func_name, RPC(instantiate=0, result=result))
 
+    def definition(self, model, language):
+        pool = Pool()
+        Translation = pool.get('ir.translation')
+        encoder = PYSONEncoder()
+        definition = {
+            'context': encoder.encode(self.context),
+            'loading': self.loading,
+            'name': self.name,
+            'on_change': list(self.on_change),
+            'on_change_with': list(self.on_change_with),
+            'readonly': self.readonly,
+            'required': self.required,
+            'states': encoder.encode(self.states),
+            'type': self._type,
+            'domain': encoder.encode(self.domain),
+            'searchable': hasattr(model, 'search'),
+            'sortable': hasattr(model, 'search'),
+            }
+
+        # Add id to on_change's if they are not cached
+        # Not having the id increase the efficiency of the cache
+        for method in ['on_change', 'on_change_with']:
+            changes = definition[method]
+            if changes:
+                method_name = method + '_' + self.name
+                if not model.__rpc__[method_name].cache:
+                    changes.append('id')
+
+        name = '%s,%s' % (model.__name__, self.name)
+        for attr, ttype in [('string', 'field'), ('help', 'help')]:
+            definition[attr] = ''
+            for source in getattr(self, attr):
+                definition[attr] += (
+                    Translation.get_source(name, ttype, language, source)
+                    or source)
+        return definition
+
+    def definition_translations(self, model, language):
+        "Returns sources used for definition"
+        name = '%s,%s' % (model.__name__, self.name)
+        translations = []
+        for attr, ttype in [('string', 'field'), ('help', 'help')]:
+            for source in getattr(self, attr):
+                translations.append((name, ttype, language, source))
+        return translations
+
 
 class FieldTranslate(Field):
 
@@ -495,3 +575,8 @@ class FieldTranslate(Field):
             language = get_parent_language(language)
 
         return [Coalesce(column, self.sql_column(table))]
+
+    def definition(self, model, language):
+        definition = super().definition(model, language)
+        definition['translate'] = self.translate
+        return definition

@@ -2,11 +2,13 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
 
-from setuptools import setup, find_packages
+from setuptools import setup, find_packages, Command
+import glob
 import os
 import re
 import io
 import platform
+import subprocess
 
 
 def read(fname):
@@ -18,6 +20,26 @@ def read(fname):
 def get_version():
     init = read(os.path.join('trytond', '__init__.py'))
     return re.search('__version__ = "([0-9.]*)"', init).group(1)
+
+
+class rnc2rng(Command):
+    description = "Generate rng files from rnc"
+    user_options = []
+
+    def initialize_options(self):
+        pass
+
+    def finalize_options(self):
+        pass
+
+    def run(self):
+        os.chdir(os.path.dirname(__file__) or '.')
+        for path in glob.glob('**/*.rnc', recursive=True):
+            root, ext = os.path.splitext(path)
+            cmd = ['rnc2rng', path, root + '.rng']
+            self.announce(' '.join(cmd))
+            subprocess.run(cmd)
+
 
 version = get_version()
 major_version, minor_version, _ = version.split('.', 2)
@@ -40,11 +62,17 @@ else:
 setup(name=name,
     version=version,
     description='Tryton server',
-    long_description=read('README'),
+    long_description=read('README.rst'),
     author='Tryton',
-    author_email='issue_tracker@tryton.org',
+    author_email='bugs@tryton.org',
     url='http://www.tryton.org/',
     download_url=download_url,
+    project_urls={
+        "Bug Tracker": 'https://bugs.tryton.org/',
+        "Documentation": 'https://docs.tryton.org/',
+        "Forum": 'https://www.tryton.org/forum',
+        "Source Code": 'https://hg.tryton.org/trytond',
+        },
     keywords='business application platform ERP',
     packages=find_packages(exclude=['*.modules.*', 'modules.*', 'modules',
             '*.proteus.*', 'proteus.*', 'proteus']),
@@ -62,11 +90,13 @@ setup(name=name,
     scripts=[
         'bin/trytond',
         'bin/trytond-admin',
+        'bin/trytond-console',
         'bin/trytond-cron',
         'bin/trytond-worker',
         ],
     classifiers=[
         'Development Status :: 5 - Production/Stable',
+        'Environment :: Console',
         'Environment :: No Input/Output (Daemon)',
         'Framework :: Tryton',
         'Intended Audience :: Developers',
@@ -77,6 +107,7 @@ setup(name=name,
         'Natural Language :: Czech',
         'Natural Language :: Dutch',
         'Natural Language :: English',
+        'Natural Language :: Finnish',
         'Natural Language :: French',
         'Natural Language :: German',
         'Natural Language :: Hungarian',
@@ -87,7 +118,9 @@ setup(name=name,
         'Natural Language :: Russian',
         'Natural Language :: Slovenian',
         'Natural Language :: Spanish',
+        'Natural Language :: Turkish',
         'Operating System :: OS Independent',
+        'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.4',
         'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: 3.6',
@@ -98,7 +131,7 @@ setup(name=name,
         ],
     platforms='any',
     license='GPL-3',
-    python_requires='>=3.4',
+    python_requires='>=3.5',
     install_requires=[
         'lxml >= 2.0',
         'relatorio[fodt] >= 0.7.0',
@@ -116,8 +149,12 @@ setup(name=name,
         'Levenshtein': ['python-Levenshtein'],
         'BCrypt': ['passlib[bcrypt]'],
         'html2text': ['html2text'],
+        'coroutine': ['gevent>=1.1'],
         },
     zip_safe=False,
     test_suite='trytond.tests',
     test_loader='trytond.test_loader:Loader',
+    cmdclass={
+        'update_rng': rnc2rng,
+        },
     )

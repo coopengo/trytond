@@ -58,7 +58,7 @@ class ModelTestCase(unittest.TestCase):
 
     @with_transaction()
     def test_names_model(self):
-        "Test __names__  for model only"
+        "Test __names__ for model only"
         pool = Pool()
         Model = pool.get('test.model')
 

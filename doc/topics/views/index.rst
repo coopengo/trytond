@@ -29,11 +29,13 @@ the name of the XML file in the `view` directory:
   </record>
 
 
-There is three types of views:
+There are different types of views:
 
     * Form
 
     * Tree
+
+    * List-Forms
 
     * Graph
 
@@ -291,6 +293,8 @@ Display an image.
 
     * ``colspan``: see in common-attributes-colspan_.
 
+    * ``size``: the size of the image in pixels. The default value is 48.
+
     * ``states``: see in common-attributes-states_.
 
     * ``help``: see in common-attributes-help_.
@@ -379,34 +383,6 @@ of the ``string``, ``confirm`` and ``help`` attributes can be can be defined.
     * ``keyword``: specify where will the button be displayed in the client
       toolbar. The valid values are the keywords starting with `form_` from
       :ref:`Actions <topics-actions>` without the `form_` part.
-
-The button can be used to display actions, relates...
-There are different ways to add an toolbar Action. This is the dynamic way.
-Instead the "keyword form" which is unchangeable.
-We use the buttons of a view.
-
-     * ``keywords`` :  This attribute determines where the button will be display.
-
-       There are five places:
-
-           * ``open`` : Open tree
-
-           * ``action`` : Action
-
-	   * ``print`` : Print form
-
-	   * ``email`` : Email
-
-	   * ``form_relate`` : Form relate
-
-If there is no attribute keyword, the default place is Action.
-
-Example:
-
-.. highlight:: xml
-::
-    <button name="button_name" string="button_string" keywords="action"/>
-    <button name="button_name" string="button_string" keywords="action,relate"/>
 
 notebook
 ^^^^^^^^
@@ -648,6 +624,16 @@ Display a button.
 
     * ``help``: see in common-attributes-help_
 
+List-Form view
+==============
+
+The list-form views use the same schema as the form views.
+
+List-forms display records as a list of editable forms.
+
+.. note:: The performance of the list-form does not allow to scale well for
+          large number of records
+
 Graph view
 ==========
 
@@ -833,7 +819,8 @@ Each calendar view must start with this tag.
     * ``dtend``: The name of the field that contains the end date.
 
     * ``mode``: An optional name for the view that will be used first.
-      Available views are: `week` and `month`. The default value is `month`.
+      Available views are: `day`, `week` and `month`. The default value is 
+      `month`.
 
     * ``color``: An optional field name that contains the text color for the
       event. The default value is `black`.

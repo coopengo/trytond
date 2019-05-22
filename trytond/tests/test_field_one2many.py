@@ -2,7 +2,8 @@
 # this repository contains the full copyright notices and license terms.
 import unittest
 
-from trytond.exceptions import UserError
+from trytond.model.exceptions import (
+    RequiredValidationError, SizeValidationError)
 from trytond.pool import Pool
 from trytond.tests.test_tryton import activate_module, with_transaction
 
@@ -341,7 +342,7 @@ class FieldOne2ManyTestCase(unittest.TestCase, CommonTestCaseMixin):
         "Test create one2many required without value"
         One2Many = Pool().get('test.one2many_required')
 
-        with self.assertRaises(UserError):
+        with self.assertRaises(RequiredValidationError):
             One2Many.create([{}])
 
     @with_transaction()
@@ -362,7 +363,7 @@ class FieldOne2ManyTestCase(unittest.TestCase, CommonTestCaseMixin):
         "Test create one2many size invalid"
         One2Many = Pool().get('test.one2many_size')
 
-        with self.assertRaises(UserError):
+        with self.assertRaises(SizeValidationError):
             One2Many.create([{
                         'targets': [
                             ('create', [{}] * 4),
@@ -388,7 +389,7 @@ class FieldOne2ManyTestCase(unittest.TestCase, CommonTestCaseMixin):
         "Test create one2many size pyson invalid"
         One2Many = Pool().get('test.one2many_size_pyson')
 
-        with self.assertRaises(UserError):
+        with self.assertRaises(SizeValidationError):
             One2Many.create([{
                         'limit': 3,
                         'targets': [
@@ -453,6 +454,59 @@ class FieldOne2ManyTestCase(unittest.TestCase, CommonTestCaseMixin):
 
         self.assertListEqual(one2manys, [one2many])
         self.assertListEqual(one2manys_filtered, [])
+
+    @with_transaction()
+    def test_context_attribute(self):
+        "Test context on one2many attribute"
+        pool = Pool()
+        Many2One = pool.get('test.one2many_context')
+
+        record, = Many2One.create([{
+                    'targets': [('create', [{}])],
+                    }])
+
+        self.assertEqual(record.targets[0].context, record.id)
+
+    @with_transaction()
+    def test_context_read(self):
+        "Test context on one2many read"
+        pool = Pool()
+        Many2One = pool.get('test.one2many_context')
+
+        record, = Many2One.create([{
+                    'targets': [('create', [{}])],
+                    }])
+        data, = Many2One.read([record.id], ['targets.context'])
+
+        self.assertEqual(data['targets.'][0]['context'], record.id)
+
+    @with_transaction()
+    def test_context_read_multi(self):
+        "Test context on one2many read multiple records"
+        pool = Pool()
+        Many2One = pool.get('test.one2many_context')
+
+        records = Many2One.create([{
+                    'targets': [('create', [{}])],
+                    }, {
+                    'targets': [('create', [{}])],
+                    }])
+        data = Many2One.read([r.id for r in records], ['targets.context'])
+
+        self.assertEqual(data[0]['targets.'][0]['context'], records[0].id)
+        self.assertEqual(data[1]['targets.'][0]['context'], records[1].id)
+
+    @with_transaction()
+    def test_context_set(self):
+        "Test context on one2many set"
+        pool = Pool()
+        Many2One = pool.get('test.one2many_context')
+        Target = pool.get('test.one2many_context.target')
+
+        target, = Target.create([{}])
+        record = Many2One(targets=[target.id])
+
+        self.assertEqual(record.targets[0].context, record.id)
 
 
 class FieldOne2ManyReferenceTestCase(unittest.TestCase, CommonTestCaseMixin):

@@ -3,8 +3,13 @@
 import base64
 import gzip
 import logging
+import time
 from io import BytesIO
 from functools import wraps
+try:
+    from http import HTTPStatus
+except ImportError:
+    from http import client as HTTPStatus
 
 from werkzeug.wrappers import Request as _Request, Response
 from werkzeug.utils import cached_property
@@ -13,6 +18,7 @@ from werkzeug.datastructures import Authorization
 from werkzeug.exceptions import abort, HTTPException
 
 from trytond import security, backend
+from trytond.exceptions import RateLimitException
 from trytond.pool import Pool
 from trytond.transaction import Transaction
 from trytond.config import config
@@ -81,9 +87,12 @@ class Request(_Request):
         elif auth.type == 'token':
             user_id = auth.get('user_id')
         else:
-            user_id = security.login(
-                database_name, auth.username, auth, cache=False,
-                context=context)
+            try:
+                user_id = security.login(
+                    database_name, auth.username, auth, cache=False,
+                    context=context)
+            except RateLimitException:
+                abort(HTTPStatus.TOO_MANY_REQUESTS)
         return user_id
 
     @cached_property
@@ -140,12 +149,13 @@ def with_pool(func):
     return wrapper
 
 
-def with_transaction(readonly=None):
+def with_transaction(readonly=None, user=0, context=None):
     from trytond.worker import run_task
 
     def decorator(func):
         @wraps(func)
         def wrapper(request, pool, *args, **kwargs):
+            nonlocal user, context
             DatabaseOperationalError = backend.get('DatabaseOperationalError')
             readonly_ = readonly  # can not modify non local
             if readonly_ is None:
@@ -153,10 +163,19 @@ def with_transaction(readonly=None):
                     readonly_ = False
                 else:
                     readonly_ = True
-            context = {'_request': request.context}
-            for count in range(config.getint('database', 'retry'), -1, -1):
+            if context is None:
+                context = {}
+            else:
+                context = context.copy()
+            context['_request'] = request.context
+            if user == 'request':
+                user = request.user_id
+            retry = config.getint('database', 'retry')
+            for count in range(retry, -1, -1):
+                if count != retry:
+                    time.sleep(0.02 * (retry - count))
                 with Transaction().start(
-                        pool.database_name, 0, readonly=readonly_,
+                        pool.database_name, user, readonly=readonly_,
                         context=context) as transaction:
                     try:
                         result = func(request, pool, *args, **kwargs)
@@ -193,13 +212,13 @@ def user_application(name, json=True):
                 auth_type, auth_info = authorization.split(None, 1)
                 auth_type = auth_type.lower()
             except ValueError:
-                abort(401)
+                abort(HTTPStatus.UNAUTHORIZED)
             if auth_type != b'bearer':
-                abort(403)
+                abort(HTTPStatus.FORBIDDEN)
 
             application = UserApplication.check(bytes_to_wsgi(auth_info), name)
             if not application:
-                abort(403)
+                abort(HTTPStatus.FORBIDDEN)
             transaction = Transaction()
             # TODO language
             with transaction.set_user(application.user.id), \
@@ -210,7 +229,7 @@ def user_application(name, json=True):
                     if isinstance(e, HTTPException):
                         raise
                     logger.error('%s', request, exc_info=True)
-                    abort(500, e)
+                    abort(HTTPStatus.INTERNAL_SERVER_ERROR, e)
             if not isinstance(response, Response) and json:
                 response = Response(json_.dumps(response, cls=JSONEncoder),
                     content_type='application/json')
