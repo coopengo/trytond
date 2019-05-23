@@ -1335,7 +1335,7 @@ class ModelGraph(Report):
         graph.set('center', '1')
         graph.set('ratio', 'auto')
         cls.fill_graph(models, graph, level=data['level'], filter=filter,
-            ignore_function=data['ignore_function'])
+            ignore_function=data.get('ignore_function', False))
         data = graph.create(prog='dot', format='png')
         return ('png', fields.Binary.cast(data), False, action_report.name)
 
