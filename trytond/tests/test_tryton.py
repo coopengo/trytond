@@ -190,6 +190,10 @@ def _pg_dump(cache_file):
         cache_name, _ = os.path.splitext(os.path.basename(cache_file))
         # Ensure any connection is left open
         database = backend.get('Database')(DB_NAME)
+        # JMO: dirty fix for cases where pg_dump is not installed
+        # and we try to create a template that already exists
+        if db_exist(cache_name):
+            return True
         database.close()
         with Transaction().start(
                 None, 0, close=True, autocommit=True, _nocache=True) \
