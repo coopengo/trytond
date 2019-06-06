@@ -21,7 +21,7 @@ class DatabaseInterface(object):
     def __init__(self, name=''):
         self.name = name
 
-    def _kill_session_query(self):
+    def _kill_session_query(self, database_name):
         raise NotImplementedError
 
     def kill_other_sessions(self, connection, database_name):
