@@ -46,15 +46,14 @@ DB_CACHE = os.environ.get('DB_CACHE')
 Pool.test = True
 
 
-def activate_module(name, cache_name=None):
+def activate_module(modules, cache_name=None):
     '''
     Activate modules for the tested database
     '''
-    # JCA : Allow multiple modules to be installed in unittests. Should be
-    # removed when upgrading to Tryton 5.2
-    modules = [name] if isinstance(name, str) else name
-    cache_name = cache_name or '-'.join(modules)
-    if not db_exist(DB_NAME) and restore_db_cache(cache_name):
+    if isinstance(modules, str):
+        modules = [modules]
+    name = cache_name or '-'.join(modules)
+    if not db_exist(DB_NAME) and restore_db_cache(name):
         return
     create_db()
     with Transaction().start(DB_NAME, 1, close=True) as transaction:
@@ -82,7 +81,7 @@ def activate_module(name, cache_name=None):
             ActivateUpgrade(instance_id).transition_upgrade()
             ActivateUpgrade.delete(instance_id)
             transaction.commit()
-    backup_db_cache(cache_name)
+    backup_db_cache(name)
 
 
 def restore_db_cache(name):
