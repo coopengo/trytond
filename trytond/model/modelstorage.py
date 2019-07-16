@@ -1085,7 +1085,11 @@ class ModelStorage(Model):
                                 break
                             grouped_domain.append(
                                 [('id', 'in', [r.id for r in relations]), d])
-                        new_domains[freeze(grouped_domain)] = grouped_records
+                        else:
+                            new_domains[freeze(grouped_domain)] = \
+                                grouped_records
+                            continue
+                        break
                     else:
                         domains = new_domains
             else:
@@ -1111,7 +1115,7 @@ class ModelStorage(Model):
         def validate_relation_domain(field, records, Relation, domain):
             relations = relation_domain(field, records)
             if relations:
-                for sub_relations in grouped_slice(relations):
+                for sub_relations in grouped_slice(relations, 1):
                     sub_relations = set(sub_relations)
                     # Use root user to skip access rules
                     with Transaction().set_user(0):
@@ -1258,7 +1262,10 @@ class ModelStorage(Model):
                                 test = sel_func()
                             else:
                                 test = sel_func(record)
-                            test = set(dict(test))
+                            try:
+                                test = set(dict(test))
+                            except:
+                                raise Exception((test, field_name, cls))
                         # None and '' are equivalent
                         if '' in test or None in test:
                             test.add('')
