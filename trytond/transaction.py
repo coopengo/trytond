@@ -231,6 +231,7 @@ class Transaction(object):
                 # This just commits the sub transactions to avoid any crashes
                 # which could occur otherwise.
                 sub_transaction.connection.commit()
+            self.started_at = self.monotonic_time()
             Cache.commit(self)
             self.connection.commit()
         except:
