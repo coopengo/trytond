@@ -82,7 +82,7 @@ def activate_module(name, cache_name=None):
             ActivateUpgrade(instance_id).transition_upgrade()
             ActivateUpgrade.delete(instance_id)
             transaction.commit()
-    backup_db_cache(name)
+    backup_db_cache(cache_name)
 
 
 def restore_db_cache(name):
