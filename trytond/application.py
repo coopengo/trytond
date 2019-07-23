@@ -9,23 +9,20 @@ from io import StringIO
 
 __all__ = ['app']
 
+LF = '%(process)s %(thread)s [%(asctime)s] %(levelname)s %(name)s %(message)s'
 log_file = os.environ.get('WSGI_LOG_FILE')
+log_level = os.environ.get('LOG_LEVEL', 'ERROR')
 if log_file:
-    log_level = os.environ.get('LOG_LEVEL', 'ERROR')
     logging.basicConfig(level=getattr(logging, log_level),
         filename=log_file)
 
-# Logging must be set before importing
-logging_config = os.environ.get('TRYTOND_LOGGING_CONFIG')
-logging_level = int(os.environ.get(
-        'TRYTOND_LOGGING_LEVEL', default=logging.ERROR))
-if logging_config:
-    logging.config.fileConfig(logging_config)
-else:
-    logformat = ('%(process)s %(thread)s [%(asctime)s] '
-        '%(levelname)s %(name)s %(message)s')
-    level = max(logging_level, logging.NOTSET)
-    logging.basicConfig(level=level, format=logformat)
+if not log_file:
+    # Logging must be set before importing
+    logging_config = os.environ.get('TRYTOND_LOGGING_CONFIG')
+    if logging_config:
+        logging.config.fileConfig(logging_config)
+    else:
+        logging.basicConfig(level=getattr(logging, log_level), format=LF)
 logging.captureWarnings(True)
 
 if os.environ.get('TRYTOND_COROUTINE'):
