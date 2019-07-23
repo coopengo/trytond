@@ -19,6 +19,8 @@ if not log_file:
     logging_config = os.environ.get('TRYTOND_LOGGING_CONFIG')
     if logging_config:
         logging.config.fileConfig(logging_config)
+    else:
+        logging.basicConfig(level=getattr(logging, log_level), format=LF)
 
 from trytond.pool import Pool
 from trytond.wsgi import app
