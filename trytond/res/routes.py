@@ -15,6 +15,17 @@ from trytond.wsgi import app
 logger = logging.getLogger(__name__)
 
 
+@app.route('/liveness', methods=['GET'])
+def livenessness(request):
+    return 'alive\n'
+
+
+@app.route('/<database_name>/readiness', methods=['GET'])
+@with_pool
+def readiness(request, pool):
+    return 'ready\n'
+
+
 @app.route('/<database_name>/user/application/', methods=['POST', 'DELETE'])
 @allow_null_origin
 @with_pool
