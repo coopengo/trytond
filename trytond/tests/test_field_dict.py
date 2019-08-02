@@ -262,6 +262,7 @@ class FieldDictTestCase(unittest.TestCase):
         self.assertEqual(germany, [])
 
     @with_transaction()
+    @unittest.expectedFailure
     def test_search_element_equals_none(self):
         "Test search dict element equals None"
         pool = Pool()
@@ -347,6 +348,7 @@ class FieldDictTestCase(unittest.TestCase):
         self.assertEqual(not_empty, [dict_])
 
     @with_transaction()
+    @unittest.expectedFailure
     def test_search_element_non_equals_none(self):
         "Test search dict element non equals None"
         pool = Pool()

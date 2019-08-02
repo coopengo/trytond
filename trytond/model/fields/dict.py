@@ -55,8 +55,12 @@ class Dict(Field):
         if isinstance(value, dict):
             d = {}
             for k, v in value.items():
-                if v is None:
-                    continue
+                # JMO : some Coog tests rely on data with all values at None
+                # JCA : Actually, without this, extra data without a value will
+                # never be stored, which is definitively not what we want,
+                # since the presence of the key is an information in itself
+                # if v is None:
+                #     continue
                 if isinstance(v, list):
                     v = list(sorted(set(v)))
                 d[k] = v
