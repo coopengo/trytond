@@ -47,7 +47,8 @@ class Dict(Field):
         if value is None:
             return None
         assert isinstance(value, dict)
-        value = {k: v for k, v in value.items() if v is not None}
+        # JMO : some Coog tests rely on data with all values at None
+        # value = {k: v for k, v in value.items() if v is not None}
         return dumps(value)
 
     def translated(self, name=None, type_='values'):
