@@ -169,6 +169,7 @@ def _pg_restore(cache_file):
         with Transaction().start(
                 None, 0, close=True, autocommit=True) as transaction:
             database.kill_other_sessions(transaction.connection, DB_NAME)
+            time.sleep(1)
             transaction.database.drop(transaction.connection, DB_NAME)
             transaction.database.create(
                 transaction.connection, DB_NAME, cache_name)
