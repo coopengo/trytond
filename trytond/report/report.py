@@ -307,7 +307,7 @@ class Report(URLMixin, PoolBase):
         "converts the report data to another mimetype if necessary"
         # AKE: support printing via external api
         if config.get('report', 'api', default=None):
-            return cls.convert_api(report, data)
+            return cls.convert_api(report, data, timeout)
         elif config.get('report', 'unoconv', default=True):
             return cls.convert_unoconv(report, data, timeout)
         else:
