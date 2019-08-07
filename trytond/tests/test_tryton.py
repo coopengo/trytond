@@ -168,6 +168,9 @@ def _pg_restore(cache_file):
         database = backend.get('Database')(cache_name)
         with Transaction().start(
                 None, 0, close=True, autocommit=True) as transaction:
+            # Clean up cache invalidation channels
+            if cache_name in Cache._listener:
+                del Cache._listener[cache_name]
             database.kill_other_sessions(transaction.connection, cache_name)
             time.sleep(1)
             transaction.database.drop(transaction.connection, DB_NAME)
@@ -697,6 +700,9 @@ def drop_db(name=DB_NAME):
 
         with Transaction().start(
                 None, 0, close=True, autocommit=True) as transaction:
+            # Clean up cache invalidation channels
+            if name in Cache._listener:
+                del Cache._listener[name]
             database.kill_other_sessions(transaction.connection,
                 name)
             database.drop(transaction.connection, name)
