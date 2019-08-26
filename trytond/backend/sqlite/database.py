@@ -393,6 +393,10 @@ class Database(DatabaseInterface):
         os.remove(os.path.join(config.get('database', 'path'),
             database_name + '.sqlite'))
 
+    def _kill_session_query(self, database_name):
+        # JMO : not necessary
+        return 'select 1'
+
     def list(self, hostname=None):
         res = []
         listdir = [':memory:']

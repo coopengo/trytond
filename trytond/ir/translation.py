@@ -1251,7 +1251,7 @@ class TranslationClean(Wizard):
                 or not getattr(field, 'translate_selection', True)):
             return True
         if (isinstance(field.selection, (tuple, list))
-                and translation.src not in list(dict(field.selection).values())):
+                and translation.src not in dict(field.selection).values()):
             return True
 
     @staticmethod
