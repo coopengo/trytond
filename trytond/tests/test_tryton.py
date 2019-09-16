@@ -230,7 +230,7 @@ class ModuleTestCase(unittest.TestCase):
         modules = [cls.module]
         if cls.extras:
             modules.extend(cls.extras)
-        activate_module(modules)
+        activate_module(modules, cache_name=cls.module)
         super(ModuleTestCase, cls).setUpClass()
 
     @classmethod
