@@ -149,6 +149,14 @@ def with_pool(func):
     return wrapper
 
 
+def with_pool_by_alias(func):
+    @wraps(func)
+    def wrapper(request, database_alias, *args, **kwargs):
+        database_name = config.get('database_aliases', database_alias)
+        return with_pool(func)(request, database_name, *args, **kwargs)
+    return wrapper
+
+
 def with_transaction(readonly=None, user=0, context=None):
     from trytond.worker import run_task
 
