@@ -223,6 +223,7 @@ class ModuleTestCase(unittest.TestCase):
     'Trytond Test Case'
     module = None
     extras = None
+    cache_name = None
 
     @classmethod
     def setUpClass(cls):
@@ -230,7 +231,7 @@ class ModuleTestCase(unittest.TestCase):
         modules = [cls.module]
         if cls.extras:
             modules.extend(cls.extras)
-        activate_module(modules, cache_name=cls.module)
+        activate_module(modules, cache_name=cls.cache_name)
         super(ModuleTestCase, cls).setUpClass()
 
     @classmethod
