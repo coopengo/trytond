@@ -151,7 +151,7 @@ def with_pool(func):
 
 def with_pool_by_config(func):
     @wraps(func)
-    def wrapper(request, database_alias, *args, **kwargs):
+    def wrapper(request, *args, **kwargs):
         uri = config.get('database', 'uri')
         database_name = parse_uri(uri).path[1:]
         return with_pool(func)(request, database_name, *args, **kwargs)
