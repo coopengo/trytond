@@ -18,7 +18,7 @@ from werkzeug.wrappers import Request as _Request
 from werkzeug.wrappers import Response
 
 from trytond import backend, security
-from trytond.config import config
+from trytond.config import config, parse_uri
 from trytond.exceptions import RateLimitException
 from trytond.pool import Pool
 from trytond.tools import cached_property
@@ -176,6 +176,15 @@ def with_pool(func):
             with Transaction().start(database_name, 0, readonly=True):
                 pool.init()
         return func(request, pool, *args, **kwargs)
+    return wrapper
+
+
+def with_pool_by_config(func):
+    @wraps(func)
+    def wrapper(request, *args, **kwargs):
+        uri = config.get('database', 'uri')
+        database_name = parse_uri(uri).path[1:]
+        return with_pool(func)(request, database_name, *args, **kwargs)
     return wrapper
 
 
