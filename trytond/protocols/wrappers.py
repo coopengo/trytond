@@ -21,7 +21,7 @@ from trytond import security, backend
 from trytond.exceptions import RateLimitException
 from trytond.pool import Pool
 from trytond.transaction import Transaction
-from trytond.config import config
+from trytond.config import config, parse_uri
 
 logger = logging.getLogger(__name__)
 
@@ -146,6 +146,15 @@ def with_pool(func):
             with Transaction().start(database_name, 0, readonly=True):
                 pool.init()
         return func(request, pool, *args, **kwargs)
+    return wrapper
+
+
+def with_pool_by_config(func):
+    @wraps(func)
+    def wrapper(request, *args, **kwargs):
+        uri = config.get('database', 'uri')
+        database_name = parse_uri(uri).path[1:]
+        return with_pool(func)(request, database_name, *args, **kwargs)
     return wrapper
 
 
