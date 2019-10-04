@@ -1,3 +1,21 @@
+Version 5.2.6 - 2019-09-15
+* Bug fixes (see mercurial logs for details)
+
+Version 5.2.5 - 2019-08-17
+* Bug fixes (see mercurial logs for details)
+
+Version 5.2.4 - 2019-08-01
+* Bug fixes (see mercurial logs for details)
+
+Version 5.2.3 - 2019-07-17
+* Bug fixes (see mercurial logs for details)
+
+Version 5.2.2 - 2019-07-01
+* Bug fixes (see mercurial logs for details)
+
+Version 5.2.1 - 2019-06-10
+* Bug fixes (see mercurial logs for details)
+
 Version 5.2.0 - 2019-05-06
 * Bug fixes (see mercurial logs for details)
 * Add sort and translate options to Reference field

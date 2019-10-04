@@ -328,5 +328,5 @@ class Model(URLMixin, PoolBase, metaclass=ModelMeta):
                         value = [r.id for r in value]
                 values[fname] = value
                 if rec_name is not None:
-                    values['%s.rec_name' % fname] = rec_name
+                    values['%s.' % fname] = {'rec_name': rec_name}
         return values

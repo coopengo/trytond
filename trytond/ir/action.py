@@ -637,14 +637,14 @@ class ActionReport(ActionMixin, ModelSQL, ModelView):
 
     @classmethod
     def set_report_content_html(cls, reports, name, value):
-        value = value.encode('utf-8')
+        if value is not None:
+            value = value.encode('utf-8')
         cls.set_report_content(reports, name[:-5], value)
 
     @fields.depends('name', 'template_extension')
     def on_change_with_report_content_name(self, name=None):
-        if not self.name:
-            return
-        return ''.join([self.name, os.extsep, self.template_extension])
+        return ''.join(
+            filter(None, [self.name, os.extsep, self.template_extension]))
 
     @classmethod
     def get_pyson(cls, reports, name):
