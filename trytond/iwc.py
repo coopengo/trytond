@@ -34,10 +34,6 @@ class Listener:
                     listener.start()
 
     @classmethod
-    def get_worker_id(cls):
-        return '%s-%s' % (os.environ.get('HOSTNAME', 'localhost'), os.getpid())
-
-    @classmethod
     def _listen(cls, dbname):
         Database = backend.get('Database')
         database = Database(dbname)
@@ -62,7 +58,7 @@ class Listener:
                     if notification.payload:
                         reset = json.loads(notification.payload)
                         for name in reset:
-                            me = cls.get_worker_id()
+                            me = get_worker_id()
                             if 'init_pool' in name and me != name.split(
                                     '|')[-1]:
                                 cls.on_init_pool(dbname)
@@ -90,21 +86,25 @@ class Listener:
             if listener:
                 listener.join()
 
-    @classmethod
-    def broadcast_init_pool(cls, dbname):
-        Database = backend.get('Database')
-        database = Database(dbname)
-        conn = database.get_connection()
-        try:
-            cursor = conn.cursor()
-            cursor.execute(
-                'NOTIFY "%s", %%s' % 'ir_cache',
-                (json.dumps(['init_pool|%s' % cls.get_worker_id()],
-                    separators=(',', ':')),))
-            conn.commit()
-        finally:
-            database.put_connection(conn)
-        logger.info('init_pool(%s)', dbname)
+
+def get_worker_id():
+    return '%s-%s' % (os.environ.get('HOSTNAME', 'localhost'), os.getpid())
+
+
+def broadcast_init_pool(dbname):
+    Database = backend.get('Database')
+    database = Database(dbname)
+    conn = database.get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            'NOTIFY "%s", %%s' % 'ir_cache',
+            (json.dumps(['init_pool|%s' % get_worker_id()],
+                separators=(',', ':')),))
+        conn.commit()
+    finally:
+        database.put_connection(conn)
+    logger.info('init_pool(%s)', dbname)
 
 
 def start(db_name):

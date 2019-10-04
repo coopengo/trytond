@@ -153,10 +153,10 @@ class Pool(object):
         Set update to proceed to update
         lang is a list of language code to be updated
         '''
-        # AKE: inter-workers communication
+        # ABDC: inter-workers communication
         from trytond import iwc
         with self._lock:
-            # AKE: inter-workers communication
+            # ABDC: inter-workers communication
             iwc.start(self.database_name)
             if not self._started:
                 self.start()
@@ -175,9 +175,9 @@ class Pool(object):
                     lang=lang, activatedeps=activatedeps)
             if restart:
                 self.init()
-            # AKE: inter-workers communication
+            # ABDC: inter-workers communication
             if update:
-                iwc.Listener.broadcast_init_pool(self.database_name)
+                iwc.broadcast_init_pool(self.database_name)
 
     def post_init(self, update):
         for hook in self._post_init_calls[self.database_name]:
