@@ -18,6 +18,7 @@ from trytond.transaction import Transaction
 from trytond.pyson import Eval
 from trytond.rpc import RPC
 
+
 __all__ = [
     'Module', 'ModuleDependency', 'ModuleConfigWizardItem',
     'ModuleConfigWizardFirst', 'ModuleConfigWizardOther',
@@ -45,7 +46,8 @@ class Module(ModelSQL, ModelView):
     "Module"
     __name__ = "ir.module"
     name = fields.Char("Name", readonly=True, required=True)
-    version = fields.Function(fields.Char('Version'), 'get_version')
+    # ABDC: Store Version
+    version = fields.Char('Version')
     dependencies = fields.One2Many('ir.module.dependency',
         'module', 'Dependencies', readonly=True)
     parents = fields.Function(fields.One2Many('ir.module', None, 'Parents'),
@@ -107,11 +109,15 @@ class Module(ModelSQL, ModelView):
         sql_table = cls.__table__()
         model_data_sql_table = ModelData.__table__()
         cursor = Transaction().connection.cursor()
+        table = cls.__table__()
 
         # Migration from 3.6: remove double module
         old_table = 'ir_module_module'
         if TableHandler.table_exist(old_table):
             TableHandler.table_rename(old_table, cls._table)
+
+            # ABDC: Migration version from function field to stored char
+            migrate_version = table.column_exist('version')
 
         super(Module, cls).__register__(module_name)
 
@@ -136,6 +142,14 @@ class Module(ModelSQL, ModelView):
                 [model_data_sql_table.module], ['ir'],
                 where=((model_data_sql_table.module == 'res')
                     & (model_data_sql_table.fs_id.in_(button_fs_ids)))))
+
+        # ABDC: Migration version from function field to stored char
+        if migrate_version:
+            module_list = [(x, get_module_info(x)) for x in get_module_list()]
+            for (name, info) in module_list:
+                cursor.execute(*table.insert(columns=[table.version],
+                        values=[info.get('version', '')],
+                        where=table.name == name))
 
     @staticmethod
     def default_state():

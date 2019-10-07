@@ -11,9 +11,20 @@ from trytond.transaction import Transaction
 from trytond import backend
 from trytond.pool import Pool
 from trytond.config import config
+from trytond.modules import get_module_list, get_module_info
 
 __all__ = ['run']
 logger = logging.getLogger(__name__)
+
+
+def _check_update_needed(db_name, options):
+    if not options.check_update:
+        return True
+    module_list = [(x, get_module_info(x)) for x in get_module_list()]
+    with Transaction().start(db_name, 0) as transaction:
+
+        cursor = transaction.connection.cursor()
+        cursor.execute()
 
 
 def run(options):
@@ -49,7 +60,9 @@ def run(options):
             lang = set()
         lang |= set(options.languages)
         pool = Pool(db_name)
-        pool.init(update=options.update, lang=list(lang),
+        pool.init(update=options.update and _check_update_needed(db_name,
+                options),
+            lang=list(lang),
             activatedeps=options.activatedeps)
 
         if options.update_modules_list:
