@@ -813,11 +813,7 @@ class ModelView(Model):
                         value = value.id
             elif field._type == 'one2many':
                 targets = value
-                # JMO: I had to revert the fix
-                # for https://bugs.tryton.org/issue8605.
-                # Otherwise, some of our test scenarios would fail.
-                # [scenario_endorsement_insurance for example]
-                init_targets = list(init_values.get(fname, []))
+                init_targets = list(init_values.get(fname, targets))
                 value = collections.defaultdict(list)
                 value['remove'] = [t.id for t in init_targets if t.id]
                 for i, target in enumerate(targets):
