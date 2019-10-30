@@ -79,7 +79,7 @@ def start():
         port = url.port
         db = url.path.strip('/')
         broker = redis.StrictRedis(host=host, port=port, db=db)
-        listener = Listener(broker, {'init_pool': on_init_pool})
+        listener = Listener(broker, {b'init_pool': on_init_pool})
         listener.start()
     else:
         logger.info('init_pool: %s no redis config to start', get_worker_id())
