@@ -207,9 +207,12 @@ class MemoryCache(BaseCache):
         dbname = database.name
         if not _clear_timeout and transaction.database.has_channel():
             with transaction.connection.cursor() as cursor:
-                cursor.execute(
-                    'NOTIFY "%s", %%s' % cls._channel,
-                    (json.dumps(list(reset), separators=(',', ':')),))
+                # JCA: Fix for https://bugs.tryton.org/issue8781
+                resets = list(reset)
+                for i in range(0, len(resets), 10):
+                    cursor.execute(
+                        'NOTIFY "%s", %%s' % cls._channel,
+                        (json.dumps(resets[i:i + 10], separators=(',', ':')),))
         else:
             connection = database.get_connection(
                 readonly=False, autocommit=True)
