@@ -24,6 +24,9 @@ class DictSchemaMixin(object):
     _rec_name = 'string'
     name = fields.Char('Name', required=True)
     string = fields.Char('String', translate=True, required=True)
+    help = fields.Text(
+        "Help",
+        translate=True)
     type_ = fields.Selection([
             ('boolean', 'Boolean'),
             ('integer', 'Integer'),
@@ -117,6 +120,7 @@ class DictSchemaMixin(object):
                 'id': record.id,
                 'name': record.name,
                 'string': record.string,
+                'help': record.help,
                 'type_': record.type_,
                 'domain': record.domain,
                 }
