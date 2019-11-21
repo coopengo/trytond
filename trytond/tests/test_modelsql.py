@@ -282,6 +282,7 @@ class ModelSQLTestCase(unittest.TestCase):
             # timestamp precision of sqlite is the second
             time.sleep(1)
 
+        transaction.timestamp[str(record)] = timestamp
         ModelsqlTimestamp.write([record], {})
         transaction.commit()
 
@@ -292,6 +293,10 @@ class ModelSQLTestCase(unittest.TestCase):
         transaction.timestamp[str(record)] = timestamp
         self.assertRaises(ConcurrencyException,
             ModelsqlTimestamp.delete, [record])
+
+        transaction.timestamp[str(record)] = None
+        ModelsqlTimestamp.write([record], {})
+        transaction.commit()
 
         transaction.timestamp.pop(str(record), None)
         ModelsqlTimestamp.write([record], {})
