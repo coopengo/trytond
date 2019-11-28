@@ -166,14 +166,8 @@ def _pg_restore(cache_file):
     except OSError:
         cache_name, _ = os.path.splitext(os.path.basename(cache_file))
         cache_name = backend.get('TableHandler').convert_name(cache_name)
-        database = backend.get('Database')(cache_name)
         with Transaction().start(
                 None, 0, close=True, autocommit=True) as transaction:
-            # Clean up cache invalidation channels
-            if cache_name in Cache._listener:
-                del Cache._listener[cache_name]
-            database.kill_other_sessions(transaction.connection, cache_name)
-            time.sleep(1)
             transaction.database.drop(transaction.connection, DB_NAME)
             transaction.database.create(
                 transaction.connection, DB_NAME, cache_name)
@@ -191,16 +185,14 @@ def _pg_dump(cache_file):
         cache_name, _ = os.path.splitext(os.path.basename(cache_file))
         cache_name = backend.get('TableHandler').convert_name(cache_name)
         # Ensure any connection is left open
-        database = backend.get('Database')(DB_NAME)
-        database.close()
-        with Transaction().start(
-                None, 0, close=True, autocommit=True) as transaction:
-            database.kill_other_sessions(transaction.connection, DB_NAME)
+        backend.get('Database')(DB_NAME).close()
         with Transaction().start(
                 None, 0, close=True, autocommit=True) as transaction:
             transaction.database.create(
                 transaction.connection, cache_name, DB_NAME)
         open(cache_file, 'a').close()
+        if DB_NAME in Cache._listener:
+            del Cache._listener[DB_NAME]
         return True
 
 
@@ -700,17 +692,14 @@ def drop_db(name=DB_NAME):
         Database = backend.get('Database')
         database = Database(name)
         database.close()
+        if name in Cache._listener:
+            del Cache._listener[name]
 
         with Transaction().start(
                 None, 0, close=True, autocommit=True) as transaction:
-            # Clean up cache invalidation channels
-            if name in Cache._listener:
-                del Cache._listener[name]
-            database.kill_other_sessions(transaction.connection,
-                name)
+            Cache.drop(name)
             database.drop(transaction.connection, name)
             Pool.stop(name)
-            Cache.drop(name)
 
 
 def drop_create(name=DB_NAME, lang='en'):
