@@ -24,13 +24,6 @@ class DatabaseInterface(object):
     def _kill_session_query(self, database_name):
         raise NotImplementedError
 
-    def kill_other_sessions(self, connection, database_name):
-        '''
-        Kill all sessions using the given database name
-        '''
-        cursor = connection.cursor()
-        cursor.execute(self._kill_session_query(database_name))
-
     def connect(self):
         '''
         Connect to the database
