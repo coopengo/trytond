@@ -162,7 +162,6 @@ def _pg_restore(cache_file):
     cmd.extend(options)
     cmd.append(cache_file)
     try:
-        raise OSError
         return not subprocess.call(cmd, env=env)
     except OSError:
         cache_name, _ = os.path.splitext(os.path.basename(cache_file))
@@ -181,7 +180,6 @@ def _pg_dump(cache_file):
     cmd.extend(options)
     cmd.append(DB_NAME)
     try:
-        raise OSError
         return not subprocess.call(cmd, env=env)
     except OSError:
         cache_name, _ = os.path.splitext(os.path.basename(cache_file))
