@@ -3,6 +3,7 @@
 
 
 from trytond.model import ModelView, fields
+from trytond.pool import Pool
 
 
 __all__ = [
@@ -143,3 +144,15 @@ class ModelViewCircularDepends(ModelView):
     foo = fields.Char("Char", depends=['bar'])
     bar = fields.Char("Char", depends=['foobar'])
     foobar = fields.Char("Char", depends=['foo'])
+
+
+def register(module):
+    Pool.register(
+        ModelViewChangedValues,
+        ModelViewChangedValuesTarget,
+        ModelViewButton,
+        ModelViewButtonDepends,
+        ModelViewRPC,
+        ModelViewEmptyPage,
+        ModelViewCircularDepends,
+        module=module, type_='model')
