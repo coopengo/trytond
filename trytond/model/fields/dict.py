@@ -47,8 +47,16 @@ class Dict(Field):
         if value is None:
             return None
         assert isinstance(value, dict)
-        # JMO : some Coog tests rely on data with all values at None
-        # value = {k: v for k, v in value.items() if v is not None}
+        if isinstance(value, dict):
+            d = {}
+            for k, v in value.items():
+                # JMO : some Coog tests rely on data with all values at None
+                # if v is None:
+                #     continue
+                if isinstance(v, list):
+                    v = list(sorted(set(v)))
+                d[k] = v
+            value = d
         return dumps(value)
 
     def translated(self, name=None, type_='values'):
@@ -75,6 +83,8 @@ class Dict(Field):
             value = int(value)
         if isinstance(value, (Select, CombiningQuery)):
             return value
+        if isinstance(value, (list, tuple)):
+            value = sorted(set(value))
         if operator.endswith('in'):
             return [dumps(v) for v in value]
         else:
@@ -102,33 +112,51 @@ class Dict(Field):
         table, _ = tables[None]
         name, key = name.split('.', 1)
         Operator = SQL_OPERATORS[operator]
-        column = self.sql_column(table)
-        column = self._domain_column(operator, column, key)
+        raw_column = self.sql_column(table)
+        column = self._domain_column(operator, raw_column, key)
         expression = Operator(column, self._domain_value(operator, value))
         if operator in {'=', '!='}:
             # Try to use custom operators in case there is indexes
-            raw_column = self.sql_column(table)
             try:
                 if value is None:
                     expression = database.json_key_exists(
                         raw_column, key)
                     if operator == '=':
                         expression = operators.Not(expression)
-                    return expression
-                else:
+                # we compare on multi-selection by doing an equality check and
+                # not a contain check
+                elif not isinstance(value, (list, tuple)):
                     expression = database.json_contains(
                         raw_column, dumps({key: value}))
                     if operator == '!=':
                         expression = operators.Not(expression)
                         expression &= database.json_key_exists(
                             raw_column, key)
-                    return expression
+                return expression
             except NotImplementedError:
                 pass
-        if isinstance(expression, operators.In) and not expression.right:
-            expression = Literal(False)
-        elif isinstance(expression, operators.NotIn) and not expression.right:
-            expression = Literal(True)
+        elif operator.endswith('in'):
+            # Try to use custom operators in case there is indexes
+            if operator == 'in':
+                none_value = False
+                op = '='
+            else:
+                none_value = True
+                op = '!='
+
+            if not expression.right:
+                expression = Literal(none_value)
+            elif isinstance(value, (list, tuple)):
+                try:
+                    expression = Literal(not bool(value))
+                    for v in value:
+                        expression |= database.json_contains(
+                            self._domain_column(op, raw_column, key),
+                            dumps(v))
+                    if operator.startswith('not'):
+                        expression = ~expression
+                except NotImplementedError:
+                    pass
         expression = self._domain_add_null(column, operator, value, expression)
         return expression
 
