@@ -56,7 +56,7 @@ class Dict(Field):
                 if isinstance(v, list):
                     v = list(sorted(set(v)))
                 d[k] = v
-            value = dumps(d)
+            value = d
         return dumps(value)
 
     def translated(self, name=None, type_='values'):
