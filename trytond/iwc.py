@@ -40,11 +40,11 @@ class Listener:
         if not database.has_channel():
             raise NotImplementedError
 
-        logger.info("listening on channel ir_cache of '%s'", dbname)
+        logger.info("listening on channel ir_update of '%s'", dbname)
         conn = database.get_connection()
         try:
             cursor = conn.cursor()
-            cursor.execute('LISTEN "ir_cache"')
+            cursor.execute('LISTEN "ir_update"')
             conn.commit()
 
             while cls._listener.get(dbname) == threading.current_thread():
@@ -80,11 +80,21 @@ class Listener:
 
     @classmethod
     def stop(cls):
+        to_join = []
         with cls._listener_lock:
-            for dbname in cls._listener:
-                listener = cls._listener.pop(dbname, None)
-            if listener:
-                listener.join()
+            for dbname in list(cls._listener):
+                to_join.append(cls._listener.pop(dbname, None))
+                try:
+                    Database = backend.get('Database')
+                    database = Database(dbname)
+                    conn = database.get_connection()
+                    cursor = conn.cursor()
+                    cursor.execute('NOTIFY ir_update')
+                    conn.commit()
+                finally:
+                    database.put_connection(conn)
+        for listener in to_join:
+            listener.join()
 
 
 def get_worker_id():
@@ -98,7 +108,7 @@ def broadcast_init_pool(dbname):
     try:
         cursor = conn.cursor()
         cursor.execute(
-            'NOTIFY "%s", %%s' % 'ir_cache',
+            'NOTIFY "%s", %%s' % 'ir_update',
             (json.dumps(['init_pool|%s' % get_worker_id()],
                 separators=(',', ':')),))
         conn.commit()
