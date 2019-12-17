@@ -803,7 +803,7 @@ def post_import(pool, module, to_delete):
                 Model = pool.get(model)
             except KeyError:
                 Model = None
-            if Model and model != 'res.user':
+            if Model:
                 Model.delete([Model(db_id)])
                 mdata_delete.append(mrec)
             else:
