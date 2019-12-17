@@ -182,7 +182,7 @@ class Model(URLMixin, PoolBase, metaclass=ModelMeta):
             if fields_names and fname not in fields_names:
                 continue
             definition[fname] = field.definition(cls, language)
-            if not accesses.get(field, {}).get('write', True):
+            if not accesses.get(fname, {}).get('write', True):
                 definition[fname]['readonly'] = True
                 states = decoder.decode(definition[fname]['states'])
                 states.pop('readonly', None)
@@ -266,9 +266,6 @@ class Model(URLMixin, PoolBase, metaclass=ModelMeta):
     def __str__(self):
         return '%s,%s' % (self.__name__, self.id)
 
-    def __unicode__(self):
-        return '%s,%s' % (self.__name__, self.id)
-
     def __repr__(self):
         if self.id is None or self.id < 0:
             return "Pool().get('%s')(**%s)" % (self.__name__,
@@ -328,5 +325,5 @@ class Model(URLMixin, PoolBase, metaclass=ModelMeta):
                         value = [r.id for r in value]
                 values[fname] = value
                 if rec_name is not None:
-                    values['%s.rec_name' % fname] = rec_name
+                    values['%s.' % fname] = {'rec_name': rec_name}
         return values

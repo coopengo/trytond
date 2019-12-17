@@ -617,6 +617,11 @@ Class attributes are:
     The definition of the :class:`trytond.model.fields.Char` field for the
     string of the key.
 
+.. attribute:: DictSchemaMixin.help
+
+    The definition of the :class:`trytond.model.fields.Char` field for the help
+    of the key.
+
 .. attribute:: DictSchemaMixin.type\_
 
     The definition of the :class:`trytond.model.fields.Selection` field for the

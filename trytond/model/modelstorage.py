@@ -29,6 +29,8 @@ from .modelview import ModelView
 from .descriptors import dualmethod
 
 __all__ = ['ModelStorage', 'EvalEnvironment']
+_cache_record = config.getint('cache', 'record')
+_cache_field = config.getint('cache', 'field')
 
 
 class AccessError(UserError):
@@ -76,8 +78,7 @@ def without_check_access(func):
 
 
 def cache_size():
-    return Transaction().context.get('_record_cache_size',
-        config.getint('cache', 'record'))
+    return Transaction().context.get('_record_cache_size', _cache_record)
 
 
 def is_leaf(expression):
@@ -859,11 +860,26 @@ class ModelStorage(Model):
                         else:
                             res = bool(int(value))
                     elif field_type == 'integer':
-                        res = int(value) if value else None
+                        if isinstance(value, int):
+                            res = value
+                        elif value:
+                            res = int(value)
+                        else:
+                            res = None
                     elif field_type == 'float':
-                        res = float(value) if value else None
+                        if isinstance(value, float):
+                            res = value
+                        elif value:
+                            res = float(value)
+                        else:
+                            res = None
                     elif field_type == 'numeric':
-                        res = Decimal(value) if value else None
+                        if isinstance(value, Decimal):
+                            res = value
+                        elif value:
+                            res = Decimal(value)
+                        else:
+                            res = None
                     elif field_type == 'date':
                         if isinstance(value, datetime.date):
                             res = value
@@ -1073,8 +1089,8 @@ class ModelStorage(Model):
                     in_max = Transaction().database.IN_MAX
                     count = in_max // 10
                     new_domains = {}
-                    for sub_domains in grouped_slice(list(domains.keys()),
-                            count):
+                    for sub_domains in grouped_slice(
+                            list(domains.keys()), count):
                         grouped_domain = ['OR']
                         grouped_records = []
                         for d in sub_domains:
@@ -1421,8 +1437,6 @@ class ModelStorage(Model):
             to_remove = set(x for x, y in fread_accesses.items()
                     if not y and x != name)
 
-            threshold = config.getint('cache', 'field')
-
             def not_cached(item):
                 fname, field = item
                 return (fname not in self._cache.get(self.id, {})
@@ -1440,7 +1454,7 @@ class ModelStorage(Model):
             ifields = filter(to_load,
                 filter(not_cached,
                     iter(self._fields.items())))
-            ifields = islice(ifields, 0, threshold)
+            ifields = islice(ifields, 0, _cache_field)
             ffields.update(ifields)
 
         # add datetime_field

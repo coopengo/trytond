@@ -796,27 +796,34 @@ class ModelView(Model):
                 continue
             if field._type in ('many2one', 'one2one', 'reference'):
                 if value:
-                    if value.id is None or value.id < 0:
+                    if isinstance(value, ModelStorage):
+                        try:
+                            rec_name = value.rec_name
+                            changed['%s.' % fname] = {
+                                'rec_name': rec_name,
+                                }
+                        except AttributeError:
+                            pass
+                    if value.id is None:
                         # Don't consider temporary instance as a change
                         continue
-                    if isinstance(value, ModelStorage):
-                        changed['%s.rec_name' % fname] = value.rec_name
                     if field._type == 'reference':
                         value = str(value)
                     else:
                         value = value.id
             elif field._type == 'one2many':
                 targets = value
-                init_targets = list(init_values.get(fname, []))
+                init_targets = list(init_values.get(fname, targets))
                 value = collections.defaultdict(list)
                 value['remove'] = [t.id for t in init_targets if t.id]
                 for i, target in enumerate(targets):
                     if target.id in value['remove']:
                         value['remove'].remove(target.id)
-                        target_changed = target._changed_values
-                        if target_changed:
-                            target_changed['id'] = target.id
-                            value['update'].append(target_changed)
+                        if isinstance(target, ModelView):
+                            target_changed = target._changed_values
+                            if target_changed:
+                                target_changed['id'] = target.id
+                                value['update'].append(target_changed)
                     else:
                         # JACK: redmine issue #5873
                         # automatically get a one2Many rec_name
@@ -824,8 +831,8 @@ class ModelView(Model):
                         with ServerContext().set_context(
                                 _default_rec_names=True):
                             if isinstance(target, ModelView):
-                                # Ensure initial values are returned because
-                                # target was instantiated on server side.
+                                # Ensure initial values are returned because target
+                                # was instantiated on server side.
                                 target_init_values = target._init_values
                                 target._init_values = None
                                 try:
