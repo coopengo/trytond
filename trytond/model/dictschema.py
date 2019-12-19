@@ -36,22 +36,24 @@ class DictSchemaMixin(object):
             ('date', 'Date'),
             ('datetime', 'DateTime'),
             ('selection', 'Selection'),
+            ('multiselection', 'Multi-Selection'),
             ], 'Type', required=True)
     digits = fields.Integer('Digits', states={
             'invisible': ~Eval('type_').in_(['float', 'numeric']),
             }, depends=['type_'])
     domain = fields.Char("Domain")
     selection = fields.Text('Selection', states={
-            'invisible': Eval('type_') != 'selection',
+            'invisible': ~Eval('type_').in_(['selection', 'multiselection']),
             }, translate=True, depends=['type_'],
         help='A couple of key and label separated by ":" per line')
     selection_sorted = fields.Boolean('Selection Sorted', states={
-            'invisible': Eval('type_') != 'selection',
+            'invisible': ~Eval('type_').in_(['selection', 'multiselection']),
             }, depends=['type_'],
         help='If the selection must be sorted on label')
     selection_json = fields.Function(fields.Char('Selection JSON',
             states={
-                'invisible': Eval('type_') != 'selection',
+                'invisible': ~Eval('type_').in_(
+                    ['selection', 'multiselection']),
                 },
             depends=['type_']), 'get_selection_json')
 
@@ -95,7 +97,7 @@ class DictSchemaMixin(object):
     @classmethod
     def check_selection(cls, schemas):
         for schema in schemas:
-            if schema.type_ != 'selection':
+            if schema.type_ not in {'selection', 'multiselection'}:
                 continue
             try:
                 dict(json.loads(schema.get_selection_json()))
@@ -124,7 +126,7 @@ class DictSchemaMixin(object):
                 'type_': record.type_,
                 'domain': record.domain,
                 }
-            if record.type_ == 'selection':
+            if record.type_ in {'selection', 'multiselection'}:
                 with Transaction().set_context(language=Config.get_language()):
                     english_key = cls(record.id)
                     selection = OrderedDict(json.loads(
