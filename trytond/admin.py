@@ -29,12 +29,8 @@ def _check_update_needed(db_name, options, transaction):
     # Get main module version which stocked in the database
     version_control_table = Table('upgrade_version_control')
     cursor = transaction.connection.cursor()
-    cursor.execute(*version_control_table.select(version_control_table.current_version, version_control_table.is_upgrading))
-    db_main_module_version, is_upgrading = cursor.fetchone()
-
-    # If the main module is upgrading, other upgradings are not allowed
-    if is_upgrading:
-        return False, current_main_module_version
+    cursor.execute(*version_control_table.select(version_control_table.current_version))
+    db_main_module_version = cursor.fetchone()[0]
 
     if options.check_update and current_main_module_version != db_main_module_version:
         return True, current_main_module_version
@@ -78,29 +74,28 @@ def run(options):
         pool = Pool(db_name)
 
         # Do the update only when it is needed
-        transaction = Transaction().start(db_name, 0)
-        cursor = transaction.connection.cursor()
-        # Lock table to upgrade
-        cursor.execute("LOCK upgrade_version_control IN EXCLUSIVE MODE;")
-        is_upgrade_needed, new_version = _check_update_needed(db_name, options, transaction)
-        if not is_upgrade_needed:
-            options.update = []
-            options.check_update = []
-        pool.init(update=options.update or options.check_update, lang=list(lang), activatedeps=options.activatedeps)                
-        if is_upgrade_needed:
-            # If upgrade finishes correctly -> update version in database and reset is_upgrading to false
-            try:
-                version_control_table = Table('upgrade_version_control')
-                cursor.execute(*version_control_table.update(
-                    columns=[version_control_table.current_version, version_control_table.is_upgrading],
-                    values=[new_version, False]))
-                transaction.commit()
+        with Transaction().start(db_name, 0) as transaction:
+            cursor = transaction.connection.cursor()
+            # Lock table to upgrade
+            cursor.execute("LOCK upgrade_version_control IN EXCLUSIVE MODE;")
+            is_upgrade_needed, new_version = _check_update_needed(db_name, options, transaction)
+            if not is_upgrade_needed:
+                options.update = []
+                options.check_update = []
+            pool.init(update=options.update or options.check_update, lang=list(lang), activatedeps=options.activatedeps)                
+            if is_upgrade_needed:
+                # If upgrade finishes correctly -> update version in database
+                try:
+                    version_control_table = Table('upgrade_version_control')
+                    cursor.execute(*version_control_table.update(
+                        columns=[version_control_table.current_version],
+                        values=[new_version]))
+                    transaction.commit()
 
-            except:
-                transaction.rollback()
-                logger.info('Upgrade was interrupted!')
-                raise
-        transaction.stop()
+                except:
+                    transaction.rollback()
+                    logger.info('Upgrade was interrupted!')
+                    raise
 
         if options.update_modules_list:
             with Transaction().start(db_name, 0) as transaction:
