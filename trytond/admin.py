@@ -12,8 +12,7 @@ from trytond import backend
 from trytond.pool import Pool
 from trytond.config import config
 
-from trytond.modules import get_module_info, get_module_list
-from trytond.cache import Cache
+from trytond.modules import get_module_info
 
 __all__ = ['run']
 logger = logging.getLogger(__name__)
