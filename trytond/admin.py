@@ -79,34 +79,37 @@ def run(options):
         pool = Pool(db_name)
 
         # Do the update only when it is needed
-        with Transaction().start(db_name, 0) as transaction:
-            cursor = transaction.connection.cursor()
-            # Lock table to upgrade
-            cursor.execute("LOCK upgrade_version_control IN EXCLUSIVE MODE;")
-            is_upgrade_needed, new_version = _check_update_needed(db_name, options, transaction)
-            if not is_upgrade_needed:
-                options.update = []
-                options.check_update = []
-            pool.init(update=options.update or options.check_update, lang=list(lang), activatedeps=options.activatedeps)                
-            if is_upgrade_needed:
-                # If upgrade finishes correctly -> update version in database and reset is_upgrading to false
-                try:
-                    version_control_table = Table('upgrade_version_control')
-                    cursor.execute(*version_control_table.update(
-                        columns=[version_control_table.current_version, version_control_table.is_upgrading],
-                        values=[new_version, False]))
-                    transaction.commit()
+        transaction = Transaction().start(db_name, 0)
+        cursor = transaction.connection.cursor()
+        # Lock table to upgrade
+        cursor.execute("LOCK upgrade_version_control IN EXCLUSIVE MODE;")
+        is_upgrade_needed, new_version = _check_update_needed(db_name, options, transaction)
+        if not is_upgrade_needed:
+            options.update = []
+            options.check_update = []
+        pool.init(update=options.update or options.check_update, lang=list(lang), activatedeps=options.activatedeps)                
+        if is_upgrade_needed:
+            # If upgrade finishes correctly -> update version in database and reset is_upgrading to false
+            try:
+                version_control_table = Table('upgrade_version_control')
+                cursor.execute(*version_control_table.update(
+                    columns=[version_control_table.current_version, version_control_table.is_upgrading],
+                    values=[new_version, False]))
+                transaction.commit()
 
-                except:
-                    transaction.rollback()
-                    logger.info('Upgrade was interrupted!')
-                    raise
+            except:
+                transaction.rollback()
+                logger.info('Upgrade was interrupted!')
+                raise
+        transaction.stop()
 
-            if options.update_modules_list:
+        if options.update_modules_list:
+            with Transaction().start(db_name, 0) as transaction:
                 Module = pool.get('ir.module')
                 Module.update_list()
 
-            if lang:
+        if lang:
+            with Transaction().start(db_name, 0) as transaction:
                 pool = Pool()
                 Lang = pool.get('ir.lang')
                 languages = Lang.search([
