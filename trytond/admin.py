@@ -4,6 +4,7 @@ import sys
 import os
 import logging
 from getpass import getpass
+from filelock import FileLock
 
 from sql import Table
 
@@ -17,6 +18,7 @@ from trytond.modules import get_module_info
 __all__ = ['run']
 logger = logging.getLogger(__name__)
 
+# XUNG
 def _check_update_needed(db_name, options, transaction):
     # Get current main module version
     main_module = config.get('version', 'module', default='coog_core')
@@ -36,7 +38,6 @@ def _check_update_needed(db_name, options, transaction):
         return True, current_main_module_version
 
     return False, current_main_module_version
-
 
 def run(options):
     Database = backend.get('Database')
@@ -73,11 +74,14 @@ def run(options):
         lang |= set(options.languages)
         pool = Pool(db_name)
 
-        # Do the update only when it is needed
+        # XUNG
         with Transaction().start(db_name, 0) as transaction:
-            cursor = transaction.connection.cursor()
-            # Lock table to upgrade
-            cursor.execute("LOCK upgrade_version_control IN EXCLUSIVE MODE;")
+            # Create a lock file
+            # This lock will block others workers / processes until the current upgrade is finished
+            lock_file_name = '/tmp/version_control_lock.lck'
+            version_control_lock = FileLock(lock_file_name)
+            version_control_lock.acquire()
+
             is_upgrade_needed, new_version = _check_update_needed(db_name, options, transaction)
             if not is_upgrade_needed:
                 options.update = []
@@ -87,6 +91,7 @@ def run(options):
                 # If upgrade finishes correctly -> update version in database
                 try:
                     version_control_table = Table('upgrade_version_control')
+                    cursor = transaction.connection.cursor()
                     cursor.execute(*version_control_table.update(
                         columns=[version_control_table.current_version],
                         values=[new_version]))
@@ -94,8 +99,8 @@ def run(options):
 
                 except:
                     transaction.rollback()
-                    logger.info('Upgrade was interrupted!')
                     raise
+            version_control_lock.release()
 
         if options.update_modules_list:
             with Transaction().start(db_name, 0) as transaction:

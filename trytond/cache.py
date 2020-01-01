@@ -302,6 +302,7 @@ class MemoryCache(BaseCache):
                     if notification.payload:
                         reset = json.loads(notification.payload)
                         for name in reset:
+                            # XUNG
                             # Name not in instances when control_vesion_upgrade table is locked
                             # because another process is currently upgrading
                             # We must ignore cache reset notifications (Not yet loaded anyway)
