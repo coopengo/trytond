@@ -36,13 +36,52 @@ logger = logging.getLogger(__name__)
 # JCA: log slow RPC (> log_time_threshold)
 slow_threshold = config.getfloat('web', 'log_time_threshold', default=-1)
 if slow_threshold >= 0:
-    slow_logger = logging.getLogger('slowness')
+    slow_logger = logging.getLogger('trytond.rpc.performance')
+
+# JCA: Format json logs
+format_json_parameters = config.getboolean('web', 'format_parameters_logs',
+    default=False)
+format_json_result = config.getboolean('web', 'format_result_logs',
+    default=False)
+if format_json_parameters or format_json_result:
+    import datetime
+    import base64
+    import json
+    from decimal import Decimal
+
+    class DEBUGEncoder(json.JSONEncoder):
+
+        serializers = {}
+
+        @classmethod
+        def register(cls, klass, encoder):
+            assert klass not in cls.serializers
+            cls.serializers[klass] = encoder
+
+        def default(self, obj):
+            marshaller = self.serializers.get(type(obj),
+                super(DEBUGEncoder, self).default)
+            return marshaller(obj)
+
+    DEBUGEncoder.register(datetime.datetime,
+        lambda x: 'DateTime(%s-%s-%s %s:%s:%s.%s)' % (x.year, x.month, x.day,
+            x.hour, x.minute, x.second, x.microsecond))
+    DEBUGEncoder.register(datetime.date, lambda x: 'Date(%s-%s-%s)' % (
+            x.year, x.month, x.day))
+    DEBUGEncoder.register(datetime.time, lambda x: 'Time(%s:%s:%s.%s)' % (
+            x.hour, x.minute, x.second, x.microsecond))
+    DEBUGEncoder.register(datetime.timedelta, lambda x: 'TimeDelta(%s seconds)' % (
+            x.total_seconds()))
+    DEBUGEncoder.register(Decimal, lambda x: 'Decimal(%s)' % str(x))
+    DEBUGEncoder.register(bytes, lambda x: 'Bytes(%s)' % base64.encodebytes(x))
+    DEBUGEncoder.register(bytearray,
+        lambda x: 'Bytes(%s)' % base64.encodebytes(x))
+
 
 ir_configuration = Table('ir_configuration')
 ir_lang = Table('ir_lang')
 ir_module = Table('ir_module')
 res_user = Table('res_user')
-
 
 # JCA: log slow RPC
 def log_exception(method, *args, **kwargs):
@@ -202,6 +241,15 @@ def _dispatch(request, pool, *args, **kwargs):
         slow_args = (obj, method)
         slow_start = time.time()
 
+    # JCA: Format parameters
+    if format_json_parameters and logger.isEnabledFor(logging.DEBUG):
+        try:
+            for line in json.dumps(args, indent=2, sort_keys=True,
+                    cls=DEBUGEncoder).split('\n'):
+                logger.debug('Parameters: %s' % line)
+        except Exception:
+            logger.debug('Could not format parameters in log', exc_info=True)
+
     user = request.user_id
 
     # AKE: add session and token to transaction context
@@ -298,7 +346,18 @@ def _dispatch(request, pool, *args, **kwargs):
         if session:
             context = {'_request': request.context}
             security.reset(pool.database_name, session, context=context)
-        logger.debug('Result: %s', result)
+
+        # JCA: Allow to format json result
+        if format_json_result and logger.isEnabledFor(logging.DEBUG):
+            try:
+                for line in json.dumps(result, indent=2,
+                        sort_keys=True, cls=DEBUGEncoder).split('\n'):
+                    logger.debug('Result: %s' % line)
+            except Exception:
+                logger.debug('Could not format parameters in log',
+                    exc_info=True)
+        else:
+            logger.debug('Result: %s', result)
 
         # JCA: log slow RPC
         if slow_threshold >= 0:
