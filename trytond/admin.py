@@ -77,30 +77,32 @@ def run(options):
         # XUNG
         with Transaction().start(db_name, 0) as transaction:
             # Create a lock file
-            # This lock will block others workers / processes until the current upgrade is finished
+            # This lock will block others workers /
+            # processes until the current upgrade is finished
             lock_file_name = '/tmp/version_control_lock.lck'
-            version_control_lock = FileLock(lock_file_name)
-            version_control_lock.acquire()
+            with FileLock(lock_file_name) as version_control_lock:
+                version_control_lock.acquire()
+                is_upgrade_needed, new_version = _check_update_needed(db_name,
+                    options, transaction)
+                if not is_upgrade_needed:
+                    options.update = []
+                    options.check_update = []
+                pool.init(update=options.update or options.check_update,
+                    lang=list(lang), activatedeps=options.activatedeps)
+                if is_upgrade_needed:
+                    # If upgrade finishes correctly->update version in database
+                    try:
+                        version_control_table = Table('upgrade_version_control')
+                        cursor = transaction.connection.cursor()
+                        cursor.execute(*version_control_table.update(
+                            columns=[version_control_table.current_version],
+                            values=[new_version]))
+                        transaction.commit()
 
-            is_upgrade_needed, new_version = _check_update_needed(db_name, options, transaction)
-            if not is_upgrade_needed:
-                options.update = []
-                options.check_update = []
-            pool.init(update=options.update or options.check_update, lang=list(lang), activatedeps=options.activatedeps)                
-            if is_upgrade_needed:
-                # If upgrade finishes correctly -> update version in database
-                try:
-                    version_control_table = Table('upgrade_version_control')
-                    cursor = transaction.connection.cursor()
-                    cursor.execute(*version_control_table.update(
-                        columns=[version_control_table.current_version],
-                        values=[new_version]))
-                    transaction.commit()
-
-                except:
-                    transaction.rollback()
-                    raise
-            version_control_lock.release()
+                    except:
+                        transaction.rollback()
+                        raise
+                version_control_lock.release()
 
         if options.update_modules_list:
             with Transaction().start(db_name, 0) as transaction:
