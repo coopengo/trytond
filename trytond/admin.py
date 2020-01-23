@@ -26,6 +26,7 @@ def _init_upgrade_version_control_table(db_name):
             "SELECT EXISTS("
             "SELECT * FROM information_schema.tables "
             "WHERE table_name='upgrade_version_control')")
+
         if not cursor.fetchone()[0]:
             sql_file = os.path.join(os.path.dirname(__file__),
                 'backend/postgresql/init_upgrade_version_control.sql')
@@ -99,8 +100,12 @@ def run(options):
         with Transaction().start(db_name, 0) as transaction:
             # This lock of table will block others workers /
             # processes until the current upgrade is finished
+            # Attention: lock activated only when -cu is activated
+            # -u can do the update normally
             cursor = transaction.connection.cursor()
-            cursor.execute("LOCK upgrade_version_control IN EXCLUSIVE MODE;")
+            if options.check_update:
+                cursor.execute("LOCK upgrade_version_control IN EXCLUSIVE MODE;")
+            
             is_upgrade_needed, new_version = _check_update_needed(db_name,
                 options, transaction)
             if not is_upgrade_needed:
