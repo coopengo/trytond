@@ -100,7 +100,7 @@ class Note(ResourceMixin, ModelSQL, ModelView):
     @classmethod
     def write(cls, notes, values, *args):
         # Avoid changing write meta data if only unread is set
-        if args or list(values.keys()) != ['unread']:
+        if args or values.keys() != ['unread']:
             super(Note, cls).write(notes, values, *args)
         else:
             # Check access write and clean cache
