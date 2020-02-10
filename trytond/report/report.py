@@ -6,6 +6,7 @@ import logging
 import math
 import operator
 import os
+import requests
 import subprocess
 import tempfile
 import time
@@ -32,6 +33,7 @@ except ImportError:
 from genshi.filters import Translator
 from genshi.template.text import TextTemplate
 
+from trytond.config import config
 from trytond.exceptions import UserError
 from trytond.i18n import gettext
 from trytond.pool import Pool, PoolBase
@@ -49,7 +51,9 @@ try:
 except ImportError:
     Manifest, MANIFEST = None, None
 
+
 logger = logging.getLogger(__name__)
+
 
 MIMETYPES = {
     'odt': 'application/vnd.oasis.opendocument.text',
@@ -95,6 +99,20 @@ TIMEDELTA_DEFAULT_CONVERTER['M'] = TIMEDELTA_DEFAULT_CONVERTER['d'] * 30
 TIMEDELTA_DEFAULT_CONVERTER['Y'] = TIMEDELTA_DEFAULT_CONVERTER['d'] * 365
 
 REPORT_NAME_MAX_LENGTH = 200
+
+
+class UnoConversionError(UserError):
+    pass
+
+
+class ReportFactory:
+
+    def __call__(self, records, **kwargs):
+        data = {}
+        data['objects'] = records  # XXX To remove
+        data['records'] = records
+        data.update(kwargs)
+        return data
 
 
 class TranslateFactory:
@@ -352,6 +370,17 @@ class Report(URLMixin, PoolBase):
     @classmethod
     def convert(cls, report, data, timeout=5 * 60, retry=5):
         "converts the report data to another mimetype if necessary"
+        # AKE: support printing via external api
+        if config.get('report', 'api', default=None):
+            return cls.convert_api(report, data, timeout)
+        elif config.get('report', 'unoconv', default=True):
+            return cls.convert_unoconv(report, data, timeout)
+        else:
+            raise NotImplementedError
+
+    @classmethod
+    def convert_unoconv(cls, report, data, timeout, retry=5):
+        "converts the report data to another mimetype if necessary"
         input_format = report.template_extension
         output_format = report.extension or report.template_extension
 
@@ -403,6 +432,32 @@ class Report(URLMixin, PoolBase):
                 os.rmdir(dtemp)
             except OSError:
                 pass
+
+    @classmethod
+    def convert_api(cls, report, data, timeout):
+        # AKE: support printing via external api
+        input_format = report.template_extension
+        output_format = report.extension or report.template_extension
+
+        if output_format in MIMETYPES:
+            return output_format, data
+
+        oext = FORMAT2EXT.get(output_format, output_format)
+        url_tpl = config.get('report', 'api')
+        url = url_tpl.format(oext=oext)
+        files = {'file': ('doc.' + input_format, data)}
+        for count in range(config.getint('report', 'unoconv_retry'), -1, -1):
+            try:
+                r = requests.post(url, files=files, timeout=timeout)
+                if r.status_code < 300:
+                    return oext, r.content
+                else:
+                    raise UnoConversionError(r)
+            except UnoConversionError:
+                if count:
+                    time.sleep(0.1)
+                    continue
+                raise
 
     @classmethod
     def format_date(cls, value, lang=None, format=None):
