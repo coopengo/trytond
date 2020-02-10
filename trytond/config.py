@@ -71,6 +71,7 @@ class TrytonConfigParser(ConfigParser.RawConfigParser):
         self.set('cache', 'class', os.environ.get('TRYTOND_CACHE_CLASS', None))
         self.set('cache', 'uri', os.environ.get('TRYTOND_CACHE_URI', None))
         self.set('cache', 'coog_cache_size', 1024)
+
         self.add_section('ssl')
         self.add_section('email')
         self.set('email', 'uri', 'smtp://localhost:25')
@@ -84,6 +85,7 @@ class TrytonConfigParser(ConfigParser.RawConfigParser):
         self.add_section('report')
         self.set('report', 'unoconv',
             'pipe,name=trytond;urp;StarOffice.ComponentContext')
+        self.set('report', 'unoconv_retry', 2)
         # AKE: sentry config from env vars
         self.add_section('sentry')
         self.set('sentry', 'dsn', os.environ.get('TRYTOND_SENTRY_DSN', None))
