@@ -33,6 +33,7 @@ from trytond.url import URLMixin
 from trytond.rpc import RPC
 from trytond.exceptions import UserError
 
+
 logger = logging.getLogger(__name__)
 
 import requests
@@ -70,6 +71,9 @@ FORMAT2EXT = {
     'xlsx': 'xlsx',
     }
 
+
+class UnoConversionError(UserError):
+    pass
 
 class ReportFactory:
 
@@ -372,11 +376,18 @@ class Report(URLMixin, PoolBase):
         url_tpl = config.get('report', 'api')
         url = url_tpl.format(oext=oext)
         files = {'file': ('doc.' + input_format, data)}
-        r = requests.post(url, files=files)
-        if r.status_code < 300:
-            return oext, r.content
-        else:
-            raise Exception(r)
+        for count in range(config.getint('report', 'unoconv_retry'), -1, -1):
+            try:
+                r = requests.post(url, files=files)
+                if r.status_code < 300:
+                    return oext, r.content
+                else:
+                    raise UnoConversionError(r)
+            except UnoConversionError:
+                if count:
+                    time.sleep(0.1)
+                    continue
+                raise
 
     @classmethod
     def format_date(cls, value, lang=None):
