@@ -76,6 +76,9 @@ class TrytonConfigParser(configparser.RawConfigParser):
         self.set('cache', 'uri', os.environ.get('TRYTOND_CACHE_URI', None))
         self.set('cache', 'coog_cache_size', 1024)
 
+        self.add_section('report')
+        self.set('report', 'unoconv_retry', 2)
+
         self.add_section('queue')
         self.set('queue', 'worker', False)
         self.add_section('ssl')
