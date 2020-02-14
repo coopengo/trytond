@@ -302,8 +302,13 @@ class MemoryCache(BaseCache):
                     if notification.payload:
                         reset = json.loads(notification.payload)
                         for name in reset:
-                            inst = cls._instances[name]
-                            inst._clear(dbname)
+                            # XUNG
+                            # Name not in instances when control_vesion_upgrade table is locked
+                            # because another process is currently upgrading
+                            # We must ignore cache reset notifications (Not yet loaded anyway)
+                            if name in cls._instances:
+                                inst = cls._instances[name]
+                                inst._clear(dbname)
         except Exception:
             logger.error(
                 "cache listener on '%s' crashed", dbname, exc_info=True)
