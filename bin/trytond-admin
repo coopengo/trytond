@@ -15,6 +15,11 @@ import trytond.admin as admin
 
 parser = commandline.get_parser_admin()
 options = parser.parse_args()
+
+if options.check_update and options.update:
+    raise Exception\
+        ("Starting update and check update together is not allowed!")
+
 config.update_etc(options.configfile)
 commandline.config_log(options)
 
