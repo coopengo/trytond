@@ -6,6 +6,7 @@ import argparse
 import os
 import uuid
 import unittest
+import xmlrunner
 import sys
 
 from trytond.config import config
@@ -25,6 +26,8 @@ parser.add_argument("--no-doctest", action="store_false", dest="doctest",
     default=True, help="Don't run doctest")
 parser.add_argument("-v", action="count", default=0, dest="verbosity",
     help="Increase verbosity")
+parser.add_argument("-x", "--xmloutput", action="store_true",
+    default=False, dest="xmloutput", help="Generate XML files")
 parser.add_argument('tests', metavar='test', nargs='*')
 parser.epilog = ('The database name can be specified in the DB_NAME '
     'environment variable.\n'
@@ -47,6 +50,11 @@ if not opt.modules:
     suite = all_suite(opt.tests)
 else:
     suite = modules_suite(opt.tests, doc=opt.doctest)
-result = unittest.TextTestRunner(
-    verbosity=opt.verbosity, failfast=opt.failfast).run(suite)
+
+if not opt.xmloutput:
+    result = unittest.TextTestRunner(
+        verbosity=opt.verbosity, failfast=opt.failfast).run(suite)
+else:
+    result = xmlrunner.XMLTestRunner(
+        output='test-reports', verbosity=opt.verbosity).run(suite)
 sys.exit(not result.wasSuccessful())
