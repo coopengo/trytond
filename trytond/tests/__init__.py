@@ -39,6 +39,7 @@ def register():
     from . import modelview
     from . import mptt
     from . import multivalue
+    from . import note
     from . import rule
     from . import tree
     from . import trigger
@@ -76,6 +77,7 @@ def register():
     modelview.register('tests')
     mptt.register('tests')
     multivalue.register('tests')
+    note.register('tests')
     rule.register('tests')
     tree.register('tests')
     trigger.register('tests')
