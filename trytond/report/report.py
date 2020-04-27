@@ -2,8 +2,9 @@
 # this repository contains the full copyright notices and license terms.
 import time
 import datetime
-import logging
 import os
+import inspect
+import logging
 import subprocess
 import tempfile
 import warnings
@@ -74,6 +75,7 @@ FORMAT2EXT = {
 
 class UnoConversionError(UserError):
     pass
+
 
 class ReportFactory:
 
@@ -317,25 +319,23 @@ class Report(URLMixin, PoolBase):
 
     @classmethod
     def convert_unoconv(cls, report, data, timeout):
-        # AKE: support printing via external api
         input_format = report.template_extension
         output_format = report.extension or report.template_extension
 
         if output_format in MIMETYPES:
             return output_format, data
 
-        fd, path = tempfile.mkstemp(suffix=(os.extsep + input_format),
-            prefix='trytond_')
+        dtemp = tempfile.mkdtemp(prefix='trytond_')
+        path = os.path.join(
+            dtemp, report.report_name + os.extsep + input_format)
         oext = FORMAT2EXT.get(output_format, output_format)
-        output = None
-        dtemp = os.path.dirname(path)
-        with os.fdopen(fd, 'wb+') as fp:
+        mode = 'w+' if isinstance(data, str) else 'wb+'
+        with open(path, mode) as fp:
             fp.write(data)
         try:
             cmd = ['soffice',
                 '--headless', '--nolockcheck', '--nodefault', '--norestore',
                 '--convert-to', oext, '--outdir', dtemp, path]
-            logger = logging.getLogger(__name__)
             output = os.path.splitext(path)[0] + os.extsep + oext
             subprocess.check_call(cmd, timeout=timeout)
             # ABDC: Please don't judge me... Soffice makes me do this because
@@ -351,15 +351,12 @@ class Report(URLMixin, PoolBase):
                     return oext, fp.read()
             else:
                 logger.error(
-                    'fail to convert file %s to %s' % (path, output))
+                    'fail to convert %s to %s', report.report_name, oext)
                 return input_format, data
-            with open(output, 'rb') as fp:
-                return oext, fp.read()
         finally:
             try:
                 os.remove(path)
-                if output:
-                    os.remove(output)
+                os.remove(output)
                 os.rmdir(dtemp)
             except OSError:
                 pass
@@ -423,7 +420,7 @@ def get_email(report, record, languages):
     pool = Pool()
     ActionReport = pool.get('ir.action.report')
     report_id = None
-    if isinstance(report, Report):
+    if inspect.isclass(report) and issubclass(report, Report):
         Report_ = report
     else:
         if isinstance(report, ActionReport):
