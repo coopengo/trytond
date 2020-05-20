@@ -214,11 +214,18 @@ def load_module_graph(graph, pool, update=None, lang=None):
             module2state.update(cursor)
         modules = set(modules)
 
+        idx = 0
+        count = len(modules)
         for node in graph:
             module = node.name
             if module not in MODULES:
                 continue
-            logger.info(module)
+            idx += 1
+
+            # JCA: Add loading indicator in the logs
+            logging_prefix = '%i%% (%i/%i):%s' % (
+                int(idx * 100 / (count + 1)), idx, count, module)
+            logger.info(logging_prefix)
             classes = pool.fill(module, modules)
             if update:
                 pool.setup(classes)
@@ -236,7 +243,7 @@ def load_module_graph(graph, pool, update=None, lang=None):
                     module2state[child.name] = package_state
                 for type in list(classes.keys()):
                     for cls in classes[type]:
-                        logger.info('%s:register %s', module, cls.__name__)
+                        logger.info('%s:register %s', logging_prefix, cls.__name__)
                         cls.__register__(module)
                 for model in classes['model']:
                     if hasattr(model, '_history'):
@@ -248,7 +255,7 @@ def load_module_graph(graph, pool, update=None, lang=None):
 
                 for filename in node.info.get('xml', []):
                     filename = filename.replace('/', os.sep)
-                    logger.info('%s:loading %s', module, filename)
+                    logger.info('%s:loading %s', logging_prefix, filename)
                     # Feed the parser with xml content:
                     with tools.file_open(OPJ(module, filename), 'rb') as fp:
                         tryton_parser.parse_xmlstream(fp)
