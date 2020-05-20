@@ -197,11 +197,16 @@ def load_module_graph(graph, pool, update=None, lang=None):
             module2state.update(cursor.fetchall())
         modules = set(modules)
 
+        idx = 0
         for node in graph:
             module = node.name
             if module not in MODULES:
                 continue
-            logger.info(module)
+            idx += 1
+
+            # JCA: Add loading indicator in the logs
+            logging_prefix = '%s[%i/%i]' % (module, idx, len(modules))
+            logger.info(logging_prefix)
             classes = pool.fill(module, modules)
             if update:
                 pool.setup(classes)
@@ -219,7 +224,7 @@ def load_module_graph(graph, pool, update=None, lang=None):
                     module2state[child.name] = package_state
                 for type in list(classes.keys()):
                     for cls in classes[type]:
-                        logger.info('%s:register %s', module, cls.__name__)
+                        logger.info('%s:register %s', logging_prefix, cls.__name__)
                         cls.__register__(module)
                 for model in classes['model']:
                     if hasattr(model, '_history'):
@@ -231,7 +236,7 @@ def load_module_graph(graph, pool, update=None, lang=None):
 
                 for filename in node.info.get('xml', []):
                     filename = filename.replace('/', os.sep)
-                    logger.info('%s:loading %s', module, filename)
+                    logger.info('%s:loading %s', logging_prefix, filename)
                     # Feed the parser with xml content:
                     with tools.file_open(OPJ(module, filename), 'rb') as fp:
                         tryton_parser.parse_xmlstream(fp)
@@ -251,7 +256,8 @@ def load_module_graph(graph, pool, update=None, lang=None):
                 base_path_position = len(node.info['directory']) + 1
                 for language, files in lang2filenames.items():
                     filenames = [f[base_path_position:] for f in files]
-                    logger.info('%s:loading %s', module, ','.join(filenames))
+                    logger.info('%s:loading %s', logging_prefix,
+                        ','.join(filenames))
                     Translation = pool.get('ir.translation')
                     Translation.translation_import(language, module, files)
 
