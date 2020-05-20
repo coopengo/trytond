@@ -198,6 +198,7 @@ def load_module_graph(graph, pool, update=None, lang=None):
         modules = set(modules)
 
         idx = 0
+        count = len(modules)
         for node in graph:
             module = node.name
             if module not in MODULES:
@@ -205,7 +206,8 @@ def load_module_graph(graph, pool, update=None, lang=None):
             idx += 1
 
             # JCA: Add loading indicator in the logs
-            logging_prefix = '%s[%i/%i]' % (module, idx, len(modules))
+            logging_prefix = '%i%% (%i/%i):%s' % (
+                int(idx * 100 / (count + 1)), idx, count, module)
             logger.info(logging_prefix)
             classes = pool.fill(module, modules)
             if update:
