@@ -3,6 +3,7 @@
 
 import unittest
 
+from trytond.model import EvalEnvironment
 from trytond.model.exceptions import (
     RequiredValidationError, DomainValidationError)
 from trytond.pool import Pool
@@ -29,11 +30,13 @@ class ModelStorageTestCase(unittest.TestCase):
         self.assertTrue(
             all(x['id'] < y['id'] for x, y in zip(rows, rows[1:])))
 
-        rows = ModelStorage.search_read([], order=[('name', 'ASC')])
+        rows = ModelStorage.search_read(
+            [], order=[('name', 'ASC')], fields_names=['name'])
         self.assertTrue(
             all(x['name'] <= y['name'] for x, y in zip(rows, rows[1:])))
 
-        rows = ModelStorage.search_read([], order=[('name', 'DESC')])
+        rows = ModelStorage.search_read(
+            [], order=[('name', 'DESC')], fields_names=['name'])
         self.assertTrue(
             all(x['name'] >= y['name'] for x, y in zip(rows, rows[1:])))
 
@@ -138,6 +141,113 @@ class ModelStorageTestCase(unittest.TestCase):
         self.assertEqual(foo.name, 'foo')
         self.assertIsNone(bar.name)
 
+    @with_transaction()
+    def test_save_one2many_create(self):
+        "Test save one2many create"
+        pool = Pool()
+        ModelStorage = pool.get('test.modelstorage.save2many')
+        Target = pool.get('test.modelstorage.save2many.target')
+
+        record = ModelStorage()
+        record.targets = [Target()]
+        record.save()
+
+        self.assertTrue(record.id)
+        self.assertEqual(len(record.targets), 1)
+
+    @with_transaction()
+    def test_save_one2many_add(self):
+        "Test save one2many add"
+        pool = Pool()
+        ModelStorage = pool.get('test.modelstorage.save2many')
+        Target = pool.get('test.modelstorage.save2many.target')
+
+        target = Target()
+        target.save()
+        record = ModelStorage()
+        record.targets = [target]
+        record.save()
+
+        self.assertTrue(record.id)
+        self.assertEqual(len(record.targets), 1)
+        self.assertEqual(len(Target.search([])), 1)
+
+    @with_transaction()
+    def test_save_one2many_delete(self):
+        "Test save one2many delete"
+        pool = Pool()
+        ModelStorage = pool.get('test.modelstorage.save2many')
+        Target = pool.get('test.modelstorage.save2many.target')
+
+        record, = ModelStorage.create([{'targets': [('create', [{}])]}])
+        record.targets = []
+        record.save()
+
+        self.assertEqual(len(record.targets), 0)
+        self.assertEqual(Target.search([], count=True), 0)
+
+    @with_transaction()
+    def test_save_one2many_remove(self):
+        "Test save one2many remove"
+        pool = Pool()
+        ModelStorage = pool.get('test.modelstorage.save2many')
+        Target = pool.get('test.modelstorage.save2many.target')
+
+        record, = ModelStorage.create([{'targets': [('create', [{}])]}])
+        ModelStorage.targets.remove(record, record.targets)
+        record.save()
+
+        self.assertEqual(len(record.targets), 0)
+        self.assertEqual(Target.search([], count=True), 1)
+
+    @with_transaction()
+    def test_save_many2many_add(self):
+        "Test save many2many add"
+        pool = Pool()
+        ModelStorage = pool.get('test.modelstorage.save2many')
+        Target = pool.get('test.modelstorage.save2many.target')
+
+        target = Target()
+        target.save()
+        record = ModelStorage()
+        record.m2m_targets = [target]
+        record.save()
+
+        self.assertTrue(record.id)
+        self.assertEqual(len(record.m2m_targets), 1)
+        self.assertEqual(len(Target.search([])), 1)
+
+    @with_transaction()
+    def test_save_many2many_delete(self):
+        "Test save many2many delete"
+        pool = Pool()
+        ModelStorage = pool.get('test.modelstorage.save2many')
+        Target = pool.get('test.modelstorage.save2many.target')
+
+        record, = ModelStorage.create([{'m2m_targets': [('create', [{}])]}])
+        ModelStorage.m2m_targets.delete(record, record.m2m_targets)
+        record.save()
+
+        self.assertEqual(len(record.targets), 0)
+        self.assertEqual(Target.search([], count=True), 0)
+
+    @with_transaction()
+    def test_save_many2many_remove(self):
+        "Test save one2many remove"
+        pool = Pool()
+        ModelStorage = pool.get('test.modelstorage.save2many')
+        Target = pool.get('test.modelstorage.save2many.target')
+
+        target = Target()
+        target.save()
+        record, = ModelStorage.create([
+                {'m2m_targets': [('add', [target.id])]}])
+        record.m2m_targets = []
+        record.save()
+
+        self.assertEqual(len(record.m2m_targets), 0)
+        self.assertEqual(Target.search([], count=True), 1)
+
     @with_transaction(context={'_check_access': True})
     def test_model_translations(self):
         'Test any user can translate fields and duplicate its records'
@@ -174,8 +284,10 @@ class ModelStorageTestCase(unittest.TestCase):
 
         Model.create([{'constraint': 'foo', 'value': 'foo'}] * 10)
 
-        with self.assertRaises(DomainValidationError):
+        with self.assertRaises(DomainValidationError) as cm:
             Model.create([{'constraint': 'foo', 'value': 'bar'}] * 10)
+        self.assertEqual(cm.exception.domain[0], [['value', '=', 'foo']])
+        self.assertTrue(cm.exception.domain[1]['value'])
 
     @with_transaction()
     def test_pyson_domain_unique(self):
@@ -186,10 +298,35 @@ class ModelStorageTestCase(unittest.TestCase):
         Model.create(
             [{'constraint': str(i), 'value': str(i)} for i in range(10)])
 
-        with self.assertRaises(DomainValidationError):
+        with self.assertRaises(DomainValidationError) as cm:
             Model.create(
                 [{'constraint': str(i), 'value': str(i + 1)}
                     for i in range(10)])
+        self.assertTrue(cm.exception.domain[0])
+        self.assertTrue(cm.exception.domain[1]['value'])
+
+    @with_transaction()
+    def test_pyson_domain_unique_in_max(self):
+        "Test unique pyson domain validation with greater IN_MAX"
+        pool = Pool()
+        Model = pool.get('test.modelstorage.pyson_domain')
+
+        in_max = Transaction().database.IN_MAX
+        self.addCleanup(setattr, Transaction().database, 'IN_MAX', in_max)
+        Transaction().database.IN_MAX = 1
+
+        # Use modulo 6 so len(domains) is greater then len(records) * 0.5
+        # and more than 1 (IN_MAX) have the same domain
+        Model.create(
+            [{'constraint': str(i % 6), 'value': str(i % 6)}
+                for i in range(10)])
+
+        with self.assertRaises(DomainValidationError) as cm:
+            Model.create(
+                [{'constraint': str(i % 6), 'value': str(i)}
+                    for i in range(10)])
+        self.assertTrue(cm.exception.domain[0])
+        self.assertTrue(cm.exception.domain[1]['value'])
 
     @with_transaction()
     def test_pyson_domain_single(self):
@@ -199,8 +336,54 @@ class ModelStorageTestCase(unittest.TestCase):
 
         Model.create([{'constraint': 'foo', 'value': 'foo'}])
 
-        with self.assertRaises(DomainValidationError):
+        with self.assertRaises(DomainValidationError) as cm:
             Model.create([{'constraint': 'foo', 'value': 'bar'}])
+        self.assertEqual(cm.exception.domain[0], [['value', '=', 'foo']])
+        self.assertTrue(cm.exception.domain[1]['value'])
+
+    @with_transaction()
+    def test_relation_domain(self):
+        "Test valid relation domain"
+        pool = Pool()
+        Model = pool.get('test.modelstorage.relation_domain')
+        Target = pool.get('test.modelstorage.relation_domain.target')
+
+        target, = Target.create([{'value': 'valid'}])
+
+        record, = Model.create([{'relation': target.id}])
+
+    @with_transaction()
+    def test_relation_domain_invalid(self):
+        "Test invalid relation domain"
+        pool = Pool()
+        Model = pool.get('test.modelstorage.relation_domain')
+        Target = pool.get('test.modelstorage.relation_domain.target')
+
+        target, = Target.create([{'value': 'invalid'}])
+
+        with self.assertRaises(DomainValidationError) as cm:
+            Model.create([{'relation': target.id}])
+        self.assertEqual(cm.exception.domain[0], [('value', '=', 'valid')])
+        self.assertTrue(cm.exception.domain[1]['value'])
+
+    @with_transaction()
+    def test_relation2_domain_invalid(self):
+        "Test invalid relation domain with 2 level"
+        pool = Pool()
+        Model = pool.get('test.modelstorage.relation_domain2')
+        Target2 = pool.get('test.modelstorage.relation_domain2.target')
+        Target = pool.get('test.modelstorage.relation_domain.target')
+
+        target, = Target.create([{'value': 'invalid'}])
+        target2, = Target2.create([{'relation2': target.id}])
+
+        with self.assertRaises(DomainValidationError) as cm:
+            Model.create([{'relation': target2.id}])
+        self.assertEqual(
+            cm.exception.domain[0], [('relation2.value', '=', 'valid')])
+        self.assertTrue(cm.exception.domain[1]['relation2'])
+        self.assertTrue(
+            cm.exception.domain[1]['relation2']['relation_fields']['value'])
 
     @with_transaction()
     def test_check_xml_record_without_record(self):
@@ -372,5 +555,84 @@ class ModelStorageTestCase(unittest.TestCase):
         Model.delete([record])
 
 
+class EvalEnvironmentTestCase(unittest.TestCase):
+    "Test EvalEnvironment"
+
+    @classmethod
+    def setUpClass(cls):
+        activate_module('tests')
+
+    @with_transaction()
+    def test_char_field(self):
+        "Test eval simple field"
+        pool = Pool()
+        Model = pool.get('test.modelstorage.eval_environment')
+
+        record = Model(char="Test")
+        env = EvalEnvironment(record, Model)
+
+        self.assertEqual(env.get('char'), "Test")
+
+    @with_transaction()
+    def test_reference_field(self):
+        "Test eval reference field"
+        pool = Pool()
+        Model = pool.get('test.modelstorage.eval_environment')
+
+        record = Model(reference=Model(id=1))
+        env = EvalEnvironment(record, Model)
+
+        self.assertEqual(
+            env.get('reference'), 'test.modelstorage.eval_environment,1')
+
+    @with_transaction()
+    def test_many2one_field(self):
+        "Test eval many2one field"
+        pool = Pool()
+        Model = pool.get('test.modelstorage.eval_environment')
+
+        record = Model(many2one=Model(id=1))
+        env = EvalEnvironment(record, Model)
+
+        self.assertEqual(env.get('many2one'), 1)
+
+    @with_transaction()
+    def test_one2many_field(self):
+        "Test eval one2many field"
+        pool = Pool()
+        Model = pool.get('test.modelstorage.eval_environment')
+
+        record = Model(one2many=[Model(id=1), Model(id=2)])
+        env = EvalEnvironment(record, Model)
+
+        self.assertEqual(env.get('one2many'), [1, 2])
+
+    @with_transaction()
+    def test_multiselection_field(self):
+        "Test eval multiselection field"
+        pool = Pool()
+        Model = pool.get('test.modelstorage.eval_environment')
+
+        record = Model(multiselection=['value1', 'value2'])
+        env = EvalEnvironment(record, Model)
+
+        self.assertEqual(env.get('multiselection'), ['value1', 'value2'])
+
+    @with_transaction()
+    def test_parent_field(self):
+        "Test eval parent field"
+        pool = Pool()
+        Model = pool.get('test.modelstorage.eval_environment')
+
+        record = Model(many2one=Model(char="Test"))
+        env = EvalEnvironment(record, Model)
+
+        self.assertEqual(env.get('_parent_many2one').get('char'), "Test")
+
+
 def suite():
-    return unittest.TestLoader().loadTestsFromTestCase(ModelStorageTestCase)
+    suite_ = unittest.TestSuite()
+    loader = unittest.TestLoader()
+    suite_.addTests(loader.loadTestsFromTestCase(ModelStorageTestCase))
+    suite_.addTests(loader.loadTestsFromTestCase(EvalEnvironmentTestCase))
+    return suite_

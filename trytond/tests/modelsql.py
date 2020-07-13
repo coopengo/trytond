@@ -5,6 +5,7 @@ from sql.operators import Equal
 
 from trytond.model import ModelSQL, fields, Check, Unique, Exclude
 from trytond.pool import Pool
+from trytond.pyson import Eval
 
 
 class ModelSQLRead(ModelSQL):
@@ -23,6 +24,14 @@ class ModelSQLReadTarget(ModelSQL):
     name = fields.Char("Name")
     parent = fields.Many2One('test.modelsql.read', "Parent")
     target = fields.Many2One('test.modelsql.read.target', "Target")
+
+
+class ModelSQLReadContextID(ModelSQL):
+    "ModelSQL to test read with ID in context"
+    __name__ = 'test.modelsql.read.context_id'
+    name = fields.Char("Name", context={
+            'test': Eval('id'),
+            })
 
 
 class ModelSQLRequiredField(ModelSQL):
@@ -138,6 +147,7 @@ def register(module):
     Pool.register(
         ModelSQLRead,
         ModelSQLReadTarget,
+        ModelSQLReadContextID,
         ModelSQLRequiredField,
         ModelSQLTimestamp,
         ModelSQLFieldSet,

@@ -3,11 +3,14 @@
 import json
 from collections import OrderedDict
 
-from trytond.i18n import gettext
+from trytond.cache import Cache
+from trytond.config import config
+from trytond.i18n import gettext, lazy_gettext
 from trytond.model import fields
 from trytond.model.exceptions import ValidationError
 from trytond.pyson import Eval, PYSONDecoder
 from trytond.rpc import RPC
+from trytond.tools import slugify
 from trytond.transaction import Transaction
 from trytond.pool import Pool
 
@@ -21,41 +24,53 @@ class SelectionError(ValidationError):
 
 
 class DictSchemaMixin(object):
+    __slots__ = ()
     _rec_name = 'string'
-    name = fields.Char('Name', required=True)
-    string = fields.Char('String', translate=True, required=True)
+    name = fields.Char(lazy_gettext('ir.msg_dict_schema_name'), required=True)
+    string = fields.Char(
+        lazy_gettext('ir.msg_dict_schema_string'),
+        translate=True, required=True)
     help = fields.Text(
-        "Help",
+        lazy_gettext('ir.msg_dict_schema_help'),
         translate=True)
     type_ = fields.Selection([
-            ('boolean', 'Boolean'),
-            ('integer', 'Integer'),
-            ('char', 'Char'),
-            ('float', 'Float'),
-            ('numeric', 'Numeric'),
-            ('date', 'Date'),
-            ('datetime', 'DateTime'),
-            ('selection', 'Selection'),
-            ('multiselection', 'Multi-Selection'),
-            ], 'Type', required=True)
-    digits = fields.Integer('Digits', states={
+            ('boolean', lazy_gettext('ir.msg_dict_schema_boolean')),
+            ('integer', lazy_gettext('ir.msg_dict_schema_integer')),
+            ('char', lazy_gettext('ir.msg_dict_schema_char')),
+            ('float', lazy_gettext('ir.msg_dict_schema_float')),
+            ('numeric', lazy_gettext('ir.msg_dict_schema_numeric')),
+            ('date', lazy_gettext('ir.msg_dict_schema_date')),
+            ('datetime', lazy_gettext('ir.msg_dict_schema_datetime')),
+            ('selection', lazy_gettext('ir.msg_dict_schema_selection')),
+            ('multiselection',
+                lazy_gettext('ir.msg_dict_schema_multiselection')),
+            ], lazy_gettext('ir.msg_dict_schema_type'), required=True)
+    digits = fields.Integer(
+        lazy_gettext('ir.msg_dict_schema_digits'),
+        states={
             'invisible': ~Eval('type_').in_(['float', 'numeric']),
             }, depends=['type_'])
-    domain = fields.Char("Domain")
-    selection = fields.Text('Selection', states={
+    domain = fields.Char(lazy_gettext('ir.msg_dict_schema_domain'))
+    selection = fields.Text(
+        lazy_gettext('ir.msg_dict_schema_selection'),
+        states={
             'invisible': ~Eval('type_').in_(['selection', 'multiselection']),
             }, translate=True, depends=['type_'],
-        help='A couple of key and label separated by ":" per line')
-    selection_sorted = fields.Boolean('Selection Sorted', states={
+        help=lazy_gettext('ir.msg_dict_schema_selection_help'))
+    selection_sorted = fields.Boolean(
+        lazy_gettext('ir.msg_dict_schema_selection_sorted'),
+        states={
             'invisible': ~Eval('type_').in_(['selection', 'multiselection']),
             }, depends=['type_'],
-        help='If the selection must be sorted on label')
-    selection_json = fields.Function(fields.Char('Selection JSON',
+        help=lazy_gettext('ir.msg_dict_schema_selection_sorted_help'))
+    selection_json = fields.Function(fields.Char(
+            lazy_gettext('ir.msg_dict_schema_selection_json'),
             states={
                 'invisible': ~Eval('type_').in_(
                     ['selection', 'multiselection']),
                 },
             depends=['type_']), 'get_selection_json')
+    _relation_fields_cache = Cache('_dict_schema_mixin.get_relation_fields')
 
     @classmethod
     def __setup__(cls):
@@ -71,6 +86,11 @@ class DictSchemaMixin(object):
     @staticmethod
     def default_selection_sorted():
         return True
+
+    @fields.depends('name', 'string')
+    def on_change_string(self):
+        if not self.name and self.string:
+            self.name = slugify(self.string.lower(), hyphenate='_')
 
     @classmethod
     def validate(cls, schemas):
@@ -123,8 +143,9 @@ class DictSchemaMixin(object):
                 'name': record.name,
                 'string': record.string,
                 'help': record.help,
-                'type_': record.type_,
+                'type': record.type_,
                 'domain': record.domain,
+                'sequence': getattr(record, 'sequence', record.name),
                 }
             if record.type_ in {'selection', 'multiselection'}:
                 with Transaction().set_context(language=Config.get_language()):
@@ -133,7 +154,7 @@ class DictSchemaMixin(object):
                             english_key.selection_json))
                 selection.update(dict(json.loads(record.selection_json)))
                 new_key['selection'] = list(selection.items())
-                new_key['sorted'] = record.selection_sorted
+                new_key['sort'] = record.selection_sorted
             elif record.type_ in ('float', 'numeric'):
                 new_key['digits'] = (16, record.digits)
             # ABDC Inject sequence order in dict schema to allow client sorting
@@ -142,3 +163,31 @@ class DictSchemaMixin(object):
                 new_key['sequence_order'] = record.sequence_order
             keys.append(new_key)
         return keys
+
+    @classmethod
+    def get_relation_fields(cls):
+        if not config.get('dict', cls.__name__, default=True):
+            return {}
+        fields = cls._relation_fields_cache.get(cls.__name__)
+        if fields is not None:
+            return fields
+        keys = cls.get_keys(cls.search([]))
+        fields = {k['name']: k for k in keys}
+        cls._relation_fields_cache.set(cls.__name__, fields)
+        return fields
+
+    @classmethod
+    def create(cls, vlist):
+        records = super().create(vlist)
+        cls._relation_fields_cache.clear()
+        return records
+
+    @classmethod
+    def write(cls, *args):
+        super().write(*args)
+        cls._relation_fields_cache.clear()
+
+    @classmethod
+    def delete(cls, records):
+        super().delete(records)
+        cls._relation_fields_cache.clear()

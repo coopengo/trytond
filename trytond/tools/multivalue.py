@@ -17,8 +17,7 @@ def migrate_property(
     pool = Pool()
     Field = pool.get('ir.model.field')
     Model = pool.get('ir.model')
-    TableHandler = backend.get('TableHandler')
-    if not TableHandler.table_exist('ir_property'):
+    if not backend.TableHandler.table_exist('ir_property'):
         return
     cursor = Transaction().connection.cursor()
     field = Field.__table__()
@@ -89,15 +88,17 @@ def migrate_property(
         pcolumns = []
     vcolumns = [Column(table, f) for f in fields]
     values = []
-    l = len(value_names)
+    length = len(value_names)
     for row in cursor.fetchall():
         value = [c(v) for v, c in zip(row, casts)]
         if parent:
-            value.append(int(row[l].split(',')[1]) if row[l] else None)
+            value.append(
+                int(row[length].split(',')[1])
+                if row[length] else None)
             i = 1
         else:
             i = 0
-        value.extend(row[l + i:])
+        value.extend(row[length + i:])
         values.append(value)
     if (values and not (
                 # No property defined

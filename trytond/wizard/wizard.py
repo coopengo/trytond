@@ -12,6 +12,7 @@ from trytond.pool import Pool, PoolBase
 from trytond.transaction import Transaction
 from trytond.url import URLMixin
 from trytond.protocols.jsonrpc import JSONDecoder, JSONEncoder
+from trytond.model import ModelSQL
 from trytond.model.fields import states_validate
 from trytond.pyson import PYSONEncoder
 from trytond.rpc import RPC
@@ -23,13 +24,15 @@ class Button(object):
     Define a button on wizard.
     '''
 
-    def __init__(self, string, state, icon='', default=False, states=None):
+    def __init__(self, string, state,
+            icon='', default=False, states=None, validate=None):
         self.string = string
         self.state = state
         self.icon = icon
         self.default = bool(default)
         self.__states = None
         self.states = states or {}
+        self.validate = validate
 
     @property
     def states(self):
@@ -115,10 +118,14 @@ class StateView(State):
         encoder = PYSONEncoder()
         result = []
         for button in self.buttons:
+            validate = (button.validate
+                if button.validate is not None
+                else button.state != wizard.end_state)
             result.append({
                     'state': button.state,
                     'icon': button.icon,
                     'default': button.default,
+                    'validate': validate,
                     'string': (translations.get(translation_key(button))
                         or button.string),
                     'states': encoder.encode(button.states),
@@ -153,7 +160,7 @@ class StateAction(StateTransition):
         action_id = Action.get_action_id(
             ModelData.get_id(module, fs_id))
         action = Action(action_id)
-        return Action.get_action_values(action.type, [action.id])[0]
+        return action.get_action_value()
 
 
 class StateReport(StateAction):
@@ -167,17 +174,17 @@ class StateReport(StateAction):
         'Return report definition'
         pool = Pool()
         ActionReport = pool.get('ir.action.report')
-        Action = pool.get('ir.action')
         action_reports = ActionReport.search([
                 ('report_name', '=', self.report_name),
                 ])
         assert action_reports, '%s not found' % self.report_name
         action_report = action_reports[0]
         action = action_report.action
-        return Action.get_action_values(action.type, [action.id])[0]
+        return action.get_action_value()
 
 
 class Wizard(URLMixin, PoolBase):
+    __no_slots__ = True  # To allow setting State
     start_state = 'start'
     end_state = 'end'
 
@@ -236,7 +243,10 @@ class Wizard(URLMixin, PoolBase):
                     raise UserError('Calling wizard %s is not allowed!'
                         % cls.__name__)
             elif model and model != 'ir.ui.menu':
-                ModelAccess.check(model, 'write')
+                Model = pool.get(model)
+                if (not callable(getattr(Model, 'table_query', None))
+                        or Model.write.__func__ != ModelSQL.write.__func__):
+                    ModelAccess.check(model, 'write')
 
     @classmethod
     def create(cls):

@@ -22,6 +22,11 @@ def register():
     from . import field_integer
     from . import field_many2many
     from . import field_many2one
+    from . import field_function
+    from . import field_integer
+    from . import field_many2many
+    from . import field_many2one
+    from . import field_multiselection
     from . import field_numeric
     from . import field_one2many
     from . import field_one2one
@@ -40,6 +45,7 @@ def register():
     from . import mptt
     from . import multivalue
     from . import note
+    from . import resource
     from . import rule
     from . import tree
     from . import trigger
@@ -57,9 +63,11 @@ def register():
     field_datetime.register('tests')
     field_dict.register('tests')
     field_float.register('tests')
+    field_function.register('tests')
     field_integer.register('tests')
     field_many2many.register('tests')
     field_many2one.register('tests')
+    field_multiselection.register('tests')
     field_numeric.register('tests')
     field_one2many.register('tests')
     field_one2one.register('tests')
@@ -78,6 +86,7 @@ def register():
     mptt.register('tests')
     multivalue.register('tests')
     note.register('tests')
+    resource.register('tests')
     rule.register('tests')
     tree.register('tests')
     trigger.register('tests')

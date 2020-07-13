@@ -30,7 +30,7 @@ def _cast(column):
         __slots__ = ()
         _function = 'DATETIME'
 
-    if backend.name() == 'sqlite':
+    if backend.name == 'sqlite':
         column = SQLite_DateTime(column)
     return column
 
@@ -78,6 +78,9 @@ class BaseCache(object):
 
     @classmethod
     def sync(cls, transaction):
+        raise NotImplementedError
+
+    def sync_since(self, value):
         raise NotImplementedError
 
     @classmethod
@@ -198,6 +201,9 @@ class MemoryCache(BaseCache):
                 inst._clear(dbname, timestamp)
         cls._clean_last = datetime.now()
 
+    def sync_since(self, value):
+        return self._clean_last > value
+
     @classmethod
     def commit(cls, transaction):
         table = Table(cls._table)
@@ -249,6 +255,7 @@ class MemoryCache(BaseCache):
                 connection.commit()
             finally:
                 database.put_connection(connection)
+            cls._clean_last = datetime.now()
         reset.clear()
 
     @classmethod
@@ -263,8 +270,7 @@ class MemoryCache(BaseCache):
         with cls._listener_lock:
             listener = cls._listener.pop(dbname, None)
         if listener:
-            Database = backend.get('Database')
-            database = Database(dbname)
+            database = backend.Database(dbname)
             conn = database.get_connection()
             try:
                 cursor = conn.cursor()
@@ -280,8 +286,7 @@ class MemoryCache(BaseCache):
 
     @classmethod
     def _listen(cls, dbname):
-        Database = backend.get('Database')
-        database = Database(dbname)
+        database = backend.Database(dbname)
         if not database.has_channel():
             raise NotImplementedError
 
@@ -310,6 +315,7 @@ class MemoryCache(BaseCache):
                             if name in cls._instances:
                                 inst = cls._instances[name]
                                 inst._clear(dbname)
+                cls._clean_last = datetime.now()
         except Exception:
             logger.error(
                 "cache listener on '%s' crashed", dbname, exc_info=True)

@@ -8,17 +8,14 @@ from sql import (operators, Column, Literal, Select, CombiningQuery, Null,
 from sql.conditionals import Coalesce, NullIf
 from sql.operators import Concat
 
-from trytond import backend
 from trytond.pyson import PYSON, PYSONEncoder, PYSONDecoder, Eval
 from trytond.const import OPERATORS
-from trytond.tools.string_ import StringPartitioned
+from trytond.tools.string_ import StringPartitioned, LazyString
 from trytond.transaction import Transaction
 from trytond.pool import Pool
 from trytond.cache import LRUDictTransaction
 
 from ...rpc import RPC
-
-Database = backend.get('Database')
 
 
 def domain_validate(value):
@@ -32,9 +29,11 @@ def domain_validate(value):
             elif (isinstance(arg, tuple)
                 or (isinstance(arg, list)
                     and len(arg) > 2
-                    and ((isinstance(arg[1], str)
+                    and ((
+                                isinstance(arg[1], str)
                                 and arg[1] in OPERATORS)
-                        or (isinstance(arg[1], PYSON)
+                        or (
+                                isinstance(arg[1], PYSON)
                                 and arg[1].types() == set([str]))))):
                 pass
             elif isinstance(arg, list):
@@ -140,7 +139,7 @@ def get_eval_fields(value):
     return encoder.fields
 
 
-def instanciate_values(Target, value):
+def instanciate_values(Target, value, **extra):
     from ..modelstorage import ModelStorage, cache_size
     kwargs = {}
     ids = []
@@ -150,6 +149,8 @@ def instanciate_values(Target, value):
 
     def instance(data):
         if isinstance(data, Target):
+            for k, v in extra.items():
+                setattr(data, k, v)
             return data
         elif isinstance(data, dict):
             if data.get('id', -1) >= 0:
@@ -159,10 +160,11 @@ def instanciate_values(Target, value):
                 ids.append(data['id'])
             else:
                 values = data
+            values.update(extra)
             return Target(**values)
         else:
             ids.append(data)
-            return Target(data, **kwargs)
+            return Target(data, **extra, **kwargs)
     return tuple(instance(x) for x in (value or []))
 
 
@@ -212,6 +214,7 @@ SQL_OPERATORS = {
 class Field(object):
     _type = None
     _sql_type = None
+    _py_type = None
 
     def __init__(self, string='', help='', required=False, readonly=False,
             domain=None, states=None, select=False, on_change=None,
@@ -242,7 +245,8 @@ class Field(object):
         :param loading: Define how the field must be loaded:
             ``lazy`` or ``eager``.
         '''
-        assert string, 'a string is required'
+        if not isinstance(string, LazyString):
+            assert string, 'a string is required'
         self.string = string
         self.help = help
         self.required = required
@@ -345,6 +349,9 @@ class Field(object):
 
         assert self._sql_type is not None
         database = Transaction().database
+        if (self._py_type and value is not None
+                and not isinstance(value, self._py_type)):
+            value = self._py_type(value)
         return database.sql_format(self._sql_type, value)
 
     def sql_type(self):
@@ -448,13 +455,24 @@ class Field(object):
                 if not model.__rpc__[method_name].cache:
                     changes.append('id')
 
+                for name in changes:
+                    field = model._fields.get(name)
+                    if field and field.context:
+                        eval_fields = get_eval_fields(field.context)
+                        for context_field_name in eval_fields:
+                            if (context_field_name in field.depends
+                                    and context_field_name not in changes):
+                                changes.append(context_field_name)
+
         name = '%s,%s' % (model.__name__, self.name)
         for attr, ttype in [('string', 'field'), ('help', 'help')]:
             definition[attr] = ''
             for source in getattr(self, attr):
-                definition[attr] += (
-                    Translation.get_source(name, ttype, language, source)
-                    or source)
+                if not isinstance(source, LazyString):
+                    source = (
+                        Translation.get_source(name, ttype, language, source)
+                        or source)
+                definition[attr] += source
         return definition
 
     def definition_translations(self, model, language):
@@ -463,7 +481,8 @@ class Field(object):
         translations = []
         for attr, ttype in [('string', 'field'), ('help', 'help')]:
             for source in getattr(self, attr):
-                translations.append((name, ttype, language, source))
+                if not isinstance(source, LazyString):
+                    translations.append((name, ttype, language, source))
         return translations
 
 
@@ -478,7 +497,7 @@ class FieldTranslate(Field):
                 & (translation.res_id == -1)
                 & (translation.lang == language)
                 & (translation.type == 'model')
-                & (translation.fuzzy == False))
+                & (translation.fuzzy == Literal(False)))
         elif Model.__name__ == 'ir.model.field':
             if name == 'field_description':
                 type_ = 'field'
@@ -492,14 +511,14 @@ class FieldTranslate(Field):
                     & (translation.res_id == -1)
                     & (translation.lang == language)
                     & (translation.type == type_)
-                    & (translation.fuzzy == False))
+                    & (translation.fuzzy == Literal(False)))
         else:
             return from_.join(translation, 'LEFT',
                 condition=(translation.res_id == table.id)
                 & (translation.name == '%s,%s' % (Model.__name__, name))
                 & (translation.lang == language)
                 & (translation.type == 'model')
-                & (translation.fuzzy == False))
+                & (translation.fuzzy == Literal(False)))
 
     def convert_domain(self, domain, tables, Model):
         from trytond.ir.lang import get_parent_language

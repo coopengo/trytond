@@ -139,6 +139,7 @@ class MemoryCacheTestCase(unittest.TestCase):
         self.addCleanup(transaction2.stop)
         cache.clear()
         transaction2.commit()
+        self.wait_cache_sync()
 
         # Set value from old transaction
         Transaction().set_current_transaction(transaction1)
@@ -159,7 +160,7 @@ class MemoryCacheTestCase(unittest.TestCase):
         self.assertEqual(cache_expire.get('foo'), None)
 
 
-@unittest.skipIf(backend.name() == 'sqlite', "SQLite has not channel")
+@unittest.skipIf(backend.name == 'sqlite', "SQLite has not channel")
 class MemoryCacheChannelTestCase(MemoryCacheTestCase):
     "Test Cache with channel"
 

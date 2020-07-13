@@ -2,6 +2,7 @@
 # this repository contains the full copyright notices and license terms.
 import logging
 import time
+from collections import defaultdict
 from threading import local
 from sql import Flavor
 
@@ -55,6 +56,7 @@ class Transaction(object):
     create_records = None
     delete_records = None
     delete = None  # TODO check to merge with delete_records
+    trigger_records = None
     timestamp = None
     started_at = None
 
@@ -92,7 +94,6 @@ class Transaction(object):
         '''
         Start transaction
         '''
-        Database = backend.get('Database')
         assert self.user is None
         assert self.database is None
         assert self.close is None
@@ -102,10 +103,10 @@ class Transaction(object):
         # but it may be also before transactions started before
         self.started_at = self.monotonic_time()
         if not database_name:
-            database = Database().connect()
+            database = backend.Database().connect()
         else:
-            database = Database(database_name).connect()
-        Flavor.set(Database.flavor)
+            database = backend.Database(database_name).connect()
+        Flavor.set(backend.Database.flavor)
         self.connection = database.get_connection(readonly=readonly,
             autocommit=autocommit)
         self.user = user
@@ -116,6 +117,7 @@ class Transaction(object):
         self.create_records = {}
         self.delete_records = {}
         self.delete = {}
+        self.trigger_records = defaultdict(set)
         self.timestamp = {}
         self.counter = 0
         self._datamanagers = []
@@ -160,6 +162,7 @@ class Transaction(object):
                     self.create_records = None
                     self.delete_records = None
                     self.delete = None
+                    self.trigger_records = None
                     self.timestamp = None
                     self._datamanagers = []
 
@@ -234,14 +237,14 @@ class Transaction(object):
             self.started_at = self.monotonic_time()
             Cache.commit(self)
             self.connection.commit()
-        except:
+        except Exception:
             self.rollback()
             raise
         else:
             try:
                 for datamanager in self._datamanagers:
                     datamanager.tpc_finish(self)
-            except:
+            except Exception:
                 logger.critical('A datamanager raised an exception in'
                     ' tpc_finish, the data might be inconsistant',
                     exc_info=True)

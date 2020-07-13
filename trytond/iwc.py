@@ -24,8 +24,7 @@ class Listener:
 
     @classmethod
     def run(cls, dbname):
-        Database = backend.get('Database')
-        database = Database(dbname)
+        database = backend.Database(dbname)
         if database.has_channel():
             with cls._listener_lock:
                 if dbname not in cls._listener:
@@ -35,8 +34,7 @@ class Listener:
 
     @classmethod
     def _listen(cls, dbname):
-        Database = backend.get('Database')
-        database = Database(dbname)
+        database = backend.Database(dbname)
         if not database.has_channel():
             raise NotImplementedError
 
@@ -85,8 +83,7 @@ class Listener:
             for dbname in list(cls._listener):
                 to_join.append(cls._listener.pop(dbname, None))
                 try:
-                    Database = backend.get('Database')
-                    database = Database(dbname)
+                    database = backend.Database(dbname)
                     conn = database.get_connection()
                     cursor = conn.cursor()
                     cursor.execute('NOTIFY ir_update')
@@ -102,8 +99,7 @@ def get_worker_id():
 
 
 def broadcast_init_pool(dbname):
-    Database = backend.get('Database')
-    database = Database(dbname)
+    database = backend.Database(dbname)
     conn = database.get_connection()
     try:
         cursor = conn.cursor()

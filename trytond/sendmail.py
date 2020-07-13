@@ -4,6 +4,7 @@ import logging
 import smtplib
 from email.message import Message
 from email.utils import formatdate
+from email.mime.text import MIMEText
 from urllib.parse import parse_qs, unquote_plus
 
 from .config import config, parse_uri
@@ -36,13 +37,22 @@ def sendmail(from_addr, to_addrs, msg, server=None):
         msg['Date'] = formatdate()
     try:
         senderrs = server.sendmail(from_addr, to_addrs, msg.as_string())
-    except smtplib.SMTPException:
+    except Exception:
         logger.error('fail to send email', exc_info=True)
     else:
         if senderrs:
             logger.warning('fail to send email to %s', senderrs)
     if quit:
         server.quit()
+
+
+def send_test_email(to_addrs, server=None):
+    from_ = config.get('email', 'from')
+    msg = MIMEText('Success!\nYour email settings work correctly.')
+    msg['From'] = from_
+    msg['To'] = to_addrs
+    msg['Subject'] = 'Tryton test email'
+    sendmail(config.get('email', 'from'), to_addrs, msg, server=server)
 
 
 def get_smtp_server(uri=None):
@@ -60,8 +70,8 @@ def get_smtp_server(uri=None):
         connector = smtplib.SMTP
     try:
         server = connector(uri.hostname, uri.port, **extra)
-    except smtplib.SMTPConnectError:
-        logger.error('fail to connect to %s', uri)
+    except Exception:
+        logger.error('fail to connect to %s', uri, exc_info=True)
         return
 
     if 'tls' in uri.scheme:

@@ -5,9 +5,15 @@ from decimal import Decimal
 import json
 import base64
 
-from werkzeug.wrappers import Response, Headers
+try:
+    from werkzeug.datastructures import Headers
+except ImportError:
+    from werkzeug.wrappers import Headers
+from werkzeug.wrappers import Response
 from werkzeug.utils import cached_property
-from werkzeug.exceptions import BadRequest, InternalServerError
+from werkzeug.exceptions import (
+    BadRequest, InternalServerError, Conflict, Forbidden, Locked,
+    TooManyRequests)
 
 # AKE: log RPC method (uwsgi and header)
 try:
@@ -16,7 +22,9 @@ except ImportError:
     uwsgi = None
 
 from trytond.protocols.wrappers import Request
-from trytond.exceptions import TrytonException
+from trytond.exceptions import (
+    TrytonException, UserWarning, LoginException, ConcurrencyException,
+    RateLimitException, MissingDependenciesException)
 
 
 class JSONDecoder(object):
@@ -33,6 +41,7 @@ class JSONDecoder(object):
             return self.decoders[dct['__class__']](dct)
         return dct
 
+
 JSONDecoder.register('datetime',
     lambda dct: datetime.datetime(dct['year'], dct['month'], dct['day'],
         dct['hour'], dct['minute'], dct['second'], dct['microsecond']))
@@ -48,6 +57,8 @@ JSONDecoder.register('timedelta',
 def _bytes_decoder(dct):
     cast = bytearray if bytes == str else bytes
     return cast(base64.decodebytes(dct['base64'].encode('utf-8')))
+
+
 JSONDecoder.register('bytes', _bytes_decoder)
 JSONDecoder.register('Decimal', lambda dct: Decimal(dct['decimal']))
 
@@ -65,6 +76,7 @@ class JSONEncoder(json.JSONEncoder):
         marshaller = self.serializers.get(type(obj),
             super(JSONEncoder, self).default)
         return marshaller(obj)
+
 
 JSONEncoder.register(datetime.datetime,
     lambda o: {
@@ -97,10 +109,15 @@ JSONEncoder.register(datetime.timedelta,
         '__class__': 'timedelta',
         'seconds': o.total_seconds(),
         })
-_bytes_encoder = lambda o: {
-    '__class__': 'bytes',
-    'base64': base64.encodebytes(o).decode('utf-8'),
-    }
+
+
+def _bytes_encoder(o):
+    return {
+        '__class__': 'bytes',
+        'base64': base64.encodebytes(o).decode('utf-8'),
+        }
+
+
 JSONEncoder.register(bytes, _bytes_encoder)
 JSONEncoder.register(bytearray, _bytes_encoder)
 JSONEncoder.register(Decimal,
@@ -159,7 +176,19 @@ class JSONProtocol:
             else:
                 response['result'] = data
         else:
-            if isinstance(data, Exception):
+            if isinstance(data, UserWarning):
+                return Conflict(data)
+            elif isinstance(data, LoginException):
+                return Forbidden(data)
+            elif isinstance(data, ConcurrencyException):
+                return Locked(data)
+            elif isinstance(data, RateLimitException):
+                return TooManyRequests(data)
+            elif isinstance(data, MissingDependenciesException):
+                return InternalServerError(data)
+            elif isinstance(data, TrytonException):
+                return BadRequest(data)
+            elif isinstance(data, Exception):
                 return InternalServerError(data)
             response = data
 

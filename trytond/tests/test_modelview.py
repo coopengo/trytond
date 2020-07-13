@@ -40,7 +40,7 @@ class ModelView(unittest.TestCase):
                 'ref_target': 'test.modelview.changed_values.target,2',
                 'targets': {
                     'add': [
-                        (0, {'name': 'bar'}),
+                        (0, {'id': None, 'name': 'bar'}),
                         ],
                     },
                 })
@@ -59,9 +59,12 @@ class ModelView(unittest.TestCase):
         self.assertEqual(record._changed_values, {
                 'targets': {
                     'update': [{'id': 1, 'name': 'bar'}],
-                    'remove': [2],
+                    'delete': [2],
                     },
-                'm2m_targets': [9, 10],
+                'm2m_targets': {
+                    'remove': [5, 6, 7],
+                    'add': [(0, {'id': 9}), (1, {'id': 10})],
+                    },
                 })
 
         # change only one2many record
@@ -74,6 +77,90 @@ class ModelView(unittest.TestCase):
         self.assertEqual(record._changed_values, {
                 'targets': {
                     'update': [{'id': 1, 'name': 'bar'}],
+                    },
+                })
+
+        # no initial value
+        record = Model()
+        record._values = {}
+        target = Target(id=1)
+        record._values['targets'] = [target]
+        target.name = 'foo'
+        self.assertEqual(record._changed_values, {
+                'targets': {
+                    'update': [{'id': 1, 'name': 'foo'}],
+                    },
+                })
+
+    @with_transaction()
+    def test_changed_values_removed(self):
+        "Test removed"
+        pool = Pool()
+        Model = pool.get('test.modelview.changed_values')
+        Target = pool.get('test.modelview.changed_values.target')
+
+        target = Target(1)
+        record = Model(targets=[target])
+        Model.targets.remove(record, [target])
+
+        self.assertEqual(record._changed_values, {
+                'targets': {
+                    'remove': [1],
+                    },
+                })
+
+    @with_transaction()
+    def test_changed_values_deleted(self):
+        "Test deleted"
+        pool = Pool()
+        Model = pool.get('test.modelview.changed_values')
+        Target = pool.get('test.modelview.changed_values.target')
+
+        target = Target(1)
+        record = Model(m2m_targets=[target])
+        Model.m2m_targets.delete(record, [target])
+
+        self.assertEqual(record._changed_values, {
+                'm2m_targets': {
+                    'delete': [1],
+                    },
+                })
+
+    @with_transaction()
+    def test_changed_values_rec_name(self):
+        "Test rec_name of ModelStorage is added"
+        pool = Pool()
+        Model = pool.get('test.modelview.changed_values')
+        Target = pool.get('test.modelview.changed_values.stored_target')
+
+        target, = Target.create([{'name': "Target"}])
+        record = Model()
+        record.stored_target = target
+
+        self.assertEqual(record._changed_values, {
+                'stored_target': target.id,
+                'stored_target.': {
+                    'rec_name': "Target",
+                    },
+                })
+
+    @with_transaction()
+    def test_changed_values_reverse_field(self):
+        "Test _changed_values with reverse field set"
+        pool = Pool()
+        Model = pool.get('test.modelview.changed_values')
+        Target = pool.get('test.modelview.changed_values.target')
+
+        record = Model(id=1)
+        record.name = "Record"
+        target = Target()
+        target.name = "Target"
+        record.targets = [target]
+
+        self.assertEqual(record._changed_values, {
+                'name': "Record",
+                'targets': {
+                    'add': [(0, {'id': None, 'name': "Target"})],
                     },
                 })
 
@@ -278,6 +365,87 @@ class ModelView(unittest.TestCase):
         self.assertTrue(rule.test(record, clicks))
 
     @with_transaction()
+    def test_button_action(self):
+        "Test button action"
+        pool = Pool()
+        TestModel = pool.get('test.modelview.button_action')
+
+        action_id = TestModel.test([])
+
+        self.assertIsInstance(action_id, int)
+
+    @with_transaction()
+    def test_button_action_return(self):
+        "Test button action update value"
+        pool = Pool()
+        TestModel = pool.get('test.modelview.button_action')
+
+        action = TestModel.test_update([])
+
+        self.assertEqual(action['url'], 'http://www.tryton.org/')
+
+    @with_transaction()
+    def test_link(self):
+        "Test link in view"
+        pool = Pool()
+        TestModel = pool.get('test.modelview.link')
+
+        arch = TestModel.fields_view_get()['arch']
+        parser = etree.XMLParser()
+        tree = etree.fromstring(arch, parser=parser)
+        link, = tree.xpath('//link')
+
+        self.assertTrue(link.attrib['id'])
+        self.assertIsInstance(int(link.attrib['id']), int)
+
+    @with_transaction()
+    def test_link_without_read_access(self):
+        "Test link in view without read access"
+        pool = Pool()
+        TestModel = pool.get('test.modelview.link')
+        Model = pool.get('ir.model')
+        ModelAccess = pool.get('ir.model.access')
+
+        model, = Model.search([('model', '=', 'test.modelview.link.target')])
+        access = ModelAccess(model=model, group=None, perm_read=False)
+        access.save()
+
+        arch = TestModel.fields_view_get()['arch']
+        parser = etree.XMLParser()
+        tree = etree.fromstring(arch, parser=parser)
+        links = tree.xpath('//link')
+        labels = tree.xpath('//label')
+
+        self.assertFalse(links)
+        self.assertTrue(labels)
+
+    @with_transaction()
+    def test_link_without_action_access(self):
+        "Test link in view without action access"
+        pool = Pool()
+        TestModel = pool.get('test.modelview.link')
+        ActionWindow = pool.get('ir.action.act_window')
+        Group = pool.get('res.group')
+        ActionGroup = pool.get('ir.action-res.group')
+
+        group = Group(name="Group")
+        group.save()
+        action_window, = ActionWindow.search(
+            [('res_model', '=', 'test.modelview.link.target')])
+        ActionGroup(
+            action=action_window.action,
+            group=group).save()
+
+        arch = TestModel.fields_view_get()['arch']
+        parser = etree.XMLParser()
+        tree = etree.fromstring(arch, parser=parser)
+        links = tree.xpath('//link')
+        labels = tree.xpath('//label')
+
+        self.assertFalse(links)
+        self.assertTrue(labels)
+
+    @with_transaction()
     def test_rpc_setup(self):
         "Testing the computation of the RPC methods"
         pool = Pool()
@@ -390,6 +558,29 @@ class ModelView(unittest.TestCase):
         buttons = tree.xpath('//button')
 
         self.assertEqual(len(buttons), 0)
+
+    @with_transaction()
+    def test_view_attributes(self):
+        "Testing view attributes are applied on view"
+        pool = Pool()
+        ViewAttributes = pool.get('test.modelview.view_attributes')
+
+        arch = ViewAttributes.fields_view_get(view_type='form')['arch']
+        parser = etree.XMLParser()
+        tree = etree.fromstring(arch, parser=parser)
+        field, = tree.xpath('//field[@name="foo"]')
+
+        self.assertTrue(field.attrib.get('visual'))
+
+    @with_transaction()
+    def test_view_attributes_depends(self):
+        "Testing view attributes depends are included on fields"
+        pool = Pool()
+        ViewAttributes = pool.get('test.modelview.view_attributes_depends')
+
+        fields = ViewAttributes.fields_view_get(view_type='form')['fields']
+
+        self.assertIn('bar', fields)
 
 
 def suite():

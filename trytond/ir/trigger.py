@@ -2,8 +2,10 @@
 # this repository contains the full copyright notices and license terms.
 import datetime
 import time
-from sql import Literal, Null
+from sql import Literal, Null, Select
 from sql.aggregate import Count, Max
+from sql.functions import CurrentTimestamp
+from sql.operators import Concat
 
 from trytond.model.exceptions import ValidationError
 from trytond.i18n import gettext
@@ -54,8 +56,7 @@ class Trigger(DeactivableMixin, ModelSQL, ModelView):
         help='Set a minimum time delay between call to "Action Function" '
         'for the same record.\n'
         'empty for no delay.')
-    action_model = fields.Many2One('ir.model', 'Action Model', required=True)
-    action_function = fields.Char('Action Function', required=True)
+    action = fields.Selection([], "Action", required=True)
     _get_triggers_cache = Cache('ir_trigger.get_triggers')
 
     @classmethod
@@ -64,10 +65,10 @@ class Trigger(DeactivableMixin, ModelSQL, ModelView):
         t = cls.__table__()
         cls._sql_constraints += [
             ('on_exclusive',
-                Check(t, ~((t.on_time == True)
-                        & ((t.on_create == True)
-                            | (t.on_write == True)
-                            | (t.on_delete == True)))),
+                Check(t, ~((t.on_time == Literal(True))
+                        & ((t.on_create == Literal(True))
+                            | (t.on_write == Literal(True))
+                            | (t.on_delete == Literal(True))))),
                 '"On Time" and others are mutually exclusive!'),
             ]
         cls._order.insert(0, ('name', 'ASC'))
@@ -79,6 +80,8 @@ class Trigger(DeactivableMixin, ModelSQL, ModelView):
         sql_table = cls.__table__()
 
         super(Trigger, cls).__register__(module_name)
+
+        table_h = cls.__table_handler__(module_name)
 
         # Migration from 3.4:
         # change minimum_delay into timedelta minimum_time_delay
@@ -93,6 +96,21 @@ class Trigger(DeactivableMixin, ModelSQL, ModelView):
                         [delay],
                         where=sql_table.id == id_))
             table.drop_column('minimum_delay')
+
+        # Migration from 5.4: merge action
+        if (table_h.column_exist('action_model')
+                and table_h.column_exist('action_function')):
+            pool = Pool()
+            Model = pool.get('ir.model')
+            model = Model.__table__()
+            action_model = model.select(
+                model.model, where=model.id == sql_table.action_model)
+            cursor.execute(*sql_table.update(
+                    [sql_table.action],
+                    [Concat(action_model, Concat(
+                                '|', sql_table.action_function))]))
+            table_h.drop_column('action_model')
+            table_h.drop_column('action_function')
 
     @classmethod
     def validate(cls, triggers):
@@ -147,7 +165,7 @@ class Trigger(DeactivableMixin, ModelSQL, ModelView):
         assert mode in ['create', 'write', 'delete', 'time'], \
             'Invalid trigger mode'
 
-        if Transaction().user == 0 and not Transaction().context.get('user'):
+        if Transaction().context.get('_no_trigger'):
             return []
 
         key = (model_name, mode)
@@ -162,8 +180,7 @@ class Trigger(DeactivableMixin, ModelSQL, ModelView):
         cls._get_triggers_cache.set(key, list(map(int, triggers)))
         return triggers
 
-    @staticmethod
-    def eval(trigger, record):
+    def eval(self, record):
         """
         Evaluate the condition of trigger
         """
@@ -172,49 +189,75 @@ class Trigger(DeactivableMixin, ModelSQL, ModelView):
         env['time'] = time
         env['context'] = Transaction().context
         env['self'] = EvalEnvironment(record, record.__class__)
-        return bool(PYSONDecoder(env).decode(trigger.condition))
+        return bool(PYSONDecoder(env).decode(self.condition))
 
-    @classmethod
-    def trigger_action(cls, records, trigger):
+    def queue_trigger_action(self, records):
+        trigger_records = Transaction().trigger_records[self.id]
+        ids = set(map(int, records)) - trigger_records
+        self.__class__.__queue__.trigger_action(self, list(ids))
+        trigger_records.update(ids)
+
+    def trigger_action(self, ids):
         """
         Trigger the action define on trigger for the records
         """
         pool = Pool()
         TriggerLog = pool.get('ir.trigger.log')
-        Model = pool.get(trigger.model.model)
-        ActionModel = pool.get(trigger.action_model.model)
+        Model = pool.get(self.model.model)
+        model, method = self.action.split('|')
+        ActionModel = pool.get(model)
         cursor = Transaction().connection.cursor()
         trigger_log = TriggerLog.__table__()
-        ids = list(map(int, records))
+
+        ids = [r.id for r in Model.browse(ids) if self.eval(r)]
 
         # Filter on limit_number
-        if trigger.limit_number:
+        if self.limit_number:
             new_ids = []
             for sub_ids in grouped_slice(ids):
                 sub_ids = list(sub_ids)
                 red_sql = reduce_ids(trigger_log.record_id, sub_ids)
                 cursor.execute(*trigger_log.select(
                         trigger_log.record_id, Count(Literal(1)),
-                        where=red_sql & (trigger_log.trigger == trigger.id),
+                        where=red_sql & (trigger_log.trigger == self.id),
                         group_by=trigger_log.record_id))
                 number = dict(cursor.fetchall())
                 for record_id in sub_ids:
                     if record_id not in number:
                         new_ids.append(record_id)
                         continue
-                    if number[record_id] < trigger.limit_number:
+                    if number[record_id] < self.limit_number:
                         new_ids.append(record_id)
             ids = new_ids
 
+        def cast_datetime(value):
+            datepart, timepart = value.split(" ")
+            year, month, day = map(int, datepart.split("-"))
+            timepart_full = timepart.split(".")
+            hours, minutes, seconds = map(
+                int, timepart_full[0].split(":"))
+            if len(timepart_full) == 2:
+                microseconds = int(timepart_full[1])
+            else:
+                microseconds = 0
+            return datetime.datetime(
+                year, month, day, hours, minutes, seconds, microseconds)
+
         # Filter on minimum_time_delay
-        if trigger.minimum_time_delay:
+        if self.minimum_time_delay:
             new_ids = []
+            # Use now from the transaction to compare with create_date
+            timestamp_cast = self.__class__.create_date.sql_cast
+            cursor.execute(*Select([timestamp_cast(CurrentTimestamp())]))
+            now, = cursor.fetchone()
+            if isinstance(now, str):
+                now = cast_datetime(now)
             for sub_ids in grouped_slice(ids):
                 sub_ids = list(sub_ids)
                 red_sql = reduce_ids(trigger_log.record_id, sub_ids)
                 cursor.execute(*trigger_log.select(
                         trigger_log.record_id, Max(trigger_log.create_date),
-                        where=(red_sql & (trigger_log.trigger == trigger.id)),
+                        where=(red_sql & (trigger_log.trigger == self.id)),
                         group_by=trigger_log.record_id))
                 delay = dict(cursor.fetchall())
                 for record_id in sub_ids:
@@ -223,30 +266,19 @@ class Trigger(DeactivableMixin, ModelSQL, ModelView):
                         continue
                     # SQLite return string for MAX
                     if isinstance(delay[record_id], str):
-                        datepart, timepart = delay[record_id].split(" ")
-                        year, month, day = list(map(int, datepart.split("-")))
-                        timepart_full = timepart.split(".")
-                        hours, minutes, seconds = map(
-                            int, timepart_full[0].split(":"))
-                        if len(timepart_full) == 2:
-                            microseconds = int(timepart_full[1])
-                        else:
-                            microseconds = 0
-                        delay[record_id] = datetime.datetime(year, month,
-                            day, hours, minutes, seconds, microseconds)
-                    if (datetime.datetime.now() - delay[record_id]
-                            >= trigger.minimum_time_delay):
+                        delay[record_id] = cast_datetime(delay[record_id])
+                    if now - delay[record_id] >= self.minimum_time_delay:
                         new_ids.append(record_id)
             ids = new_ids
 
         records = Model.browse(ids)
         if records:
-            getattr(ActionModel, trigger.action_function)(records, trigger)
-        if trigger.limit_number or trigger.minimum_time_delay:
+            getattr(ActionModel, method)(records, self)
+        if self.limit_number or self.minimum_time_delay:
             to_create = []
             for record in records:
                 to_create.append({
-                        'trigger': trigger.id,
+                        'trigger': self.id,
                         'record_id': record.id,
                         })
             if to_create:
@@ -263,14 +295,9 @@ class Trigger(DeactivableMixin, ModelSQL, ModelView):
                 ])
         for trigger in triggers:
             Model = pool.get(trigger.model.model)
-            triggered = []
             # TODO add a domain
             records = Model.search([])
-            for record in records:
-                if cls.eval(trigger, record):
-                    triggered.append(record)
-            if triggered:
-                cls.trigger_action(triggered, trigger)
+            trigger.trigger_action(records)
 
     @classmethod
     def create(cls, vlist):
@@ -295,7 +322,8 @@ class Trigger(DeactivableMixin, ModelSQL, ModelView):
 class TriggerLog(ModelSQL):
     'Trigger Log'
     __name__ = 'ir.trigger.log'
-    trigger = fields.Many2One('ir.trigger', 'Trigger', required=True)
+    trigger = fields.Many2One(
+        'ir.trigger', 'Trigger', required=True, ondelete='CASCADE')
     record_id = fields.Integer('Record ID', required=True)
 
     @classmethod

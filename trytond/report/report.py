@@ -7,9 +7,11 @@ import inspect
 import logging
 import subprocess
 import tempfile
+import time
 import warnings
 import zipfile
 import requests
+import operator
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from io import BytesIO
@@ -19,22 +21,29 @@ try:
 except ImportError:
     html2text = None
 
-warnings.simplefilter("ignore")
+try:
+    import weasyprint
+except ImportError:
+    weasyprint = None
 
-import relatorio.reporting
+from genshi.filters import Translator
+
+from trytond.i18n import gettext
+from trytond.pool import Pool, PoolBase
+from trytond.transaction import Transaction
+from trytond.config import config
+from trytond.tools import slugify
+from trytond.url import URLMixin
+from trytond.rpc import RPC
+from trytond.exceptions import UserError
+
+warnings.simplefilter("ignore")
+import relatorio.reporting  # noqa: E402
 warnings.resetwarnings()
 try:
     from relatorio.templates.opendocument import Manifest, MANIFEST
 except ImportError:
     Manifest, MANIFEST = None, None
-from genshi.filters import Translator
-from trytond.pool import Pool, PoolBase
-from trytond.transaction import Transaction
-from trytond.config import config
-from trytond.url import URLMixin
-from trytond.rpc import RPC
-from trytond.exceptions import UserError
-
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +80,16 @@ FORMAT2EXT = {
     'xls95': 'xls',
     'xlsx': 'xlsx',
     }
+
+TIMEDELTA_DEFAULT_CONVERTER = {
+    's': 1,
+    }
+TIMEDELTA_DEFAULT_CONVERTER['m'] = TIMEDELTA_DEFAULT_CONVERTER['s'] * 60
+TIMEDELTA_DEFAULT_CONVERTER['h'] = TIMEDELTA_DEFAULT_CONVERTER['m'] * 60
+TIMEDELTA_DEFAULT_CONVERTER['d'] = TIMEDELTA_DEFAULT_CONVERTER['h'] * 24
+TIMEDELTA_DEFAULT_CONVERTER['w'] = TIMEDELTA_DEFAULT_CONVERTER['d'] * 7
+TIMEDELTA_DEFAULT_CONVERTER['M'] = TIMEDELTA_DEFAULT_CONVERTER['d'] * 30
+TIMEDELTA_DEFAULT_CONVERTER['Y'] = TIMEDELTA_DEFAULT_CONVERTER['d'] * 365
 
 
 class UnoConversionError(UserError):
@@ -186,8 +205,8 @@ class Report(URLMixin, PoolBase):
                 for record in records:
                     oext, rcontent = cls._execute(
                         [record], data, action_report)
-                    rfilename = '%s-%s.%s' % (
-                        record.id, record.rec_name, oext)
+                    filename = slugify('%s-%s' % (record.id, record.rec_name))
+                    rfilename = '%s.%s' % (filename, oext)
                     content_zip.writestr(rfilename, rcontent)
             content = content.getvalue()
             oext = 'zip'
@@ -256,6 +275,7 @@ class Report(URLMixin, PoolBase):
         report_context['records'] = records
         report_context['record'] = records[0] if records else None
         report_context['format_date'] = cls.format_date
+        report_context['format_timedelta'] = cls.format_timedelta
         report_context['format_currency'] = cls.format_currency
         report_context['format_number'] = cls.format_number
         report_context['datetime'] = datetime
@@ -296,7 +316,10 @@ class Report(URLMixin, PoolBase):
         mimetype = MIMETYPES[report.template_extension]
         rel_report = relatorio.reporting.Report(path, mimetype,
                 ReportFactory(), relatorio.reporting.MIMETemplateLoader())
-        cls._add_translation_hook(rel_report, report_context)
+        if report.translatable:
+            cls._add_translation_hook(rel_report, report_context)
+        else:
+            report_context['set_lang'] = lambda language: None
 
         data = rel_report(**report_context).render()
         if hasattr(data, 'getvalue'):
@@ -307,7 +330,7 @@ class Report(URLMixin, PoolBase):
         return data
 
     @classmethod
-    def convert(cls, report, data, timeout=5 * 60):
+    def convert(cls, report, data, timeout=5 * 60, retry=5):
         "converts the report data to another mimetype if necessary"
         # AKE: support printing via external api
         if config.get('report', 'api', default=None):
@@ -318,9 +341,14 @@ class Report(URLMixin, PoolBase):
             raise NotImplementedError
 
     @classmethod
-    def convert_unoconv(cls, report, data, timeout):
+    def convert_unoconv(cls, report, data, timeout, retry=5):
         input_format = report.template_extension
         output_format = report.extension or report.template_extension
+
+        if (weasyprint
+                and input_format in {'html', 'xhtml'}
+                and output_format == 'pdf'):
+            return output_format, weasyprint.HTML(string=data).write_pdf()
 
         if output_format in MIMETYPES:
             return output_format, data
@@ -337,18 +365,21 @@ class Report(URLMixin, PoolBase):
                 '--headless', '--nolockcheck', '--nodefault', '--norestore',
                 '--convert-to', oext, '--outdir', dtemp, path]
             output = os.path.splitext(path)[0] + os.extsep + oext
-            subprocess.check_call(cmd, timeout=timeout)
-            # ABDC: Please don't judge me... Soffice makes me do this because
-            # its returns before file creation.
-            nb_retry = 0
-            while nb_retry < 10:
-                nb_retry += 1
+            for count in range(retry, -1, -1):
+                if count != retry:
+                    time.sleep(0.02 * (retry - count))
+                subprocess.check_call(cmd, timeout=timeout)
+                # ABDC: Please don't judge me... Soffice makes me do this
+                # because its returns before file creation.
+                nb_retry = 0
+                while nb_retry < 10:
+                    nb_retry += 1
+                    if os.path.exists(output):
+                        break
+                    time.sleep(0.02)
                 if os.path.exists(output):
-                    break
-                time.sleep(0.2)
-            if os.path.exists(output):
-                with open(output, 'rb') as fp:
-                    return oext, fp.read()
+                    with open(output, 'rb') as fp:
+                        return oext, fp.read()
             else:
                 logger.error(
                     'fail to convert %s to %s', report.report_name, oext)
@@ -388,12 +419,55 @@ class Report(URLMixin, PoolBase):
                 raise
 
     @classmethod
-    def format_date(cls, value, lang=None):
+    def format_date(cls, value, lang=None, format=None):
         pool = Pool()
         Lang = pool.get('ir.lang')
         if lang is None:
             lang = Lang.get()
-        return lang.strftime(value)
+        return lang.strftime(value, format=format)
+
+    @classmethod
+    def format_timedelta(cls, value, converter=None, lang=None):
+        pool = Pool()
+        Lang = pool.get('ir.lang')
+        if lang is None:
+            lang = Lang.get()
+        if not converter:
+            converter = TIMEDELTA_DEFAULT_CONVERTER
+        if value is None:
+            return ''
+
+        def translate(k):
+            xml_id = 'ir.msg_timedelta_%s' % k
+            translation = gettext(xml_id)
+            return translation if translation != xml_id else k
+
+        text = []
+        value = value.total_seconds()
+        sign = '-' if value < 0 else ''
+        value = abs(value)
+        converter = sorted(
+            converter.items(), key=operator.itemgetter(1), reverse=True)
+        values = []
+        for k, v in converter:
+            part, value = divmod(value, v)
+            values.append(part)
+
+        for (k, _), v in zip(converter[:-3], values):
+            if v:
+                text.append(lang.format('%d', v, True) + translate(k))
+        if any(values[-3:]) or not text:
+            time = '%02d:%02d' % tuple(values[-3:-1])
+            if values[-1] or value:
+                time += ':%02d' % values[-1]
+            text.append(time)
+        text = sign + ' '.join(text)
+        if value:
+            if not any(values[-3:]):
+                # Add space if no time
+                text += ' '
+            text += ('%.6f' % value)[1:]
+        return text
 
     @classmethod
     def format_currency(cls, value, lang, currency, symbol=True,

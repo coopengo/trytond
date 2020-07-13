@@ -20,6 +20,7 @@ from relatorio.templates.opendocument import get_zip_file
 
 from trytond.exceptions import UserError
 from trytond.i18n import gettext
+from trytond.tools.string_ import LazyString
 from ..model import ModelView, ModelSQL, fields
 from ..wizard import Wizard, StateView, StateTransition, StateAction, \
     Button
@@ -178,6 +179,8 @@ class Translation(ModelSQL, ModelView):
             for val in string:
                 if not val or val in translations[type][name]:
                     continue
+                if isinstance(val, LazyString):
+                    continue
                 cursor.execute(
                     *ir_translation.insert(columns,
                         [[name, 'en', type, val, '', module_name, False, -1]]))
@@ -216,7 +219,8 @@ class Translation(ModelSQL, ModelView):
                             ir_translation.type, ir_translation.src,
                             ir_translation.value, ir_translation.module,
                             ir_translation.fuzzy, ir_translation.res_id],
-                        [[trans_name, 'en',
+                        [[
+                                trans_name, 'en',
                                 'wizard_button', button.string,
                                 '', module_name,
                                 False, -1]]))
@@ -224,8 +228,8 @@ class Translation(ModelSQL, ModelView):
                 cursor.execute(*ir_translation.update(
                         [ir_translation.src],
                         [button.string],
-                        where=ir_translation.id ==
-                        trans_buttons[trans_name]['id']))
+                        where=ir_translation.id
+                        == trans_buttons[trans_name]['id']))
 
         for state_name, state in wizard.states.items():
             if not isinstance(state, StateView):
@@ -264,7 +268,8 @@ class Translation(ModelSQL, ModelView):
         Operator = fields.SQL_OPERATORS[operator]
         return [('id', 'in', table.select(table.id,
                     where=Operator(Substring(table.name, 1,
-                            Case((Position(',', table.name) > 0,
+                            Case((
+                                    Position(',', table.name) > 0,
                                     Position(',', table.name) - 1),
                                 else_=0)), value)))]
 
@@ -285,11 +290,13 @@ class Translation(ModelSQL, ModelView):
         return [('/form//field[@name="value"]', 'spell', Eval('lang'))]
 
     @classmethod
-    def get_ids(cls, name, ttype, lang, ids):
+    def get_ids(cls, name, ttype, lang, ids, cached_after=None):
         "Return translation for each id"
         pool = Pool()
         ModelFields = pool.get('ir.model.field')
         Model = pool.get('ir.model')
+        context = Transaction().context
+        fuzzy_translation = context.get('fuzzy_translation', False)
 
         translations, to_fetch = {}, []
         name = str(name)
@@ -326,8 +333,9 @@ class Translation(ModelSQL, ModelView):
             return translations
 
         # Don't use cache for fuzzy translation
-        if not Transaction().context.get(
-                'fuzzy_translation', False):
+        if (not fuzzy_translation
+                and (not cached_after
+                    or not cls._translation_cache.sync_since(cached_after))):
             for obj_id in ids:
                 trans = cls._translation_cache.get((name, ttype, lang, obj_id),
                     -1)
@@ -345,7 +353,7 @@ class Translation(ModelSQL, ModelView):
                 translations.update(
                     cls.get_ids(name, ttype, parent_lang, to_fetch))
 
-            if Transaction().context.get('fuzzy_translation', False):
+            if fuzzy_translation:
                 fuzzy_clause = []
             else:
                 fuzzy_clause = [('fuzzy', '=', False)]
@@ -360,7 +368,7 @@ class Translation(ModelSQL, ModelView):
                             ] + fuzzy_clause):
                     translations[translation.res_id] = translation.value
             # Don't store fuzzy translation in cache
-            if not Transaction().context.get('fuzzy_translation', False):
+            if not fuzzy_translation:
                 for res_id in to_fetch:
                     value = translations.setdefault(res_id)
                     cls._translation_cache.set(
@@ -1034,7 +1042,8 @@ class TranslationSet(Wizard):
                                     translation.type, translation.src,
                                     translation.value, translation.module,
                                     translation.fuzzy, translation.res_id],
-                                [[report.report_name, 'en',
+                                [[
+                                        report.report_name, 'en',
                                         'report', string,
                                         '', module,
                                         False, -1]]))
@@ -1121,8 +1130,8 @@ class TranslationSet(Wizard):
                                 [translation.src,
                                     translation.fuzzy],
                                 [string, True],
-                                where=(translation.id ==
-                                    trans_views[string_trans]['id'])))
+                                where=(translation.id
+                                    == trans_views[string_trans]['id'])))
                         del trans_views[string_trans]
                         done = True
                         break
@@ -1132,7 +1141,8 @@ class TranslationSet(Wizard):
                                 translation.type, translation.src,
                                 translation.value, translation.module,
                                 translation.fuzzy, translation.res_id],
-                            [[view.model, 'en',
+                            [[
+                                    view.model, 'en',
                                     'view', string,
                                     '', view.module,
                                     False, -1]]))
@@ -1185,7 +1195,10 @@ class TranslationClean(Wizard):
             Model = pool.get(model_name)
         except KeyError:
             return True
-        if field_name not in Model._fields:
+        field = Model._fields.get(field_name)
+        if not field:
+            return True
+        if translation.src not in list(field.string):
             return True
 
     @staticmethod
@@ -1283,10 +1296,13 @@ class TranslationClean(Wizard):
             Model = pool.get(model_name)
         except KeyError:
             return True
-        if field_name not in Model._fields:
+        field = Model._fields.get(field_name)
+        if not field:
             return True
-        field = Model._fields[field_name]
-        return not field.help
+        if not field.help:
+            return True
+        if translation.src not in list(field.help):
+            return True
 
     def transition_clean(self):
         pool = Pool()
@@ -1553,7 +1569,10 @@ class TranslationExportResult(ModelView):
     "Export translation"
     __name__ = 'ir.translation.export.result'
 
-    file = fields.Binary('File', readonly=True)
+    language = fields.Many2One('ir.lang', 'Language', readonly=True)
+    module = fields.Many2One('ir.module', 'Module', readonly=True)
+    file = fields.Binary('File', readonly=True, filename='filename')
+    filename = fields.Char('Filename')
 
 
 class TranslationExport(Wizard):
@@ -1583,7 +1602,10 @@ class TranslationExport(Wizard):
         cast = self.result.__class__.file.cast
         self.result.file = False  # No need to store it in session
         return {
+            'module': self.start.module.id,
+            'language': self.start.language.id,
             'file': cast(file_) if file_ else None,
+            'filename': '%s.po' % self.start.language.code,
             }
 
 

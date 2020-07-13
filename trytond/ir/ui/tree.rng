@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <grammar xmlns="http://relaxng.org/ns/structure/1.0"
-         xmlns:a="http://relaxng.org/ns/compatibility/annotations/1.0">
+         xmlns:a="http://relaxng.org/ns/compatibility/annotations/1.0"
+         datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes">
   <define name="tree">
     <element>
       <name ns="">tree</name>
@@ -26,8 +27,8 @@
       <attribute>
         <name ns="">editable</name>
         <choice>
-          <value>top</value>
-          <value>bottom</value>
+          <value>0</value>
+          <value>1</value>
         </choice>
       </attribute>
     </optional>
@@ -59,6 +60,14 @@
           <value>0</value>
           <value>1</value>
         </choice>
+      </attribute>
+    </optional>
+  </define>
+  <define name="attlist.tree" combine="interleave">
+    <optional>
+      <attribute>
+        <name ns="">visual</name>
+        <text/>
       </attribute>
     </optional>
   </define>
@@ -96,29 +105,30 @@
       <attribute>
         <name ns="">widget</name>
         <choice>
-          <value>char</value>
-          <value>many2one</value>
-          <value>date</value>
-          <value>one2many</value>
-          <value>many2many</value>
-          <value>selection</value>
-          <value>float</value>
-          <value>numeric</value>
-          <value>timedelta</value>
-          <value>integer</value>
-          <value>datetime</value>
-          <value>time</value>
+          <value>binary</value>
           <value>boolean</value>
-          <value>text</value>
-          <value>url</value>
-          <value>email</value>
           <value>callto</value>
-          <value>sip</value>
+          <value>char</value>
+          <value>date</value>
+          <value>datetime</value>
+          <value>email</value>
+          <value>float</value>
+          <value>image</value>
+          <value>integer</value>
+          <value>many2many</value>
+          <value>many2one</value>
+          <value>multiselection</value>
+          <value>numeric</value>
+          <value>one2many</value>
+          <value>one2one</value>
           <value>progressbar</value>
           <value>reference</value>
-          <value>one2one</value>
-          <value>binary</value>
-          <value>image</value>
+          <value>selection</value>
+          <value>sip</value>
+          <value>text</value>
+          <value>time</value>
+          <value>timedelta</value>
+          <value>url</value>
         </choice>
       </attribute>
     </optional>
@@ -135,10 +145,15 @@
     <optional>
       <attribute a:defaultValue="0">
         <name ns="">expand</name>
-        <choice>
-          <value>0</value>
-          <value>1</value>
-        </choice>
+        <data type="integer"/>
+      </attribute>
+    </optional>
+  </define>
+  <define name="attlist.field" combine="interleave">
+    <optional>
+      <attribute>
+        <name ns="">visual</name>
+        <text/>
       </attribute>
     </optional>
   </define>

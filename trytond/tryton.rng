@@ -48,19 +48,10 @@
     </optional>
   </define>
   <define name="attlist.data" combine="interleave">
-    <attribute>
-      <name ns="">depends</name>
-      <text/>
-    </attribute>
-  </define>
-  <define name="attlist.data" combine="interleave">
     <optional>
       <attribute>
-        <name ns="">skiptest</name>
-        <choice>
-          <value>0</value>
-          <value>1</value>
-        </choice>
+        <name ns="">depends</name>
+        <text/>
       </attribute>
     </optional>
   </define>
@@ -149,6 +140,14 @@
       <attribute>
         <name ns="">type</name>
         <value>xml</value>
+      </attribute>
+    </optional>
+  </define>
+  <define name="attlist.field" combine="interleave">
+    <optional>
+      <attribute>
+        <name ns="">depends</name>
+        <text/>
       </attribute>
     </optional>
   </define>

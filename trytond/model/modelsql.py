@@ -164,6 +164,7 @@ class ModelSQL(ModelStorage):
     """
     Define a model with storage in database.
     """
+    __slots__ = ()
     _table = None  # The name of the table in database
     _order = None
     _order_name = None  # Use to force order field when sorting on Many2One
@@ -187,7 +188,7 @@ class ModelSQL(ModelStorage):
             cls._sql_constraints.append(
                 ('id_positive', Check(table, table.id >= 0),
                     'ir.msg_id_positive'))
-        cls._order = [('id', 'ASC')]
+        cls._order = [('id', None)]
         if issubclass(cls, ModelView):
             cls.__rpc__.update({
                     'history_revisions': RPC(),
@@ -208,13 +209,11 @@ class ModelSQL(ModelStorage):
 
     @classmethod
     def __table_handler__(cls, module_name=None, history=False):
-        TableHandler = backend.get('TableHandler')
-        return TableHandler(cls, module_name, history=history)
+        return backend.TableHandler(cls, module_name, history=history)
 
     @classmethod
     def __register__(cls, module_name):
         cursor = Transaction().connection.cursor()
-        TableHandler = backend.get('TableHandler')
         super(ModelSQL, cls).__register__(module_name)
 
         if callable(cls.table_query):
@@ -267,8 +266,8 @@ class ModelSQL(ModelStorage):
                             and not callable(ref_model.table_query)):
                         ref = ref_model._table
                         # Create foreign key table if missing
-                        if not TableHandler.table_exist(ref):
-                            TableHandler(ref_model)
+                        if not backend.TableHandler.table_exist(ref):
+                            backend.TableHandler(ref_model)
                     else:
                         ref = None
                 if field_name in ['create_uid', 'write_uid']:
@@ -337,7 +336,6 @@ class ModelSQL(ModelStorage):
     def __raise_integrity_error(
             cls, exception, values, field_names=None, transaction=None):
         pool = Pool()
-        TableHandler = backend.get('TableHandler')
         if field_names is None:
             field_names = list(cls._fields.keys())
         if transaction is None:
@@ -355,7 +353,7 @@ class ModelSQL(ModelStorage):
                         gettext('ir.msg_required_validation_record',
                             **cls.__names__(field_name)))
         for name, _, error in cls._sql_constraints:
-            if TableHandler.convert_name(name) in str(exception):
+            if backend.TableHandler.convert_name(name) in str(exception):
                 raise SQLConstraintError(gettext(error))
         # Check foreign key in last because this can raise false positive
         # if the target is created during the same transaction.
@@ -372,7 +370,8 @@ class ModelSQL(ModelStorage):
                 target_records = Model.search([
                         ('id', '=', field.sql_format(values[field_name])),
                         ], order=[])
-                if not ((target_records
+                if not ((
+                            target_records
                             or (values[field_name] in create_records))
                         and (values[field_name] not in delete_records)):
                     error_args = cls.__names__(field_name)
@@ -554,7 +553,6 @@ class ModelSQL(ModelStorage):
     @classmethod
     @no_table_query
     def create(cls, vlist):
-        DatabaseIntegrityError = backend.get('DatabaseIntegrityError')
         transaction = Transaction()
         cursor = transaction.connection.cursor()
         pool = Pool()
@@ -625,7 +623,7 @@ class ModelSQL(ModelStorage):
                                 [insert_values]))
                         id_new = transaction.database.lastid(cursor)
                 new_ids.append(id_new)
-            except DatabaseIntegrityError as exception:
+            except backend.DatabaseIntegrityError as exception:
                 transaction = Transaction()
                 with Transaction().new_transaction(), \
                         Transaction().set_context(_check_access=False):
@@ -695,6 +693,8 @@ class ModelSQL(ModelStorage):
 
         fields_related = defaultdict(set)
         extra_fields = set()
+        if 'write_date' not in fields_names:
+            extra_fields.add('write_date')
         for field_name in fields_names:
             if field_name == '_timestamp':
                 continue
@@ -771,6 +771,9 @@ class ModelSQL(ModelStorage):
             result = [{'id': x} for x in ids]
 
         cachable_fields = []
+        max_write_date = max(
+            (r['write_date'] for r in result if r.get('write_date')),
+            default=None)
         for column in columns:
             # Split the output name to remove SQLite type detection
             fname = column.output_name.split()[0]
@@ -781,7 +784,8 @@ class ModelSQL(ModelStorage):
                 if getattr(field, 'translate', False):
                     translations = Translation.get_ids(
                         cls.__name__ + ',' + fname, 'model',
-                        Transaction().language, ids)
+                        Transaction().language, ids,
+                        cached_after=max_write_date)
                     for row in result:
                         row[fname] = translations.get(row['id']) or row[fname]
                 if fname != 'id':
@@ -931,7 +935,6 @@ class ModelSQL(ModelStorage):
     @classmethod
     @no_table_query
     def write(cls, records, values, *args):
-        DatabaseIntegrityError = backend.get('DatabaseIntegrityError')
         transaction = Transaction()
         cursor = transaction.connection.cursor()
         pool = Pool()
@@ -984,7 +987,7 @@ class ModelSQL(ModelStorage):
                 try:
                     cursor.execute(*table.update(columns, update_values,
                             where=red_sql))
-                except DatabaseIntegrityError as exception:
+                except backend.DatabaseIntegrityError as exception:
                     transaction = Transaction()
                     with Transaction().new_transaction(), \
                             Transaction().set_context(_check_access=False):
@@ -1023,7 +1026,6 @@ class ModelSQL(ModelStorage):
     @classmethod
     @no_table_query
     def delete(cls, records):
-        DatabaseIntegrityError = backend.get('DatabaseIntegrityError')
         transaction = Transaction()
         cursor = transaction.connection.cursor()
         pool = Pool()
@@ -1136,7 +1138,7 @@ class ModelSQL(ModelStorage):
 
             try:
                 cursor.execute(*table.delete(where=red_sql))
-            except DatabaseIntegrityError as exception:
+            except backend.DatabaseIntegrityError as exception:
                 transaction = Transaction()
                 with Transaction().new_transaction():
                     cls.__raise_integrity_error(
@@ -1264,11 +1266,14 @@ class ModelSQL(ModelStorage):
         for oexpr, otype in order:
             fname, _, extra_expr = oexpr.partition('.')
             field = cls._fields[fname]
-            otype = otype.upper()
-            try:
-                otype, null_ordering = otype.split(' ', 1)
-            except ValueError:
-                null_ordering = None
+            if not otype:
+                otype, null_ordering = 'ASC', None
+            else:
+                otype = otype.upper()
+                try:
+                    otype, null_ordering = otype.split(' ', 1)
+                except ValueError:
+                    null_ordering = None
             Order = order_types[otype]
             NullOrdering = null_ordering_types[null_ordering]
             forder = field.convert_order(oexpr, tables, cls)
