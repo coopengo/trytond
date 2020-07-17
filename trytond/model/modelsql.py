@@ -277,8 +277,9 @@ class ModelSQL(ModelStorage):
                 elif ref:
                     table.add_fk(field_name, ref, field.ondelete)
 
-            table.index_action(
-                field_name, action=field.select and 'add' or 'remove')
+            # Do not remove previously set indexes
+            if field.select:
+                table.index_action(field_name, action='add')
 
             required = field.required
             # Do not set 'NOT NULL' for Binary field as the database column
