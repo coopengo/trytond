@@ -187,7 +187,7 @@ class ActionKeyword(ModelSQL, ModelView):
     def models_get():
         pool = Pool()
         Model = pool.get('ir.model')
-        return [(m.model, m.name) for m in Model.search([])]
+        return [(None, '')] + [(m.model, m.name) for m in Model.search([])]
 
     @classmethod
     def delete(cls, keywords):
@@ -229,7 +229,10 @@ class ActionKeyword(ModelSQL, ModelView):
 
         clause = [
             ('keyword', '=', keyword),
-            ('model', '=', model + ',-1'),
+            ['OR',
+                ('model', '=', model + ',-1'),
+                ('model', '=', None),
+                ],
             ]
         if model_id >= 0:
             clause = ['OR',
