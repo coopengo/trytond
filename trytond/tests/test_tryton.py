@@ -322,7 +322,10 @@ class ModuleTestCase(unittest.TestCase):
                 fields.discard(fname)
                 fields.discard('context')
                 fields.discard('_user')
-                depends = set(field.depends)
+                # XXX PR https://github.com/coopengo/coog/pull/3458 implies
+                # that parent fields are added to depends.
+                depends = set(d for d in field.depends
+                    if not d.startswith('_parent'))
                 self.assertLessEqual(fields, depends,
                     msg='Missing depends %s in "%s"."%s"' % (
                         list(fields - depends), mname, fname))
