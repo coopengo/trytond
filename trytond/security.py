@@ -142,14 +142,13 @@ def check(dbname, user, session, context=None):
 
 
 def check_token(dbname, token):
-    DatabaseOperationalError = backend.get('DatabaseOperationalError')
     for count in range(config.getint('database', 'retry'), -1, -1):
         with Transaction().start(dbname, 0, readonly=True):
             pool = _get_pool(dbname)
             Token = pool.get('api.token')
             try:
                 return Token.check(token)
-            except DatabaseOperationalError:
+            except backend.DatabaseOperationalError:
                 if count:
                     continue
                 raise
@@ -182,13 +181,12 @@ def reset_user_session(dbname, user, session):
         if ttl is not None and config_session_audit():
             redis.time_user(dbname, user, ttl)
         return
-    DatabaseOperationalError = backend.get('DatabaseOperationalError')
     try:
         with Transaction().start(dbname, 0):
             pool = _get_pool(dbname)
             Session = pool.get('ir.session')
             Session.reset(session)
-    except DatabaseOperationalError:
+    except backend.DatabaseOperationalError:
         pass
 
 
