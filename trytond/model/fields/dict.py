@@ -49,8 +49,9 @@ class Dict(Field):
         if isinstance(value, dict):
             d = {}
             for k, v in value.items():
-                if v is None:
-                    continue
+                # JMO : some Coog tests rely on data with all values at None
+                # if v is None:
+                #     continue
                 if isinstance(v, list):
                     v = list(sorted(set(v)))
                 d[k] = v
