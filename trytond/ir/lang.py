@@ -208,7 +208,7 @@ class Lang(DeactivableMixin, ModelSQL, ModelView):
                     ])
         modules = [m.name for m in modules]
         for node in create_graph(modules):
-            load_translations(pool, node, codes)
+            load_translations(pool, node, codes, node.name)
 
     @classmethod
     @ModelView.button
