@@ -8,19 +8,20 @@ import logging
 
 from decimal import Decimal
 from itertools import islice, chain
-from functools import wraps
+from functools import lru_cache, wraps
 from operator import itemgetter
 from collections import defaultdict
 
 from trytond.exceptions import UserError
 from trytond.model import Model
 from trytond.model import fields
-from trytond.tools import reduce_domain, memoize, is_instance_method, \
-    grouped_slice
+from trytond.tools import reduce_domain, is_instance_method, grouped_slice
+from trytond.tools.domain_inversion import (
+    domain_inversion, parse as domain_parse)
 from trytond.pyson import PYSONEncoder, PYSONDecoder, PYSON
 from trytond.const import OPERATORS
 from trytond.config import config
-from trytond.i18n import gettext
+from trytond.i18n import gettext, lazy_gettext
 from trytond.transaction import Transaction
 from trytond.pool import Pool
 from trytond.cache import LRUDict, LRUDictTransaction, freeze
@@ -92,13 +93,20 @@ class ModelStorage(Model):
     """
     Define a model with storage capability in Tryton.
     """
+    __slots__ = ('_transaction', '_user', '_context', '_ids',
+        '_transaction_cache', '_local_cache')
 
-    create_uid = fields.Many2One('res.user', 'Create User', readonly=True)
-    create_date = fields.Timestamp('Create Date', readonly=True)
-    write_uid = fields.Many2One('res.user', 'Write User', readonly=True)
-    write_date = fields.Timestamp('Write Date', readonly=True)
-    rec_name = fields.Function(fields.Char('Record Name'), 'get_rec_name',
-            searcher='search_rec_name')
+    create_uid = fields.Many2One(
+        'res.user', lazy_gettext('ir.msg_created_by'), readonly=True)
+    create_date = fields.Timestamp(
+        lazy_gettext('ir.msg_created_by'), readonly=True)
+    write_uid = fields.Many2One(
+        'res.user', lazy_gettext('ir.msg_edited_by'), readonly=True)
+    write_date = fields.Timestamp(
+        lazy_gettext('ir.msg_edited_at'), readonly=True)
+    rec_name = fields.Function(
+        fields.Char(lazy_gettext('ir.msg_record_name')), 'get_rec_name',
+        searcher='search_rec_name')
 
     @classmethod
     def __setup__(cls):
@@ -117,6 +125,7 @@ class ModelStorage(Model):
                     'search_count': RPC(),
                     'search_read': RPC(),
                     'resources': RPC(instantiate=0, unique=False),
+                    'export_data_domain': RPC(),
                     'export_data': RPC(instantiate=0, unique=False),
                     'import_data': RPC(readonly=False),
                     })
@@ -159,12 +168,7 @@ class ModelStorage(Model):
         if not triggers:
             return
         for trigger in triggers:
-            triggers = []
-            for record in records:
-                if Trigger.eval(trigger, record):
-                    triggers.append(record)
-            if triggers:
-                Trigger.trigger_action(triggers, trigger)
+            trigger.queue_trigger_action(records)
 
     @classmethod
     def read(cls, ids, fields_names):
@@ -244,14 +248,8 @@ class ModelStorage(Model):
         Trigger write actions.
         eligibles is a dictionary of the lists of eligible records by triggers
         '''
-        Trigger = Pool().get('ir.trigger')
         for trigger, records in eligibles.items():
-            triggered = []
-            for record in records:
-                if Trigger.eval(trigger, record):
-                    triggered.append(record)
-            if triggered:
-                Trigger.trigger_action(triggered, trigger)
+            trigger.queue_trigger_action(records)
 
     @classmethod
     def index_set_field(cls, name):
@@ -289,8 +287,8 @@ class ModelStorage(Model):
 
         # Clean transaction cache
         for cache in list(Transaction().cache.values()):
-            for cache in (cache,
-                    list(cache.get('_language_cache', {}).values())):
+            for cache in (cache, list(
+                        cache.get('_language_cache', {}).values())):
                 if cls.__name__ in cache:
                     for record in records:
                         if record.id in cache[cls.__name__]:
@@ -307,12 +305,8 @@ class ModelStorage(Model):
         if not triggers:
             return
         for trigger in triggers:
-            triggered = []
-            for record in records:
-                if Trigger.eval(trigger, record):
-                    triggered.append(record)
-            if triggered:
-                Trigger.trigger_action(triggered, trigger)
+            # Do not queue because records will be deleted
+            trigger.trigger_action(records)
 
     @classmethod
     def copy(cls, records, default=None):
@@ -376,6 +370,10 @@ class ModelStorage(Model):
                         del data[field_name]
                     elif data[field_name]:
                         data[field_name] = [('add', data[field_name])]
+                elif ftype == 'binary':
+                    # Copy only file_id
+                    if field.file_id and origin.get(field.file_id):
+                        del data[field_name]
             if 'id' in data:
                 del data['id']
             return data
@@ -502,8 +500,8 @@ class ModelStorage(Model):
         '''
         records = cls.search(domain, offset=offset, limit=limit, order=order)
 
-        if not fields_names:
-            fields_names = list(cls._fields.keys())
+        if fields_names is None:
+            fields_names = ['id']
         if 'id' not in fields_names:
             fields_names.append('id')
         rows = cls.read(list(map(int, records)), fields_names)
@@ -629,15 +627,8 @@ class ModelStorage(Model):
                 eModel = pool.get(value.__name__)
                 field = eModel._fields[field_name]
                 if field.states and 'invisible' in field.states:
-                    pyson_invisible = PYSONEncoder().encode(
-                            field.states['invisible'])
-                    env = EvalEnvironment(value, eModel)
-                    env.update(Transaction().context)
-                    env['current_date'] = datetime.datetime.today()
-                    env['time'] = time
-                    env['context'] = Transaction().context
-                    env['active_id'] = value.id
-                    invisible = PYSONDecoder(env).decode(pyson_invisible)
+                    invisible = _record_eval_pyson(
+                        value, field.states['invisible'])
                     if invisible:
                         value = ''
                         break
@@ -647,8 +638,8 @@ class ModelStorage(Model):
                     value = getattr(value, field_name)
                 if isinstance(value, (list, tuple)):
                     first = True
-                    child_fields_names = [(x[:i + 1] == fields_tree[:i + 1] and
-                        x[i + 1:]) or [] for x in fields_names]
+                    child_fields_names = [(x[:i + 1] == fields_tree[:i + 1]
+                            and x[i + 1:]) or [] for x in fields_names]
                     if child_fields_names in done:
                         break
                     done.append(child_fields_names)
@@ -688,6 +679,12 @@ class ModelStorage(Model):
         return data
 
     @classmethod
+    def export_data_domain(
+            cls, domain, fields_names, offset=0, limit=None, order=None):
+        records = cls.search(domain, limit=limit, offset=offset, order=order)
+        return cls.export_data(records, fields_names)
+
+    @classmethod
     def import_data(cls, fields_names, data):
         '''
         Create records for all values in data.
@@ -695,7 +692,7 @@ class ModelStorage(Model):
         '''
         pool = Pool()
 
-        @memoize(1000)
+        @lru_cache(maxsize=1000)
         def get_many2one(relation, value):
             if not value:
                 return None
@@ -717,7 +714,7 @@ class ModelStorage(Model):
                 res = res[0].id
             return res
 
-        @memoize(1000)
+        @lru_cache(maxsize=1000)
         def get_many2many(relation, value):
             if not value:
                 return None
@@ -747,7 +744,7 @@ class ModelStorage(Model):
         def get_one2one(relation, value):
             return ('add', get_many2one(relation, value))
 
-        @memoize(1000)
+        @lru_cache(maxsize=1000)
         def get_reference(value, field):
             if not value:
                 return None
@@ -757,7 +754,7 @@ class ModelStorage(Model):
                 raise ImportDataError(
                     gettext('ir.msg_reference_syntax_error',
                         value=value,
-                        field='/'.join(field)))
+                        field=field))
             Relation = pool.get(relation)
             res = Relation.search([
                 ('rec_name', '=', value),
@@ -776,7 +773,7 @@ class ModelStorage(Model):
                 res = '%s,%s' % (relation, res[0].id)
             return res
 
-        @memoize(1000)
+        @lru_cache(maxsize=1000)
         def get_by_id(value, field, ftype):
             if not value:
                 return None
@@ -791,7 +788,7 @@ class ModelStorage(Model):
                     raise ImportDataError(
                         gettext('ir.msg_reference_syntax_error',
                             value=value,
-                            field='/'.join(field)))
+                            field=field))
                 value = [value]
             else:
                 value = [value]
@@ -803,7 +800,7 @@ class ModelStorage(Model):
                     raise ImportDataError(
                         gettext('ir.msg_xml_id_syntax_error',
                             value=word,
-                            field='/'.join(field)))
+                            field=field))
                 db_id = ModelData.get_id(module, xml_id)
                 res_ids.append(db_id)
             if ftype == 'many2many' and res_ids:
@@ -837,7 +834,8 @@ class ModelStorage(Model):
                 value = line[i]
                 if is_prefix_len and field[-1].endswith(':id'):
                     ftype = fields_def[field[-1][:-3]]['type']
-                    row[field[0][:-3]] = get_by_id(value, field, ftype)
+                    row[field[0][:-3]] = get_by_id(
+                        value, '/'.join(field), ftype)
                 elif is_prefix_len and ':lang=' in field[-1]:
                     field_name, lang = field[-1].split(':lang=')
                     translate.setdefault(lang, {})[field_name] = value or False
@@ -903,7 +901,7 @@ class ModelStorage(Model):
                     elif field_type == 'one2one':
                         res = get_one2one(this_field_def['relation'], value)
                     elif field_type == 'reference':
-                        res = get_reference(value, field)
+                        res = get_reference(value, '/'.join(field))
                     else:
                         res = value or None
                     row[field[-1]] = res
@@ -1074,13 +1072,8 @@ class ModelStorage(Model):
             if is_pyson(field.domain):
                 pyson_domain = PYSONEncoder().encode(field.domain)
                 for record in records:
-                    env = EvalEnvironment(record, cls)
-                    env.update(Transaction().context)
-                    env['current_date'] = datetime.datetime.today()
-                    env['time'] = time
-                    env['context'] = Transaction().context
-                    env['active_id'] = record.id
-                    domain = freeze(PYSONDecoder(env).decode(pyson_domain))
+                    domain = freeze(_record_eval_pyson(
+                            record, pyson_domain, encoded=True))
                     domains[domain].append(record)
                 # Select strategy depending if it is closer to one domain per
                 # record or one domain for all records
@@ -1139,10 +1132,36 @@ class ModelStorage(Model):
                                 [('id', 'in', [r.id for r in sub_relations])],
                                 domain,
                                 ])
-                    if sub_relations != set(finds):
-                        raise DomainValidationError(
-                            gettext('ir.msg_domain_validation_record',
-                                **cls.__names__(field.name)))
+                    invalid_records = sub_relations - set(finds)
+                    if invalid_records:
+                        invalid_record = invalid_records.pop()
+                        domain = field.domain
+                        if is_pyson(domain):
+                            domain = _record_eval_pyson(records[0], domain)
+                        msg = gettext(
+                            'ir.msg_domain_validation_record',
+                            **cls.__names__(field.name))
+                        fields = set()
+                        level = 0
+                        if field not in Relation._fields.values():
+                            expression = domain_parse(domain)
+                            for variable in expression.variables:
+                                parts = variable.split('.')
+                                fields.add(parts[0])
+                                level = max(level, len(parts))
+                        else:
+                            fields.add(field.name)
+                        for field_name in sorted(fields):
+                            invalid_domain = domain_inversion(
+                                domain, field_name,
+                                EvalEnvironment(invalid_record, Relation))
+                            if isinstance(invalid_domain, bool):
+                                continue
+                            field_def = Relation.fields_get(
+                                [field_name], level=level)
+                            raise DomainValidationError(
+                                msg, domain=(invalid_domain, field_def))
+                        raise DomainValidationError(msg)
 
         field_names = set(field_names or [])
         function_fields = {name for name, field in cls._fields.items()
@@ -1162,7 +1181,8 @@ class ModelStorage(Model):
                 validate_domain(field)
 
                 def required_test(value, field_name, field):
-                    if ((isinstance(value,
+                    if ((
+                                isinstance(value,
                                     (type(None), bool, list, tuple, str, dict))
                                 and not value)
                             or (field._type == 'reference'
@@ -1180,13 +1200,8 @@ class ModelStorage(Model):
                         pyson_required = PYSONEncoder().encode(
                                 field.states['required'])
                         for record in records:
-                            env = EvalEnvironment(record, cls)
-                            env.update(Transaction().context)
-                            env['current_date'] = datetime.datetime.today()
-                            env['time'] = time
-                            env['context'] = Transaction().context
-                            env['active_id'] = record.id
-                            required = PYSONDecoder(env).decode(pyson_required)
+                            required = _record_eval_pyson(
+                                record, pyson_required, encoded=True)
                             if required:
                                 required_test(getattr(record, field_name),
                                     field_name, field)
@@ -1204,14 +1219,7 @@ class ModelStorage(Model):
                 if hasattr(field, 'size') and field.size is not None:
                     for record in records:
                         if isinstance(field.size, PYSON):
-                            pyson_size = PYSONEncoder().encode(field.size)
-                            env = EvalEnvironment(record, cls)
-                            env.update(Transaction().context)
-                            env['current_date'] = datetime.datetime.today()
-                            env['time'] = time
-                            env['context'] = Transaction().context
-                            env['active_id'] = record.id
-                            field_size = PYSONDecoder(env).decode(pyson_size)
+                            field_size = _record_eval_pyson(record, field.size)
                         else:
                             field_size = field.size
                         size = len(getattr(record, field_name) or '')
@@ -1247,13 +1255,8 @@ class ModelStorage(Model):
                     if is_pyson(field.digits):
                         pyson_digits = PYSONEncoder().encode(field.digits)
                         for record in records:
-                            env = EvalEnvironment(record, cls)
-                            env.update(Transaction().context)
-                            env['current_date'] = datetime.datetime.today()
-                            env['time'] = time
-                            env['context'] = Transaction().context
-                            env['active_id'] = record.id
-                            digits = PYSONDecoder(env).decode(pyson_digits)
+                            digits = _record_eval_pyson(
+                                record, pyson_digits, encoded=True)
                             digits_test(getattr(record, field_name), digits,
                                 field_name)
                     else:
@@ -1286,16 +1289,22 @@ class ModelStorage(Model):
                         if '' in test or None in test:
                             test.add('')
                             test.add(None)
-                        if value not in test:
-                            # JCA : Add log to help debugging
-                            logging.getLogger().debug('Bad Selection : field '
-                                    '%s of model %s : %s is not in %s' % (
-                                        field_name, cls.__name__, value, test))
-                            error_args = cls.__names__(field_name)
-                            error_args['value'] = value
-                            raise SelectionValidationError(
-                                gettext('ir.msg_selection_validation_record',
-                                    **error_args))
+                        if field._type != 'multiselection':
+                            values = [value]
+                        else:
+                            values = value or []
+                        for value in values:
+                            if value not in test:
+                                logging.getLogger().debug(
+                                    'Bad Selection : field %s of model %s :'
+                                    ' %s is not in %s' % (
+                                        field_name, cls.__name__, value,
+                                        test))
+                                error_args = cls.__names__(field_name)
+                                error_args['value'] = value
+                                raise SelectionValidationError(gettext(
+                                        'ir.msg_selection_validation_record',
+                                        **error_args))
 
                 def format_test(value, format, field_name):
                     if not value:
@@ -1422,14 +1431,16 @@ class ModelStorage(Model):
         try:
             if field._type not in ('many2one', 'reference'):
                 return self._cache[self.id][name]
+            else:
+                skip_eager = name in self._cache[self.id]
         except KeyError:
-            pass
+            skip_eager = False
 
         # build the list of fields we will fetch
         ffields = {
             name: field,
             }
-        if field.loading == 'eager':
+        if field.loading == 'eager' and not skip_eager:
             FieldAccess = Pool().get('ir.model.field.access')
             fread_accesses = {}
             fread_accesses.update(FieldAccess.check(self.__name__,
@@ -1611,34 +1622,59 @@ class ModelStorage(Model):
                 if self.id is not None and self.id >= 0:
                     _values, self._values = self._values, None
                     try:
-                        to_remove = [t.id for t in getattr(self, fname)]
+                        previous = [t.id for t in getattr(self, fname)]
                     finally:
                         self._values = _values
                 else:
-                    to_remove = []
+                    previous = []
                 to_add = []
                 to_create = []
                 to_write = []
                 for target in targets:
-                    if target.id is None or target.id < 0:
-                        if field._type == 'one2many' and field.field:
-                            # Don't store old target link
-                            if field.field:
-                                # JCA : Ignore if Function field
-                                setattr(target, field.field, None)
-                        to_create.append(target._save_values)
+                    if (field._type == 'one2many'
+                            and field.field
+                            and target._values):
+                        t_values = target._values.copy()
+                        # Don't look at reverse field
+                        target._values.pop(field.field, None)
                     else:
-                        if target.id in to_remove:
-                            to_remove.remove(target.id)
+                        t_values = None
+                    try:
+                        if target.id is None or target.id < 0:
+                            to_create.append(target._save_values)
                         else:
-                            to_add.append(target.id)
-                        target_values = target._save_values
-                        if target_values:
-                            to_write.append(
-                                ('write', [target.id], target_values))
+                            if target.id in previous:
+                                previous.remove(target.id)
+                            else:
+                                to_add.append(target.id)
+                            target_values = target._save_values
+                            if target_values:
+                                to_write.append(
+                                    ('write', [target.id], target_values))
+                    finally:
+                        if t_values:
+                            target._values = t_values
                 value = []
-                if to_remove:
-                    value.append(('remove', to_remove))
+                if previous:
+                    to_delete, to_remove = [], []
+                    deleted = removed = None
+                    if self._deleted:
+                        deleted = self._deleted[fname]
+                    if self._removed:
+                        removed = self._removed[fname]
+                    for id_ in previous:
+                        if deleted and id_ in deleted:
+                            to_delete.append(id_)
+                        elif removed and id_ in removed:
+                            to_remove.append(id_)
+                        elif field._type == 'one2many':
+                            to_delete.append(id_)
+                        else:
+                            to_remove.append(id_)
+                    if to_delete:
+                        value.append(('delete', to_delete))
+                    if to_remove:
+                        value.append(('remove', to_remove))
                 if to_add:
                     value.append(('add', to_add))
                 if to_create:
@@ -1691,16 +1727,19 @@ class ModelStorage(Model):
                         cls.write(*sum(
                                 (([r], save_values[id(r)]) for r in to_write),
                                 ()))
-            except:
+            except Exception:
                 for record in to_create + to_write:
                     record._values = values[id(record)]
                 raise
             for record in to_create + to_write:
                 record._init_values = None
+                record._deleted = None
+                record._removed = None
             records = latter
 
 
 class EvalEnvironment(dict):
+    __slots__ = ('_record', '_model')
 
     def __init__(self, record, Model):
         super(EvalEnvironment, self).__init__()
@@ -1719,7 +1758,8 @@ class EvalEnvironment(dict):
                 if self._model._fields[item]._type == 'reference':
                     return str(value)
                 return value.id
-            elif isinstance(value, (list, tuple)):
+            elif (isinstance(value, (list, tuple))
+                    and value and isinstance(value[0], Model)):
                 return [r.id for r in value]
             else:
                 return value
@@ -1740,3 +1780,21 @@ class EvalEnvironment(dict):
 
     def __bool__(self):
         return bool(self._record)
+
+
+def _record_eval_pyson(record, source, encoded=False):
+    transaction = Transaction()
+    if not encoded:
+        pyson = _pyson_encoder.encode(source)
+    else:
+        pyson = source
+    env = EvalEnvironment(record, record.__class__)
+    env.update(transaction.context)
+    env['current_date'] = datetime.datetime.today()
+    env['time'] = time
+    env['context'] = transaction.context
+    env['active_id'] = record.id
+    return PYSONDecoder(env).decode(pyson)
+
+
+_pyson_encoder = PYSONEncoder()

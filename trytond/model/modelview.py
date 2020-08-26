@@ -99,6 +99,7 @@ class ModelView(Model):
     """
     Define a model with views in Tryton.
     """
+    __slots__ = ()
     __modules_list = None  # Cache for the modules list sorted by dependency
     _fields_view_get_cache = Cache('modelview.fields_view_get')
     _view_toolbar_get_cache = Cache('modelview.view_toolbar_get')
@@ -127,15 +128,12 @@ class ModelView(Model):
         cls._buttons = {}
 
         fields_ = {}
-        callables = {}
         for name in dir(cls):
             if name.startswith('__'):
                 continue
             attr = getattr(cls, name)
             if isinstance(attr, fields.Field):
                 fields_[name] = attr
-            elif callable(attr):
-                callables[name] = attr
 
         methods = {
             '_done': set(),
@@ -225,7 +223,7 @@ class ModelView(Model):
                     parent_meth, 'change', set())
 
     @classmethod
-    def fields_view_get(cls, view_id=None, view_type='form'):
+    def fields_view_get(cls, view_id=None, view_type='form', level=None):
         '''
         Return a view definition.
         If view_id is None the first one will be used of view_type.
@@ -237,7 +235,7 @@ class ModelView(Model):
            - fields: a dictionary with the definition of each field in the view
            - field_childs: the name of the childs field for tree
         '''
-        key = (cls.__name__, view_id, view_type)
+        key = (cls.__name__, view_id, view_type, level)
         result = cls._fields_view_get_cache.get(key)
         if result:
             return result
@@ -349,11 +347,14 @@ class ModelView(Model):
             result['field_childs'] = None
             result['view_id'] = view_id
 
+        if level is None:
+            level = 1 if result['type'] == 'tree' else 0
+
         # Update arch and compute fields from arch
         parser = etree.XMLParser(remove_blank_text=True)
         tree = etree.fromstring(result['arch'], parser)
-        xarch, xfields = cls._view_look_dom_arch(tree, result['type'],
-                result['field_childs'])
+        xarch, xfields = cls._view_look_dom_arch(
+            tree, result['type'], result['field_childs'], level=level)
         result['arch'] = xarch
         result['fields'] = xfields
 
@@ -421,15 +422,22 @@ class ModelView(Model):
         return []
 
     @classmethod
-    def _view_look_dom_arch(cls, tree, type, field_children=None):
+    def _view_look_dom_arch(cls, tree, type, field_children=None, level=0):
         pool = Pool()
         ModelAccess = pool.get('ir.model.access')
         FieldAccess = pool.get('ir.model.field.access')
 
         encoder = PYSONEncoder()
-        for xpath, attribute, value in cls.view_attributes():
-            for element in tree.xpath(xpath):
+        view_depends = []
+        for xpath, attribute, value, *extra in cls.view_attributes():
+            depends = []
+            if extra:
+                depends, = extra
+            nodes = tree.xpath(xpath)
+            for element in nodes:
                 element.set(attribute, encoder.encode(value))
+            if nodes and depends:
+                view_depends.extend(depends)
 
         fields_width = {}
         tree_root = tree.getroottree().getroot()
@@ -487,7 +495,7 @@ class ModelView(Model):
             for page in tree.xpath('//page[not(descendant::*)]'):
                 page.getparent().remove(page)
 
-        if type == 'tree':
+        if type == 'tree' and Transaction().context.get('view_tree_width'):
             ViewTreeWidth = pool.get('ir.ui.view_tree_width')
             viewtreewidth_ids = ViewTreeWidth.search([
                 ('model', '=', cls.__name__),
@@ -518,11 +526,15 @@ class ModelView(Model):
             for depend in field.depends:
                 fields_def.setdefault(depend, {'name': depend})
 
+        for depend in view_depends:
+            if depend not in fields_to_remove:
+                fields_def.setdefault(depend, {'name': depend})
+
         arch = etree.tostring(
             tree, encoding='utf-8', pretty_print=False).decode('utf-8')
         # Do not call fields_def without fields as it returns all fields
         if fields_def:
-            fields2 = cls.fields_get(list(fields_def.keys()))
+            fields2 = cls.fields_get(list(fields_def.keys()), level=level)
         else:
             fields2 = {}
         for field in fields_def:
@@ -539,6 +551,7 @@ class ModelView(Model):
         ModelAccess = pool.get('ir.model.access')
         Button = pool.get('ir.model.button')
         User = pool.get('res.user')
+        ActionWindow = pool.get('ir.action.act_window')
 
         if fields_width is None:
             fields_width = {}
@@ -564,10 +577,10 @@ class ModelView(Model):
             elif hasattr(field, 'get_target'):
                 return field.get_target().__name__
 
-        def get_views(relation, view_ids, mode):
+        def get_views(relation, widget, view_ids, mode):
             Relation = pool.get(relation)
             views = {}
-            if field._type in ['one2many', 'many2many']:
+            if widget in {'one2many', 'many2many'}:
                 # Prefetch only the first view to prevent infinite loop
                 if view_ids:
                     for view_id in view_ids:
@@ -606,7 +619,8 @@ class ModelView(Model):
                     continue
                 mode = (
                     element.attrib.pop('mode', None) or 'tree,form').split(',')
-                views = get_views(relation, view_ids, mode)
+                widget = element.attrib.get('widget', field._type)
+                views = get_views(relation, widget, view_ids, mode)
                 element.attrib['mode'] = ','.join(mode)
                 if not element.get('relation'):
                     fields_attrs[fname].setdefault('views', {}).update(views)
@@ -655,6 +669,25 @@ class ModelView(Model):
 
             for depend in states.get('depends', []):
                 fields_attrs.setdefault(depend, {})
+
+        if element.tag == 'link':
+            link_name = element.attrib['name']
+            action_id = ModelData.get_id(*link_name.split('.'))
+            try:
+                action, = ActionWindow.search([('id', '=', action_id)])
+            except ValueError:
+                action = None
+            if (not action
+                    or not action.res_model
+                    or not ModelAccess.check(
+                        action.res_model, 'read', raise_exception=False)):
+                element.tag = 'label'
+                colspan = element.attrib.get('colspan')
+                element.attrib.clear()
+                if colspan is not None:
+                    element.attrib['colspan'] = colspan
+            else:
+                element.attrib['id'] = str(action.action.id)
 
         # translate view
         if Transaction().language != 'en':
@@ -735,12 +768,17 @@ class ModelView(Model):
                 ModelData = pool.get('ir.model.data')
                 Action = pool.get('ir.action')
 
-                func(*args, **kwargs)
+                value = func(*args, **kwargs)
 
                 module, fs_id = action.split('.')
                 action_id = Action.get_action_id(
                     ModelData.get_id(module, fs_id))
-                return action_id
+                if value:
+                    action_value = Action(action_id).get_action_value()
+                    action_value.update(value)
+                    return action_value
+                else:
+                    return action_id
             return wrapper
         return decorator
 
@@ -797,13 +835,9 @@ class ModelView(Model):
             if field._type in ('many2one', 'one2one', 'reference'):
                 if value:
                     if isinstance(value, ModelStorage):
-                        try:
-                            rec_name = value.rec_name
-                            changed['%s.' % fname] = {
-                                'rec_name': rec_name,
-                                }
-                        except AttributeError:
-                            pass
+                        changed['%s.' % fname] = {
+                            'rec_name': value.rec_name,
+                            }
                     if value.id is None:
                         # Don't consider temporary instance as a change
                         continue
@@ -811,43 +845,73 @@ class ModelView(Model):
                         value = str(value)
                     else:
                         value = value.id
-            elif field._type == 'one2many':
+            elif field._type in ['one2many', 'many2many']:
                 targets = value
-                init_targets = list(init_values.get(fname, targets))
+                init_targets = list(init_values.get(
+                        fname, targets if field._type == 'one2many' else []))
                 value = collections.defaultdict(list)
-                value['remove'] = [t.id for t in init_targets if t.id]
+                previous = [t.id for t in init_targets if t.id]
                 for i, target in enumerate(targets):
-                    if target.id in value['remove']:
-                        value['remove'].remove(target.id)
-                        if isinstance(target, ModelView):
-                            target_changed = target._changed_values
-                            if target_changed:
-                                target_changed['id'] = target.id
-                                value['update'].append(target_changed)
+                    if (field._type == 'one2many'
+                            and field.field
+                            and target._values):
+                        t_values = target._values.copy()
+                        # Don't look at reverse field
+                        target._values.pop(field.field, None)
                     else:
-                        # JACK: redmine issue #5873
-                        # automatically get a one2Many rec_name
-                        # to limit number of requests
-                        with ServerContext().set_context(
-                                _default_rec_names=True):
+                        t_values = None
+                    try:
+                        if target.id in previous:
+                            previous.remove(target.id)
                             if isinstance(target, ModelView):
-                                # Ensure initial values are returned because target
-                                # was instantiated on server side.
-                                target_init_values = target._init_values
-                                target._init_values = None
-                                try:
-                                    added_values = target._changed_values
-                                finally:
-                                    target._init_values = target_init_values
-                            else:
-                                added_values = target._default_values
-                            value['add'].append((i, added_values))
-                if not value['remove']:
-                    del value['remove']
+                                target_changed = target._changed_values
+                                if target_changed:
+                                    target_changed['id'] = target.id
+                                    value['update'].append(target_changed)
+                        else:
+                            # JACK: redmine issue #5873
+                            # automatically get a one2Many rec_name
+                            # to limit number of requests
+                            with ServerContext().set_context(
+                                    _default_rec_names=True):
+                                if isinstance(target, ModelView):
+                                    # Ensure initial values are returned because
+                                    # target was instantiated on server side.
+                                    target_init_values = target._init_values
+                                    target._init_values = None
+                                    try:
+                                        added_values = target._changed_values
+                                    finally:
+                                        target._init_values = target_init_values
+                                else:
+                                    added_values = target._default_values
+                                added_values['id'] = target.id
+                                value['add'].append((i, added_values))
+                    finally:
+                        if t_values:
+                            target._values = t_values
+                if previous:
+                    to_delete, to_remove = [], []
+                    deleted = removed = None
+                    if self._deleted:
+                        deleted = self._deleted[fname]
+                    if self._removed:
+                        removed = self._removed[fname]
+                    for id_ in previous:
+                        if deleted and id_ in deleted:
+                            to_delete.append(id_)
+                        elif removed and id_ in removed:
+                            to_remove.append(id_)
+                        elif field._type == 'one2many':
+                            to_delete.append(id_)
+                        else:
+                            to_remove.append(id_)
+                    if to_delete:
+                        value['delete'] = to_delete
+                    if to_remove:
+                        value['remove'] = to_remove
                 if not value:
                     continue
                 value = dict(value)
-            elif field._type == 'many2many':
-                value = [r.id for r in value]
             changed[fname] = value
         return changed

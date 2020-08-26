@@ -4,7 +4,7 @@ from collections import defaultdict
 import time
 import logging
 import os
-import urllib.request, urllib.parse, urllib.error
+import urllib.parse
 import json
 from datetime import datetime
 from decimal import Decimal
@@ -28,15 +28,15 @@ except ImportError:
     PYDATE, PYDATETIME, PYTIME, PYINTERVAL = None, None, None, None
 from psycopg2 import IntegrityError as DatabaseIntegrityError
 from psycopg2 import OperationalError as DatabaseOperationalError
+from psycopg2 import ProgrammingError
 from psycopg2.extras import register_default_json, register_default_jsonb
 
-from sql import Flavor, Cast
+from sql import Flavor, Cast, For
 from sql.functions import Function
 from sql.operators import BinaryOperator
 
 from trytond.backend.database import DatabaseInterface, SQLType
 from trytond.config import config, parse_uri
-from trytond.protocols.jsonrpc import JSONDecoder
 from trytond.tools.gevent import is_gevent_monkey_patched
 
 # MAB: Performance analyser tools (See [ec1462afd])
@@ -52,6 +52,7 @@ os.environ['PGTZ'] = os.environ.get('TZ', '')
 _timeout = config.getint('database', 'timeout')
 _minconn = config.getint('database', 'minconn', default=1)
 _maxconn = config.getint('database', 'maxconn', default=64)
+_default_name = config.get('database', 'default_name', default='template1')
 
 
 def unescape_quote(s):
@@ -79,30 +80,36 @@ class PerfCursor(cursor):
             logger.debug(self.mogrify(query, vars))
         try:
             context = analyze_before(self)
-        except:
+        except Exception:
             perf_logger.exception('analyse_before failed')
             context = None
         ret = super(PerfCursor, self).execute(query, vars)
         if context is not None:
             try:
                 analyze_after(*context)
-            except:
+            except Exception:
                 perf_logger.exception('analyse_after failed')
         return ret
 
     def callproc(self, procname, vars=None):
         try:
             context = analyze_before(self)
-        except:
+        except Exception:
             perf_logger.exception('analyse_before failed')
             context = None
         ret = super(PerfCursor, self).callproc(procname, vars)
         if context is not None:
             try:
                 analyze_after(*context)
-            except:
+            except Exception:
                 perf_logger.exception('analyse_after failed')
         return ret
+
+
+class ForSkipLocked(For):
+    def __str__(self):
+        assert not self.nowait, "Can not use both NO WAIT and SKIP LOCKED"
+        return super().__str__() + (' SKIP LOCKED' if not self.nowait else '')
 
 
 class Unaccent(Function):
@@ -128,12 +135,29 @@ class JSONKeyExists(BinaryOperator):
     _operator = '?'
 
 
-class JSONAnyKeyExist(BinaryOperator):
+class _BinaryOperatorArray(BinaryOperator):
+    "Binary Operator that convert list into Array"
+
+    @property
+    def _operands(self):
+        if isinstance(self.right, list):
+            return (self.left, None)
+        return super()._operands
+
+    @property
+    def params(self):
+        params = super().params
+        if isinstance(self.right, list):
+            params = params[:-1] + (self.right,)
+        return params
+
+
+class JSONAnyKeyExist(_BinaryOperatorArray):
     __slots__ = ()
     _operator = '?|'
 
 
-class JSONAllKeyExist(BinaryOperator):
+class JSONAllKeyExist(_BinaryOperatorArray):
     __slots__ = ()
     _operator = '?&'
 
@@ -153,6 +177,7 @@ class Database(DatabaseInterface):
     _search_path = None
     _current_user = None
     _has_returning = None
+    _has_select_for_skip_locked = None
     _has_unaccent = {}
     flavor = Flavor(ilike=True)
 
@@ -165,7 +190,7 @@ class Database(DatabaseInterface):
         'TIMESTAMP': SQLType('TIMESTAMP', 'TIMESTAMP(6)'),
         }
 
-    def __new__(cls, name='template1'):
+    def __new__(cls, name=_default_name):
         with cls._lock:
             now = datetime.now()
             databases = cls._databases[os.getpid()]
@@ -177,20 +202,27 @@ class Database(DatabaseInterface):
             if name in databases:
                 inst = databases[name]
             else:
-                if name == 'template1':
+                if name == _default_name:
                     minconn = 0
                 else:
                     minconn = _minconn
                 inst = DatabaseInterface.__new__(cls, name=name)
-                logger.info('connect to "%s"', name)
-                inst._connpool = ThreadedConnectionPool(
-                    minconn, _maxconn, **cls._connection_params(name),
-                    cursor_factory=PerfCursor)
+                try:
+                    inst._connpool = ThreadedConnectionPool(
+                        minconn, _maxconn, **cls._connection_params(name),
+                        cursor_factory=LoggingCursor)
+                    logger.info('connected to "%s"', name)
+                except Exception:
+                    logger.error(
+                        'connection to "%s" failed', name, exc_info=True)
+                    raise
+                else:
+                    logger.info('connection to "%s" succeeded', name)
                 databases[name] = inst
             inst._last_use = datetime.now()
             return inst
 
-    def __init__(self, name='template1'):
+    def __init__(self, name=_default_name):
         super(Database, self).__init__(name)
 
     @classmethod
@@ -228,6 +260,10 @@ class Database(DatabaseInterface):
                     time.sleep(1)
                     continue
                 raise
+            except Exception:
+                logger.error(
+                    'connection to "%s" failed', self.name, exc_info=True)
+                raise
         if autocommit:
             conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
         else:
@@ -243,7 +279,7 @@ class Database(DatabaseInterface):
 
     def close(self):
         with self._lock:
-            logger.info('disconnect from "%s"', self.name)
+            logger.info('disconnection from "%s"', self.name)
             self._connpool.closeall()
             self._databases[os.getpid()].pop(self.name)
 
@@ -287,6 +323,8 @@ class Database(DatabaseInterface):
                         if self._test(conn, hostname=hostname):
                             res.append(db_name)
                 except Exception:
+                    logger.debug(
+                        'Test failed for "%s"', db_name, exc_info=True)
                     continue
         finally:
             self.put_connection(connection)
@@ -329,14 +367,15 @@ class Database(DatabaseInterface):
             self.put_connection(connection)
 
     def test(self, hostname=None):
-        connection = self.get_connection()
         try:
-            is_tryton_database = self._test(connection, hostname=hostname)
+            connection = self.get_connection()
         except Exception:
-            is_tryton_database = False
+            logger.debug('Test failed for "%s"', self.name, exc_info=True)
+            return False
+        try:
+            return self._test(connection, hostname=hostname)
         finally:
             self.put_connection(connection)
-        return is_tryton_database
 
     @classmethod
     def _test(cls, connection, hostname=None):
@@ -349,11 +388,14 @@ class Database(DatabaseInterface):
         if len(cursor.fetchall()) != len(tables):
             return False
         if hostname:
-            cursor.execute(
-                'SELECT hostname FROM ir_configuration')
-            hostnames = {h for h, in cursor.fetchall() if h}
-            if hostnames and hostname not in hostnames:
-                return False
+            try:
+                cursor.execute(
+                    'SELECT hostname FROM ir_configuration')
+                hostnames = {h for h, in cursor.fetchall() if h}
+                if hostnames and hostname not in hostnames:
+                    return False
+            except ProgrammingError:
+                pass
         return True
 
     def nextid(self, connection, table):
@@ -439,6 +481,20 @@ class Database(DatabaseInterface):
 
     def has_select_for(self):
         return True
+
+    def get_select_for_skip_locked(self):
+        if self._has_select_for_skip_locked is None:
+            connection = self.get_connection()
+            try:
+                # SKIP LOCKED clause is available since PostgreSQL 9.5
+                self._has_select_for_skip_locked = (
+                    self.get_version(connection) >= (9, 5))
+            finally:
+                self.put_connection(connection)
+        if self._has_select_for_skip_locked:
+            return ForSkipLocked
+        else:
+            return For
 
     def has_window_functions(self):
         return True
@@ -539,15 +595,15 @@ class Database(DatabaseInterface):
             increment, = cursor.fetchone()
             cursor.execute(
                 'SELECT CASE WHEN NOT is_called THEN last_value '
-                            'ELSE last_value + %s '
-                        'END '
+                'ELSE last_value + %s '
+                'END '
                 'FROM "%s"' % (self.flavor.param, name),
                 (increment,))
         else:
             cursor.execute(
                 'SELECT CASE WHEN NOT is_called THEN last_value '
-                            'ELSE last_value + increment_by '
-                       'END '
+                'ELSE last_value + increment_by '
+                'END '
                 'FROM "%s"' % name)
         return cursor.fetchone()[0]
 
@@ -587,7 +643,10 @@ register_adapter(Decimal, lambda value: AsIs(str(value)))
 
 
 def convert_json(value):
+    from trytond.protocols.jsonrpc import JSONDecoder
     return json.loads(value, object_hook=JSONDecoder())
+
+
 register_default_json(loads=convert_json)
 register_default_jsonb(loads=convert_json)
 

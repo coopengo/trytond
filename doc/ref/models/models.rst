@@ -59,9 +59,11 @@ Class methods:
     The `default_rec_name` key in the context can be used to define the value
     of the :attr:`Model._rec_name` field.
 
-.. classmethod:: Model.fields_get([fields_names])
+.. classmethod:: Model.fields_get([fields_names[, level]])
 
     Return the definition of each field on the model.
+    The ``level`` defines the number of relations to include in the relation
+    field definition.
 
 .. classmethod:: Model.__names__([field])
 
@@ -109,7 +111,7 @@ Static methods:
 .. staticmethod:: ModelView.button_action(action)
 
     Same as :meth:`ModelView.button` but return the action id of the XML `id`
-    action.
+    action or the action value updated by the returned value of the method.
 
 .. staticmethod:: ModelView.button_change([\*fields])
 
@@ -122,7 +124,7 @@ Static methods:
 
 Class methods:
 
-.. classmethod:: ModelView.fields_view_get([view_id[, view_type[, toolbar]]])
+.. classmethod:: ModelView.fields_view_get([view_id[, view_type[, level]]])
 
     Return a view definition used by the client. The definition is::
 
@@ -149,9 +151,10 @@ Class methods:
 
 .. classmethod:: ModelView.view_attributes()
 
-    Returns a list of XPath, attribute and value.
+    Returns a list of XPath, attribute, value and an optional depends list.
     Each element from the XPath will get the attribute set with the JSON
-    encoded value.
+    encoded value. If the depends list is set its fields are added to the
+    view if the xpath matches at least one element.
 
 ============
 ModelStorage
@@ -272,6 +275,26 @@ Class methods:
 
     Return a list of records that match the :ref:`domain <topics-domain>`.
 
+    If `offset` or `limit` are set, the result starts at the offset and has the
+    length of the limit.
+
+    The `order` is a list of tuples defining the order of the result:
+
+            [ ('field name', 'ASC'), ('other field name', 'DESC'), ... ]
+
+    The first element of the tuple is a field name of the model and the second
+    is the sort ordering as `ASC` for ascending, `DESC` for descending or empty
+    for a default order. This second element may contain 'NULLS FIRST' or
+    'NULLS LAST' to sort null values before or after non-null values. If
+    neither is specified the default behavior of the backend is used.
+
+    In case the field used is a :class:`fields.Many2One`, it is also possible
+    to use the dotted notation to sort on a specific field from the target
+    record. Or for a :class:`fields.Dict` field, the dotted notation is used to
+    sort on the key's value.
+
+    If `count` is set to `True`, then the result is the number of records.
+
 .. classmethod:: ModelStorage.search_count(domain)
 
     Return the number of records that match the :ref:`domain <topics-domain>`.
@@ -302,6 +325,11 @@ Class methods:
     Relational fields are defined with ``/`` at any depth.
     Descriptor on fields are available by appending ``.`` and the name of the
     method on the field that returns the descriptor.
+
+.. classmethod:: ModelStorage.export_data_domain(domain, fields_names[, offset[, limit[, order]]])
+
+    Call :meth:`search` and :meth`export_data` together.
+    Useful for the client to reduce the number of calls and the data transfered.
 
 .. classmethod:: ModelStorage.import_data(fields_names, data)
 
@@ -432,28 +460,7 @@ Class methods:
 
 .. classmethod:: ModelSQL.search(domain[, offset[, limit[, order[, count[, query]]]]])
 
-    Return a list of records that match the :ref:`domain <topics-domain>`.
-
-    If `offset` or `limit` are set, the result starts at the offset and has the
-    length of the limit.
-
-    The `order` is a list of tuples defining the order of the result:
-
-            [ ('field name', 'ASC'), ('other field name', 'DESC'), ... ]
-
-    The first element of the tuple is a field name of the model and the second
-    is the sort ordering as `ASC` for ascending or `DESC` for descending. This
-    second element may contain 'NULLS FIRST' or 'NULLS LAST' to sort null
-    values before or after non-null values. If neither is specified the default
-    behavior of the backend is used.
-
-    In case the field used is a :class:`fields.Many2One`, it is also possible
-    to use the dotted notation to sort on a specific field from the target
-    record. Or for a :class:`fields.Dict` field, the dotted notation is used to
-    sort on the key's value.
-
-    If `count` is set to `True`, then the result is the number of records.
-
+    Same as :meth:`ModelStorage.search` with the additional `query` argument.
     If `query` is set to `True`, the the result is the SQL query.
 
 .. classmethod:: ModelSQL.search_domain(domain[, active_test[, tables]])
@@ -619,8 +626,8 @@ Class attributes are:
 
 .. attribute:: DictSchemaMixin.help
 
-    The definition of the :class:`trytond.model.fields.Char` field for the help
-    of the key.
+    The definition of the :class:`trytond.model.fields.Char` field used as the
+    help text for the key.
 
 .. attribute:: DictSchemaMixin.type\_
 
@@ -677,6 +684,15 @@ Class methods:
 .. classmethod:: DictSchemaMixin.get_keys(records)
 
     Return the definition of the keys for the records.
+
+.. classmethod:: DictSchemaMixin.get_relation_fields()
+
+   Return a dictionary with the field definition of all the keys like the
+   result of :meth:`Model.fields_get`.
+
+   It is possible to disable this method (returns an empty dictionary) by
+   setting in the `dict` section of the configuration, the
+   :attr:`Model.__name__` to ``False``.
 
 Instance methods:
 
@@ -812,7 +828,8 @@ DeactivableMixin
 
 .. class:: DeactivableMixin
 
-A mixin_ to add soft deletion to the model.
+A mixin_ to add soft deletion to the model. It renders all the fields as
+read-only when the record is inactive.
 
 Class attributes are:
 

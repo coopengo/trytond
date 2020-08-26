@@ -52,7 +52,7 @@ from ..rpc import RPC
 from ..exceptions import LoginException, RateLimitException
 from trytond.report import Report, get_email
 from trytond.sendmail import sendmail_transactional
-from trytond.url import HOSTNAME
+from trytond.url import host, http_host
 
 __all__ = [
     'User', 'LoginAttempt', 'UserAction', 'UserGroup', 'Warning_',
@@ -134,7 +134,7 @@ class User(DeactivableMixin, ModelSQL, ModelView):
         domain=[('usage', '=', 'menu')], required=True)
     pyson_menu = fields.Function(fields.Char('PySON Menu'), 'get_pyson_menu')
     actions = fields.Many2Many('res.user-ir.action', 'user', 'action',
-        'Actions', help='Actions that will be run at login')
+        'Actions', help='Actions that will be run at login.')
     groups = fields.Many2Many('res.user-res.group',
        'user', 'group', 'Groups')
     applications = fields.One2Many(
@@ -190,6 +190,7 @@ class User(DeactivableMixin, ModelSQL, ModelView):
             'language_direction',
             'groups',
         ]
+        cls._order.insert(0, ('name', 'ASC'))
 
     @classmethod
     def __register__(cls, module_name):
@@ -223,11 +224,8 @@ class User(DeactivableMixin, ModelSQL, ModelView):
         return None
 
     def get_pyson_menu(self, name):
-        pool = Pool()
-        Action = pool.get('ir.action')
         encoder = PYSONEncoder()
-        return encoder.encode(
-            Action.get_action_values(self.menu.type, [self.menu.id])[0])
+        return encoder.encode(self.menu.get_action_value())
 
     def get_language_direction(self, name):
         pool = Pool()
@@ -615,7 +613,8 @@ class User(DeactivableMixin, ModelSQL, ModelView):
                     (table.password_reset_expire > CurrentTimestamp(),
                         table.password_reset),
                     else_=None),
-                where=(table.login == login) & (table.active == True)))
+                where=(table.login == login)
+                & (table.active == Literal(True))))
         result = cursor.fetchone() or (None, None, None)
         cls._get_login_cache.set(login, result)
         return result
@@ -635,7 +634,7 @@ class User(DeactivableMixin, ModelSQL, ModelView):
         if count > config.getint('session', 'max_attempt', default=5):
             LoginAttempt.add(login)
             raise RateLimitException()
-        Transaction().atexit(time.sleep, 2 ** count - 1)
+        Transaction().atexit(time.sleep, random.randint(0, 2 ** count - 1))
         for method in config.get(
                 'session', 'authentications', default='password').split(','):
             try:
@@ -652,7 +651,7 @@ class User(DeactivableMixin, ModelSQL, ModelView):
     @classmethod
     def _login_password(cls, login, parameters):
         if 'password' not in parameters:
-            msg = cls.fields_get(['password'])['password']['string']
+            msg = gettext('res.msg_user_password', login=login)
             raise LoginException('password', msg, type='password')
         user_id, password_hash, password_reset = cls._get_login(login)
         if user_id and password_hash:
@@ -911,6 +910,8 @@ class UserApplication(Workflow, ModelSQL, ModelView):
                     'depends': ['state'],
                     },
                 })
+        # Do not cache default_key as it depends on time
+        cls.__rpc__['default_get'].cache = None
 
     @classmethod
     def default_key(cls):
@@ -955,6 +956,11 @@ class UserApplication(Workflow, ModelSQL, ModelView):
     def create(cls, vlist):
         pool = Pool()
         User = pool.get('res.user')
+        vlist = [v.copy() for v in vlist]
+        for values in vlist:
+            # Ensure we get a different key for each record
+            # default methods are called only once
+            values.setdefault('key', cls.default_key())
         applications = super(UserApplication, cls).create(vlist)
         User._get_preferences_cache.clear()
         return applications
@@ -983,7 +989,8 @@ class EmailResetPassword(Report):
         Lang = pool.get('ir.lang')
         context = super(EmailResetPassword, cls).get_context(records, data)
         lang = Lang.get()
-        context['hostname'] = HOSTNAME
+        context['host'] = host()
+        context['http_host'] = http_host()
         context['database'] = Transaction().database.name
         context['expire'] = lang.strftime(
             records[0].password_reset_expire,

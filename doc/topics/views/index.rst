@@ -279,6 +279,10 @@ Display a field of the object with the value of the current record.
 
     * ``factor``: see in common-attributes-factor_.
 
+    * ``spell``: Only for Text widgets, a :ref:`PYSON statement <topics-pyson>`
+      that will be evaluated to the language code for which spell checking must
+      be done.
+
 image
 ^^^^^
 
@@ -380,6 +384,24 @@ Display a button.
     value of the ``string``, ``confirm`` and ``help`` attributes can be can be
     defined.
 
+.. _form-link:
+
+link
+^^^^
+
+Display an `ir.action.act_window` as a button with a counter or one counter per
+tab. When clicked it opens the window.
+
+    * ``name``: The XML id of `ir.action.act_window`.
+
+    * ``colspan``: see in common-attributes-colspan_.
+
+    * ``states``: see in common-attributes-states_.
+
+    * ``icon``: The name of the icon to display.
+
+    * ``empty``: If set to `hide` the button is not displayed if the counter is
+      zero. The default is ``show``.
 
 notebook
 ^^^^^^^^
@@ -432,6 +454,14 @@ Create a sub-table in a cell.
     * ``yexpand``: see in common-attributes-yexpand_.
 
     * ``yfill``: see in common-attributes-yfill_.
+
+    * ``yalign``: see in common-attributes-yalign_.
+
+    * ``xexpand``: see in common-attributes-xexpand_.
+
+    * ``xfill``: see in common-attributes-xfill_.
+
+    * ``xalign``: see in common-attributes-xalign_.
 
     * ``colspan``: see in common-attributes-colspan_.
 
@@ -519,9 +549,7 @@ Each tree view must start with this tag.
 
     * ``on_write``: see form-attributes-on_write_.
 
-    * ``editable``: If it is set to ``top`` or ``bottom``, the list becomes
-      editable and the new record will be added on ``top`` or ``bottom`` of the
-      list.
+    * ``editable``: A boolean to specify if the list is editable.
 
     * ``sequence``: The name of the field that is used for sorting.  This field
       must be an integer and it will be updated to match the new sort order
@@ -536,6 +564,10 @@ Each tree view must start with this tag.
     * ``tree_state``: A boolean to specify if the client should save the state
       of the tree.
 
+    * ``visual``: A :ref:`PYSON statement <topics-pyson>` that will be
+      evaluated as string ``muted``, ``success``, ``warning`` or ``danger``
+      with the context of the record to provide a visual context to the row.
+
 field
 ^^^^^
 
@@ -549,6 +581,10 @@ field
       that will be evaluated as boolean with the context of the view to display
       or not the column.
 
+    * ``visual``: A :ref:`PYSON statement <topics-pyson>` that will be
+      evaluated as string ``muted``, ``success``, ``warning`` or ``danger``
+      with the context of the record to provide a visual context to the field.
+
     * ``icon``: The name of the field that contains the name of the icon to
       display in the column.
 
@@ -557,10 +593,10 @@ field
 
     * ``width``: Set the width of the column.
 
-    * ``expand``: Boolean to specify if the column should be expanded to take
-      available extra space in the view. This space is shared equally among all
-      columns that have their "expand" property set to True. Resize don't work
-      if this option is enabled.
+    * ``expand``: An integer that specifies if the column should be expanded to
+      take available extra space in the view. This space is shared
+      proportionaly among all columns that have their "expand" property set.
+      Resize doesn't work if this option is enabled.
 
     * ``pre_validate``: see in common-attributes-pre_validate_.
 
@@ -819,11 +855,18 @@ Each calendar view must start with this tag.
       Available views are: `day`, `week` and `month`. The default value is 
       `month`.
 
+    * ``editable``: A boolean to specify if the calendar is editable. The
+      default value is `True`.
+
     * ``color``: An optional field name that contains the text color for the
       event. The default value is `black`.
 
     * ``background_color``: An optional field name that contains the background
       color for the event. The default value is `lightblue`.
+
+    * ``width``: The minimum width the calendar should request, use -1 to unset.
+
+    * ``height``: The minimum height the calendar should request, use -1 to unset.
 
 field
 ^^^^^

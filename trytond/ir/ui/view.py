@@ -4,13 +4,14 @@ import os
 import logging
 import json
 
+from functools import lru_cache
 from lxml import etree
 
 from trytond.i18n import gettext
 from trytond.model import ModelView, ModelSQL, fields
 from trytond.model.exceptions import ValidationError
 from trytond.pyson import Eval, Bool, PYSONDecoder, If
-from trytond.tools import file_open, memoize
+from trytond.tools import file_open
 from trytond.transaction import Transaction
 from trytond.wizard import Wizard, StateView, Button
 from trytond.pool import Pool
@@ -34,7 +35,7 @@ class View(ModelSQL, ModelView):
     __name__ = 'ir.ui.view'
     _rec_name = 'model'
     model = fields.Char('Model', select=True, states={
-            'required': Eval('type').in_([None, 'tree', 'form', 'graph']),
+            'required': Eval('type') != 'board',
             })
     priority = fields.Integer('Priority', required=True, select=True)
     type = fields.Selection([
@@ -98,7 +99,7 @@ class View(ModelSQL, ModelView):
         pass
 
     @classmethod
-    @memoize(10)
+    @lru_cache(maxsize=10)
     def get_rng(cls, type_):
         key = (cls.__name__, type_)
         rng = cls._get_rng_cache.get(key)
@@ -391,7 +392,7 @@ class ViewSearch(ModelSQL, ModelView):
 
     name = fields.Char('Name', required=True)
     model = fields.Char('Model', required=True)
-    domain = fields.Char('Domain', help="The PYSON domain")
+    domain = fields.Char('Domain', help="The PYSON domain.")
     user = fields.Many2One('res.user', 'User', required=True,
         ondelete='CASCADE')
 

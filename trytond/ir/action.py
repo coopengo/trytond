@@ -10,6 +10,7 @@ from sql import Null
 from trytond.config import config
 from trytond.i18n import gettext
 from trytond.model.exceptions import ValidationError
+from trytond.pyson import PYSONEncoder
 from ..model import (
     ModelView, ModelStorage, ModelSQL, DeactivableMixin, fields,
     sequence_ordered)
@@ -70,7 +71,7 @@ class Action(DeactivableMixin, ModelSQL, ModelView):
     def __setup__(cls):
         super(Action, cls).__setup__()
         cls.__rpc__.update({
-                'get_action_id': RPC(),
+                'get_action_value': RPC(instantiate=0, cache=dict(days=1)),
                 })
 
     @staticmethod
@@ -117,6 +118,10 @@ class Action(DeactivableMixin, ModelSQL, ModelView):
             to_remove = ('domain', 'context', 'search_value')
         columns.difference_update(to_remove)
         return Action.read(action_ids, list(columns))
+
+    def get_action_value(self):
+        return self.get_action_values(
+            self.type, [self.get_action_id(self.id)])[0]
 
 
 class ActionKeyword(ModelSQL, ModelView):
@@ -286,13 +291,18 @@ class ActionMixin(ModelSQL):
 
     @classmethod
     def get_action(cls, ids, names):
+        def identical(v):
+            return v
+
+        def list_int(v):
+            return list(map(int, v))
         records = cls.browse(ids)
         result = {}
         for name in names:
             result[name] = values = {}
             for record in records:
                 value = getattr(record, 'action')
-                convert = lambda v: v
+                convert = identical
                 if value is not None:
                     value = getattr(value, name)
                     if isinstance(value, ModelStorage):
@@ -301,7 +311,7 @@ class ActionMixin(ModelSQL):
                         else:
                             convert = int
                     elif isinstance(value, (list, tuple)):
-                        convert = lambda v: [r.id for r in v]
+                        convert = list_int
                 values[record.id] = convert(value)
         return result
 
@@ -406,6 +416,12 @@ class ActionMixin(ModelSQL):
         actions = cls.search(domain)
         groups = {g.id for a in actions for g in a.groups}
         return groups
+
+    @classmethod
+    def fetch_action(cls, action_id):
+        fields = list(cls._fields.keys())
+        return cls.search_read(
+            [('action', '=', action_id)], fields_names=fields, limit=1)
 
 
 class ActionReport(ActionMixin, ModelSQL, ModelView):
@@ -519,7 +535,7 @@ class ActionReport(ActionMixin, ModelSQL, ModelView):
             ('xpm', 'X PixMap'),
             ], translate=False,
         string='Extension', help='Leave empty for the same as template, '
-        'see LibreOffice documentation for compatible format')
+        'see LibreOffice documentation for compatible format.')
     module = fields.Char('Module', readonly=True, select=True)
     email = fields.Char('Email',
         help='Python dictonary where keys define "to" "cc" "subject"\n'
@@ -700,18 +716,18 @@ class ActionActWindow(ActionMixin, ModelSQL, ModelView):
     context_model = fields.Char('Context Model')
     context_domain = fields.Char(
         "Context Domain",
-        help="Part of the domain that will be evaluated on each refresh")
+        help="Part of the domain that will be evaluated on each refresh.")
     act_window_views = fields.One2Many('ir.action.act_window.view',
             'act_window', 'Views')
     views = fields.Function(fields.Binary('Views'), 'get_views')
     act_window_domains = fields.One2Many('ir.action.act_window.domain',
         'act_window', 'Domains')
     domains = fields.Function(fields.Binary('Domains'), 'get_domains')
-    limit = fields.Integer('Limit', help='Default limit for the list view')
+    limit = fields.Integer('Limit', help='Default limit for the list view.')
     action = fields.Many2One('ir.action', 'Action', required=True,
             ondelete='CASCADE')
     search_value = fields.Char('Search Criteria',
-            help='Default search criteria for the list view')
+            help='Default search criteria for the list view.')
     pyson_domain = fields.Function(fields.Char('PySON Domain'), 'get_pyson')
     pyson_context = fields.Function(fields.Char('PySON Context'),
             'get_pyson')
@@ -723,7 +739,7 @@ class ActionActWindow(ActionMixin, ModelSQL, ModelView):
     def __setup__(cls):
         super(ActionActWindow, cls).__setup__()
         cls.__rpc__.update({
-                'get': RPC(),
+                'get': RPC(cache=dict(days=1)),
                 })
 
     @classmethod
@@ -872,6 +888,8 @@ class ActionActWindow(ActionMixin, ModelSQL, ModelView):
 
     @classmethod
     def get_pyson(cls, windows, name):
+        pool = Pool()
+        encoder = PYSONEncoder()
         pysons = {}
         field = name[6:]
         defaults = {
@@ -880,6 +898,12 @@ class ActionActWindow(ActionMixin, ModelSQL, ModelView):
             'search_value': '[]',
             }
         for window in windows:
+            if not window.order and field == 'order':
+                if window.res_model:
+                    defaults['order'] = encoder.encode(
+                        getattr(pool.get(window.res_model), '_order', 'null'))
+                else:
+                    defaults['order'] = 'null'
             pysons[window.id] = (getattr(window, field)
                 or defaults.get(field, 'null'))
         return pysons
@@ -894,7 +918,7 @@ class ActionActWindow(ActionMixin, ModelSQL, ModelView):
             action_id = ModelData.get_id(*xml_id.split('.'))
         else:
             action_id = int(xml_id)
-        return Action.get_action_values(cls.__name__, [action_id])[0]
+        return Action(action_id).get_action_value()
 
 
 class ActionActWindowView(
@@ -1017,7 +1041,7 @@ class ActionWizard(ActionMixin, ModelSQL, ModelView):
             ondelete='CASCADE')
     model = fields.Char('Model')
     email = fields.Char('Email')
-    window = fields.Boolean('Window', help='Run wizard in a new window')
+    window = fields.Boolean('Window', help='Run wizard in a new window.')
 
     @staticmethod
     def default_type():

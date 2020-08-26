@@ -2,8 +2,10 @@
 # this repository contains the full copyright notices and license terms.
 
 import copy
+from collections import defaultdict
 from functools import total_ordering
 
+from trytond.i18n import lazy_gettext
 from trytond.model import fields
 from trytond.pool import Pool, PoolBase, PoolMeta
 from trytond.pyson import PYSONEncoder, PYSONDecoder
@@ -28,9 +30,10 @@ class Model(URLMixin, PoolBase, metaclass=ModelMeta):
     """
     Define a model in Tryton.
     """
+    __slots__ = ('_id', '_values', '_init_values', '_removed', '_deleted')
     _rec_name = 'name'
 
-    id = fields.Integer('ID', readonly=True)
+    id = fields.Integer(lazy_gettext('ir.msg_ID'), readonly=True)
 
     @classmethod
     def __setup__(cls):
@@ -155,7 +158,7 @@ class Model(URLMixin, PoolBase, metaclass=ModelMeta):
         return value
 
     @classmethod
-    def fields_get(cls, fields_names=None):
+    def fields_get(cls, fields_names=None, level=0):
         """
         Return the definition of each field on the model.
         """
@@ -190,6 +193,28 @@ class Model(URLMixin, PoolBase, metaclass=ModelMeta):
             for right in ['create', 'delete']:
                 definition[fname][right] = accesses.get(
                     fname, {}).get(right, True)
+            if level > 0:
+                relation = definition[fname].get('relation')
+                if relation:
+                    Relation = pool.get(relation)
+                    relation_fields = Relation.fields_get(level=level - 1)
+                    definition[fname]['relation_fields'] = relation_fields
+                    for name, props in relation_fields.items():
+                        # Convert selection into list
+                        if isinstance(props.get('selection'), str):
+                            change_with = props.get('selection_change_with')
+                            if change_with:
+                                selection = getattr(
+                                    Relation(), props['selection'])()
+                            else:
+                                selection = getattr(
+                                    Relation, props['selection'])()
+                            props['selection'] = selection
+                schema = definition[fname].get('schema_model')
+                if schema:
+                    Schema = pool.get(schema)
+                    definition[fname]['relation_fields'] = (
+                        Schema.get_relation_fields())
 
         for fname in list(definition.keys()):
             # filter out fields which aren't in the fields_names list
@@ -222,29 +247,28 @@ class Model(URLMixin, PoolBase, metaclass=ModelMeta):
         if id is not None:
             id = int(id)
         self._id = id
+        self._deleted = self._removed = None
         if kwargs:
             self._values = {}
-            parent_values = {}
+            parent_values = defaultdict(dict)
+            has_context = {}
             for name, value in kwargs.items():
                 if not name.startswith('_parent_'):
                     setattr(self, name, value)
                 else:
-                    parent_values[name] = value
-
-            def set_parent_value(record, name, value):
-                parent_name, field = name.split('.', 1)
-                parent_name = parent_name[8:]  # Strip '_parent_'
-                parent = getattr(record, parent_name, None)
-                if parent is not None:
-                    if not field.startswith('_parent_'):
-                        setattr(parent, field, value)
-                    else:
-                        set_parent_value(parent, field, value)
-                else:
-                    setattr(record, parent_name, {field: value})
+                    name, field = name.split('.', 1)
+                    name = name[len('_parent_'):]
+                    parent_values[name][field] = value
+                    value = parent_values[name]
+                if getattr(self.__class__, name).context:
+                    has_context[name] = value
 
             for name, value in parent_values.items():
-                set_parent_value(self, name, value)
+                setattr(self, name, value)
+            # Set field with context a second times
+            # to ensure it was evaluated with all the fields
+            for name, value in has_context.items():
+                setattr(self, name, value)
             self._init_values = self._values.copy()
         else:
             self._values = None

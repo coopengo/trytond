@@ -7,6 +7,7 @@ from sql.conditionals import Case
 from trytond.pool import Pool
 from ...transaction import Transaction
 from ...tools import is_instance_method
+from trytond.tools.string_ import LazyString
 from .field import Field
 from ...rpc import RPC
 
@@ -31,9 +32,10 @@ class SelectionMixin(Field):
             name = '%s,%s' % (model.__name__, self.name)
             selection = []
             for key, source in self.selection:
-                trans = Translation.get_source(
-                    name, 'selection', language, source)
-                selection.append((key, trans or source))
+                if not isinstance(source, LazyString):
+                    source = Translation.get_source(
+                        name, 'selection', language, source) or source
+                selection.append((key, str(source)))
         elif hasattr(self.selection, 'copy'):
             selection = self.selection.copy()
         else:
@@ -48,8 +50,9 @@ class SelectionMixin(Field):
         selection = []
         if not isinstance(self.selection, str) and self.translate_selection:
             for key, source in self.selection:
-                selection.append(
-                    (name, 'selection', language, source))
+                if not isinstance(source, LazyString):
+                    selection.append(
+                        (name, 'selection', language, source))
         return super().definition_translations(model, language) + selection
 
 
@@ -59,6 +62,7 @@ class Selection(SelectionMixin, Field):
     '''
     _type = 'selection'
     _sql_type = 'VARCHAR'
+    _py_type = str
 
     def __init__(self, selection, string='', sort=True,
             selection_change_with=None, translate=True, help='',
@@ -147,4 +151,11 @@ class TranslatedSelection(object):
         # Use Model __name__ for Reference field
         elif isinstance(value, Model):
             value = value.__name__
-        return selection[value]
+        if isinstance(value, (list, tuple)):
+            values = []
+            for item in value:
+                if item in selection:
+                    values.append(selection[item])
+            return values
+        else:
+            return selection.get(value)

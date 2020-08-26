@@ -48,7 +48,8 @@ Default `localhost:8000`
 hostname
 ~~~~~~~~
 
-Defines the hostname.
+Defines the hostname to use when generating a URL when there is no request
+context available, for example during a cron job.
 
 root
 ~~~~
@@ -90,7 +91,8 @@ The typical form is:
 
     database://username:password@host:port/
 
-Default: `sqlite://`
+Default: The value of the environment variable `TRYTOND_DATABASE_URI` or
+`sqlite://` if not set.
 
 The available databases are:
 
@@ -106,11 +108,6 @@ SQLite
 ******
 
 The only possible URI is: `sqlite://`
-
-MySQL
-*****
-
-Same as for PostgreSQL.
 
 path
 ~~~~
@@ -141,6 +138,12 @@ The main language of the database that will be used for storage in the main
 table for translations.
 
 Default: `en`
+
+default_name
+~~~~~~~~~~~~
+
+The name of the database to use for operations without a database name.
+Default: `template1` for PostgreSQL, `:memory:` for SQLite.
 
 request
 -------
@@ -241,6 +244,8 @@ The path to the certificate.
 email
 -----
 
+.. note:: Email settings can be tested with the `trytond-admin` command
+
 uri
 ~~~
 
@@ -266,7 +271,11 @@ Default: `smtp://localhost:25`
 from
 ~~~~
 
-Defines the default `From` address for emails sent by Tryton.
+Defines the default `From` address (using RFC-822_) for emails sent by Tryton.
+
+For example::
+
+    from: "Company Inc" <info@example.com>
 
 session
 -------
@@ -462,11 +471,28 @@ It can be overridden for specific models and fields using the names:
 
 Default: `''`
 
+wsgi middleware
+---------------
+
+The section lists the `WSGI middleware`_ class to load.
+Each middleware can be configured with a section named `wsgi <middleware>`
+containing `args` and `kwargs` options.
+
+Example::
+
+    [wsgi middleware]
+    ie = werkzeug.contrib.fixers.InternetExplorerFix
+
+    [wsgi ie]
+    kwargs={'fix_attach': False}
+
 
 .. _JSON-RPC: http://en.wikipedia.org/wiki/JSON-RPC
 .. _XML-RPC: http://en.wikipedia.org/wiki/XML-RPC
 .. _RFC-3986: http://tools.ietf.org/html/rfc3986
 .. _SMTP-URL: http://tools.ietf.org/html/draft-earhart-url-smtp-00
+.. _RFC-822: https://tools.ietf.org/html/rfc822
 .. _SSL: http://en.wikipedia.org/wiki/Secure_Sockets_Layer
 .. _SSL-CERT: https://docs.python.org/library/ssl.html#ssl.wrap_socket
 .. _STARTTLS: http://en.wikipedia.org/wiki/STARTTLS
+.. _WSGI middleware: https://en.wikipedia.org/wiki/Web_Server_Gateway_Interface#Specification_overview

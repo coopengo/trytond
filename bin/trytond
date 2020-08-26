@@ -6,6 +6,7 @@ import threading
 import logging
 import os
 import sys
+import threading
 
 DIR = os.path.abspath(os.path.normpath(os.path.join(__file__,
     '..', '..', 'trytond')))

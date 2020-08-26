@@ -1,6 +1,8 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
+import datetime as dt
 import logging
+import random
 import select
 import signal
 import time
@@ -15,13 +17,11 @@ from trytond.transaction import Transaction
 
 __all__ = ['work']
 logger = logging.getLogger(__name__)
-Database = backend.get('Database')
-DatabaseOperationalError = backend.get('DatabaseOperationalError')
 
 
 class Queue(object):
     def __init__(self, pool, mpool):
-        self.database = Database(pool.database_name).connect()
+        self.database = backend.Database(pool.database_name).connect()
         self.connection = self.database.get_connection(autocommit=True)
         self.pool = pool
         self.mpool = mpool
@@ -44,7 +44,7 @@ class TaskList(list):
 
 
 def work(options):
-    Flavor.set(Database.flavor)
+    Flavor.set(backend.Database.flavor)
     if not config.getboolean('queue', 'worker', default=False):
         return
     try:
@@ -106,13 +106,29 @@ def run_task(pool, task_id):
                 time.sleep(0.02 * (retry - count))
             with Transaction().start(pool.database_name, 0) as transaction:
                 try:
-                    Queue(task_id).run()
+                    try:
+                        task, = Queue.search([('id', '=', task_id)])
+                    except ValueError:
+                        # the task was rollbacked, nothing to do
+                        break
+                    task.run()
                     break
-                except DatabaseOperationalError:
+                except backend.DatabaseOperationalError:
                     if count:
                         transaction.rollback()
                         continue
                     raise
         logger.info('task "%d" done', task_id)
+    except backend.DatabaseOperationalError:
+        try:
+            with Transaction().start(pool.database_name, 0) as transaction:
+                task = Queue(task_id)
+                scheduled_at = dt.datetime.now()
+                scheduled_at += dt.timedelta(
+                    seconds=random.randint(0, 2 ** retry))
+                Queue.push(task.name, task.data, scheduled_at=scheduled_at)
+        except Exception:
+            logger.critical(
+                'rescheduling task "%d" failed', task_id, exc_info=True)
     except Exception:
         logger.critical('task "%d" failed', task_id, exc_info=True)

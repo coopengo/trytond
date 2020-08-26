@@ -1,5 +1,6 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
+from collections import defaultdict
 from itertools import chain
 
 from sql import Cast, Literal, Null
@@ -125,7 +126,7 @@ class Many2Many(Field):
         else:
             order = self.order
 
-        Relation = Pool().get(self.relation_name)
+        Relation = self.get_relation()
         origin_field = Relation._fields[self.origin]
 
         relations = []
@@ -158,8 +159,7 @@ class Many2Many(Field):
             (``add``, ``<ids>``),
             (``copy``, ``<ids>``, ``[{<field name>: value}, ...]``)
         '''
-        pool = Pool()
-        Relation = pool.get(self.relation_name)
+        Relation = self.get_relation()
         Target = self.get_target()
         origin_field = Relation._fields[self.origin]
         relation_to_create = []
@@ -269,9 +269,13 @@ class Many2Many(Field):
         if relation_to_create:
             Relation.create(relation_to_create)
 
+    def get_relation(self):
+        "Return the relation model"
+        return Pool().get(self.relation_name)
+
     def get_target(self):
         'Return the target model'
-        Relation = Pool().get(self.relation_name)
+        Relation = self.get_relation()
         if not self.target:
             return Relation
         return Relation._fields[self.target].get_target()
@@ -282,6 +286,15 @@ class Many2Many(Field):
         with Transaction().set_context(ctx):
             records = instanciate_values(Target, value)
         super(Many2Many, self).__set__(inst, records)
+
+    def delete(self, inst, records):
+        records = set(records)
+        if inst._deleted is None:
+            inst._deleted = defaultdict(set)
+        inst._deleted[self.name].update(map(int, records))
+        setattr(
+            inst, self.name,
+            [r for r in getattr(inst, self.name) if r not in records])
 
     def convert_domain_tree(self, domain, tables):
         Target = self.get_target()
@@ -324,7 +337,7 @@ class Many2Many(Field):
         pool = Pool()
         Rule = pool.get('ir.rule')
         Target = self.get_target()
-        Relation = pool.get(self.relation_name)
+        Relation = self.get_relation()
         transaction = Transaction()
         table, _ = tables[None]
         name, operator, value = domain[:3]
@@ -455,6 +468,9 @@ class Many2Many(Field):
         definition['search_context'] = encoder.encode(self.search_context)
         definition['search_order'] = encoder.encode(self.search_order)
         definition['sortable'] &= hasattr(model, 'order_' + self.name)
+        definition['order'] = encoder.encode(
+            getattr(model, '_order', None)
+            if self.order is None else self.order)
         if self.size is not None:
             definition['size'] = encoder.encode(self.size)
         return definition

@@ -5,12 +5,13 @@ import os
 import logging
 from getpass import getpass
 
-from sql import Table
+from sql import Table, Literal
 
-from trytond.transaction import Transaction
 from trytond import backend
+from trytond.transaction import Transaction
 from trytond.pool import Pool
 from trytond.config import config
+from trytond.sendmail import send_test_email
 
 from trytond.modules import get_module_info
 
@@ -59,12 +60,11 @@ def _check_update_needed(db_name, options, transaction):
 
 
 def run(options):
-    Database = backend.get('Database')
     main_lang = config.get('database', 'language')
     init = {}
     for db_name in options.database_names:
         init[db_name] = False
-        database = Database(db_name)
+        database = backend.Database(db_name)
         database.connect()
         if options.update:
             if not database.test():
@@ -78,13 +78,13 @@ def run(options):
         if options.update or options.check_update:
             with Transaction().start(db_name, 0) as transaction,\
                     transaction.connection.cursor() as cursor:
-                database = Database(db_name)
+                database = backend.Database(db_name)
                 database.connect()
                 if not database.test():
                     raise Exception('"%s" is not a Tryton database.' % db_name)
                 lang = Table('ir_lang')
                 cursor.execute(*lang.select(lang.code,
-                        where=lang.translatable == True))
+                        where=lang.translatable == Literal(True)))
                 lang = set([x[0] for x in cursor.fetchall()])
             lang.add(main_lang)
         else:
@@ -189,6 +189,8 @@ def run(options):
             admin.save()
             if options.reset_password:
                 User.reset_password([admin])
+            if options.test_email:
+                send_test_email(options.test_email)
             if options.hostname is not None:
                 configuration.hostname = options.hostname or None
             configuration.save()

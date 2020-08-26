@@ -1,47 +1,78 @@
-Version 5.2.14 - 2020-04-04
+Version 5.6.3 - 2020-07-01
 * Bug fixes (see mercurial logs for details)
 
-Version 5.2.13 - 2020-03-09
+Version 5.6.2 - 2020-06-16
 * Bug fixes (see mercurial logs for details)
+
+Version 5.6.1 - 2020-06-03
+* Bug fixes (see mercurial logs for details)
+
+Version 5.6.0 - 2020-05-04
+* Bug fixes (see mercurial logs for details)
+* Call getter function when accessing Function field on unsaved record
+* Add language configuration wizard
+* Allow copying attachments and notes to created records
+* Add link button on form
+* Support explicit delete and remove for saving and on_change xxx2Many
+* Add export_data_domain to ModelStorage
+* Add route to export CSV data
+* Add test on target of relation fields
+* Add width and height attributes on calendar view
+* Add default database name configuration
+* Add retry option to report convert
+* Add depends fields on view_attributes
+* Simplify trigger action
+* Run trigger in the queue
+* Do not copy Binary content with file_id
+* Replace memoize with functools.lru_cache
+* Add support for Python 3.8
+* Set all fields readonly for inactive record
 * Enable check_access context when checking wizard access (issue9108)
+* Add option to send test email with trytond-admin
+* Add editable on calendar view
+* Add xalign and yalign to group
+* Add MultiSelection entry to Dict field
+* Allow empty order clause
+* Change editable tree attribute into boolean
+* Send default order to clients
+* Replace advisory lock by SKIP LOCKED in queue pulling
+* Load WSGI middleware from configuration
+* Add help text to Dict keys
+* Update button_action with returned values
+* Use direct access to backend classes
+* Add weasyprint support
+* Add slugify tool
+* Add is_secure, host and http_host to url module
+* Add __href__ to URLMixin
+* Add validate attribute to wizard's Button
+* Return 400 instead of 500 for Tryton exception
+* Fill the reverse field in the One2Many setter
+* Drop support for skiptest attribute on xml files
+* Remove implicit field names in ModelStorage.search_read
 
-Version 5.2.12 - 2020-02-02
+Version 5.4.0 - 2019-11-04
 * Bug fixes (see mercurial logs for details)
-
-Version 5.2.11 - 2020-01-09
-* Bug fixes (see mercurial logs for details)
-
-Version 5.2.10 - 2019-12-16
-* Bug fixes (see mercurial logs for details)
-
-Version 5.2.9 - 2019-12-02
-* Bug fixes (see mercurial logs for details)
-
-* Add MultiSelection entries to Dict field
-
-Version 5.2.8 - 2019-11-08
-* Bug fixes (see mercurial logs for details)
-
-Version 5.2.7 - 2019-10-06
-* Bug fixes (see mercurial logs for details)
-
-Version 5.2.6 - 2019-09-15
-* Bug fixes (see mercurial logs for details)
-
-Version 5.2.5 - 2019-08-17
-* Bug fixes (see mercurial logs for details)
-
-Version 5.2.4 - 2019-08-01
-* Bug fixes (see mercurial logs for details)
-
-Version 5.2.3 - 2019-07-17
-* Bug fixes (see mercurial logs for details)
-
-Version 5.2.2 - 2019-07-01
-* Bug fixes (see mercurial logs for details)
-
-Version 5.2.1 - 2019-06-10
-* Bug fixes (see mercurial logs for details)
+* Improve tests on depends
+* Add permission groups on export
+* Retry cron job on DatabaseOperationalError
+* Add visual context on tree view
+* Add start value to PYSON Date and DateTime
+* Add MultiSelection field
+* Support dot notation on PYSON Eval
+* Add __slots__
+* Pass app and request to wsgi error handlers
+* Add lazy_gettext
+* Add format_timedelta to Report
+* Add partial TO_CHAR support for date and datetime on SQLite
+* Setup default logging for WSGI app
+* Add format argument to report format_date function
+* Change expand attribute into a factor
+* Allow SQL expression as value of fields
+* Allow customizing Dict keys order with a sequence field
+* Add invalid domain in DomainValidationError
+* Add domain inversion tools
+* Add get_relation_fields to DictSchemaMixin
+* Add level on Model.fields_get to fill relation_fields
 
 Version 5.2.0 - 2019-05-06
 * Bug fixes (see mercurial logs for details)

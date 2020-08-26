@@ -2,26 +2,22 @@
 # this repository contains the full copyright notices and license terms.
 
 import datetime
-import warnings
-warnings.filterwarnings('ignore', "", ImportWarning)
 from locale import CHAR_MAX
-warnings.resetwarnings()
 from ast import literal_eval
 
 from sql import Table
 
 from ..model import ModelView, ModelSQL, DeactivableMixin, fields, Check
+from ..modules import create_graph, load_translations
 from ..cache import Cache
 from ..transaction import Transaction
 from ..pool import Pool
+from ..pyson import Eval
 from ..exceptions import UserError
 from ..i18n import gettext
+from ..wizard import Wizard, StateView, Button, StateTransition
 
 Transaction.cache_keys.add('translate_name')
-
-__all__ = [
-    'Lang',
-    ]
 
 
 class GroupingError(UserError):
@@ -46,7 +42,7 @@ class Lang(DeactivableMixin, ModelSQL, ModelView):
     name = fields.Char('Name', required=True, translate=True)
     code = fields.Char('Code', required=True,
         help="RFC 4646 tag: http://tools.ietf.org/html/rfc4646")
-    translatable = fields.Boolean('Translatable')
+    translatable = fields.Boolean('Translatable', readonly=True)
     parent = fields.Char("Parent Code", help="Code of the exceptional parent")
     direction = fields.Selection([
             ('ltr', 'Left-to-right'),
@@ -90,6 +86,12 @@ class Lang(DeactivableMixin, ModelSQL, ModelView):
                 Check(table, table.decimal_point != table.thousands_sep),
                 'decimal_point and thousands_sep must be different!'),
             ]
+        cls._buttons.update({
+                'load_translations': {},
+                'unload_translations': {
+                    'invisible': ~Eval('translatable', False),
+                    },
+                })
 
     @classmethod
     def search_rec_name(cls, name, clause):
@@ -188,6 +190,37 @@ class Lang(DeactivableMixin, ModelSQL, ModelView):
     @classmethod
     def default_n_sep_by_space(cls):
         return False
+
+    @classmethod
+    @ModelView.button
+    def load_translations(cls, languages):
+        pool = Pool()
+        Module = pool.get('ir.module')
+        codes = set()
+        cls.write(languages, {'translatable': True})
+        for language in languages:
+            code = language.code
+            while code:
+                codes.add(code)
+                code = get_parent_language(code)
+        modules = Module.search([
+                    ('state', '=', 'activated'),
+                    ])
+        modules = [m.name for m in modules]
+        for node in create_graph(modules):
+            load_translations(pool, node, codes, node.name)
+
+    @classmethod
+    @ModelView.button
+    def unload_translations(cls, languages):
+        pool = Pool()
+        Translation = pool.get('ir.translation')
+        cls.write(languages, {'translatable': False})
+        languages = [l.code for l in languages]
+        Translation.delete(Translation.search([
+                    ('lang', 'in', languages),
+                    ('module', '!=', None),
+                    ]))
 
     @classmethod
     def validate(cls, languages):
@@ -506,6 +539,42 @@ class Lang(DeactivableMixin, ModelSQL, ModelView):
         return value.strftime(format)
 
 
+class LangConfigStart(ModelView):
+    'Language Configuration Start'
+    __name__ = 'ir.lang.config.start'
+
+    languages = fields.Many2Many('ir.lang', None, None, "Languages")
+
+    @classmethod
+    def default_languages(cls):
+        pool = Pool()
+        Lang = pool.get('ir.lang')
+        return [x.id for x in Lang.search([('translatable', '=', True)])]
+
+
+class LangConfig(Wizard):
+    'Configure languages'
+    __name__ = 'ir.lang.config'
+
+    start = StateView('ir.lang.config.start',
+        'ir.lang_config_start_view_form', [
+            Button('Cancel', 'end', 'tryton-cancel'),
+            Button('Load', 'load', 'tryton-ok', default=True),
+            ])
+    load = StateTransition()
+
+    def transition_load(self):
+        pool = Pool()
+        Lang = pool.get('ir.lang')
+        Lang.load_translations(list(self.start.languages))
+        untranslated_languages = Lang.search([
+                ('id', 'not in', [l.id for l in self.start.languages]),
+                ('translatable', '=', True),
+                ])
+        Lang.unload_translations(untranslated_languages)
+        return 'end'
+
+
 def get_parent_language(code):
     if code not in _parents:
         # Use SQL because it is used by load_module_graph
@@ -518,4 +587,6 @@ def get_parent_language(code):
     for sep in ['@', '_']:
         if sep in code:
             return code.rsplit(sep, 1)[0]
+
+
 _parents = {}

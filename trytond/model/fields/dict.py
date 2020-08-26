@@ -21,6 +21,7 @@ class Dict(Field):
     'Define dict field.'
     _type = 'dict'
     _sql_type = 'TEXT'
+    _py_type = dict
 
     def __init__(self, schema_model, string='', help='', required=False,
             readonly=False, domain=None, states=None, select=False,
@@ -44,9 +45,7 @@ class Dict(Field):
         return dicts
 
     def sql_format(self, value):
-        if value is None:
-            return None
-        assert isinstance(value, dict)
+        value = super().sql_format(value)
         if isinstance(value, dict):
             d = {}
             for k, v in value.items():
@@ -56,8 +55,8 @@ class Dict(Field):
                 if isinstance(v, list):
                     v = list(sorted(set(v)))
                 d[k] = v
-            value = d
-        return dumps(value)
+            value = dumps(d)
+        return value
 
     def translated(self, name=None, type_='values'):
         "Return a descriptor for the translated value of the field"
@@ -78,7 +77,7 @@ class Dict(Field):
         return column
 
     def _domain_value(self, operator, value):
-        if backend.name() == 'sqlite' and isinstance(value, bool):
+        if backend.name == 'sqlite' and isinstance(value, bool):
             # json_extract returns 0 for JSON false and 1 for JSON true
             value = int(value)
         if isinstance(value, (Select, CombiningQuery)):
@@ -137,24 +136,19 @@ class Dict(Field):
                 pass
         elif operator.endswith('in'):
             # Try to use custom operators in case there is indexes
-            if operator == 'in':
-                none_value = False
-                op = '='
+            if not value:
+                expression = Literal(operator.startswith('not'))
             else:
-                none_value = True
-                op = '!='
-
-            if not expression.right:
-                expression = Literal(none_value)
-            elif isinstance(value, (list, tuple)):
+                op = '!=' if operator.startswith('not') else '='
                 try:
-                    expression = Literal(not bool(value))
+                    in_expr = Literal(False)
                     for v in value:
-                        expression |= database.json_contains(
+                        in_expr |= database.json_contains(
                             self._domain_column(op, raw_column, key),
                             dumps(v))
                     if operator.startswith('not'):
-                        expression = ~expression
+                        in_expr = ~in_expr
+                    expression = in_expr
                 except NotImplementedError:
                     pass
         expression = self._domain_add_null(column, operator, value, expression)

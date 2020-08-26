@@ -3,6 +3,7 @@
 import csv
 import os
 import logging
+import threading
 from io import StringIO
 
 __all__ = ['app']
@@ -21,13 +22,14 @@ if not log_file:
         logging.config.fileConfig(logging_config)
     else:
         logging.basicConfig(level=getattr(logging, log_level), format=LF)
+logging.captureWarnings(True)
 
 if os.environ.get('TRYTOND_COROUTINE'):
     from gevent import monkey
     monkey.patch_all()
 
-from trytond.pool import Pool
-from trytond.wsgi import app
+from trytond.pool import Pool  # noqa: E402
+from trytond.wsgi import app  # noqa: E402
 
 Pool.start()
 # TRYTOND_CONFIG it's managed by importing config
@@ -35,5 +37,10 @@ db_names = os.environ.get('TRYTOND_DATABASE_NAMES')
 if db_names:
     # Read with csv so database name can include special chars
     reader = csv.reader(StringIO(db_names))
-    for db_name in next(reader):
-        Pool(db_name).init()
+    threads = []
+    for name in next(reader):
+        thread = threading.Thread(target=Pool(name).init)
+        thread.start()
+        threads.append(thread)
+    for thread in threads:
+        thread.join()

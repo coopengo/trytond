@@ -448,7 +448,7 @@ Selection
 
 .. class:: Selection(selection, string[, sort[, selection_change_with[, translate[, \**options]]]])
 
-A string field with limited values to choice.
+A string field with limited values to choose from.
 
 :class:`Selection` has one extra required argument:
 
@@ -501,6 +501,37 @@ Instance methods:
     Returns a descriptor for the translated value of the field. The descriptor
     must be used on the same class as the field. It will use the language
     defined in the context of the instance accessed.
+
+
+MultiSelection
+--------------
+
+.. class:: MultiSelection(selection, string[, sort[, translate[, \**options]]])
+
+A list field with limited values to choose from.
+
+:class:`MultiSelection` has one extra required argument:
+
+.. attribute:: MultiSelection.selection
+
+    Same as :attr:`Selection.selection`
+
+:class:`MultiSelection` has two extra optional arguments:
+
+.. attribute:: MultiSelection.sort
+
+    Same as :attr:`Selection.sort`
+
+.. attribute:: MultiSelection.translate_selection
+
+    Same as :attr:`Selection.translate_selection`
+
+Instance methods:
+
+.. method:: MultiSelection.translated([name])
+
+    Same as :meth:`Selection.translated` but returns a list of translated values.
+
 
 Reference
 ---------
@@ -726,6 +757,12 @@ This field accepts as written value a list of tuples like this:
 
     Same as :attr:`Many2One.search_context`
 
+Instance methods:
+
+.. method:: One2Many.remove(instance, records)
+
+    Remove the target records from the instance instead of deleting them.
+
 Many2Many
 ---------
 
@@ -784,12 +821,6 @@ This field accepts as written value a list of tuples like the :class:`One2Many`.
 
     Same as :attr:`One2Many.filter`
 
-Instance methods:
-
-.. method:: Many2Many.get_target()
-
-    Return the target :class:`~trytond.model.Model`.
-
 .. attribute:: Many2Many.search_order
 
     Same as :attr:`Many2One.search_order`
@@ -797,6 +828,21 @@ Instance methods:
 .. attribute:: Many2Many.search_context
 
     Same as :attr:`Many2One.search_context`
+
+
+Instance methods:
+
+.. method:: Many2Many.get_relation()
+
+    Return the relation :class:`~trytond.model.Model`.
+
+.. method:: Many2Many.get_target()
+
+    Return the target :class:`~trytond.model.Model`.
+
+.. method:: Many2Many.delete(instance, records):
+
+    Delete the target records from the instance instead of removing them.
 
 One2One
 -------
@@ -819,6 +865,10 @@ A one-to-one relation field.
     Same as :attr:`One2Many.filter`
 
 Instance methods:
+
+.. method:: Many2Many.get_target()
+
+    Return the target :class:`~trytond.model.Model`.
 
 .. method:: One2One.get_target()
 

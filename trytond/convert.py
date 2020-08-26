@@ -16,8 +16,8 @@ from .pyson import PYSONEncoder, CONTEXT
 
 logger = logging.getLogger(__name__)
 
-CDATA_START = re.compile('^\s*\<\!\[cdata\[', re.IGNORECASE)
-CDATA_END = re.compile('\]\]\>\s*$', re.IGNORECASE)
+CDATA_START = re.compile(r'^\s*\<\!\[cdata\[', re.IGNORECASE)
+CDATA_END = re.compile(r'\]\]\>\s*$', re.IGNORECASE)
 
 
 class DummyTagHandler:
@@ -242,7 +242,7 @@ class RecordTagHandler:
                     context.update(CONTEXT)
                 value = eval(eval_attr, context)
                 if pyson_attr:
-                    value = PYSONEncoder().encode(value)
+                    value = PYSONEncoder(sort_keys=True).encode(value)
                 self.values[field_name] = value
 
         else:
@@ -279,7 +279,7 @@ class RecordTagHandler:
                 self.cdata = 'done'
 
                 value = self.values[self.current_field]
-                match = re.findall('[^%]%\((.*?)\)[ds]', value)
+                match = re.findall(r'[^%]%\((.*?)\)[ds]', value)
                 xml_ids = {}
                 for xml_id in match:
                     xml_ids[xml_id] = self.mh.get_id(xml_id)
@@ -472,11 +472,7 @@ class TrytondXmlHandler(sax.handler.ContentHandler):
             elif name == "data":
                 self.noupdate = bool(int(attributes.get("noupdate", '0')))
                 self.grouped = bool(int(attributes.get('grouped', 0)))
-                if self.pool.test and \
-                        bool(int(attributes.get("skiptest", '0'))):
-                    self.skip_data = True
-                else:
-                    self.skip_data = False
+                self.skip_data = False
                 depends = attributes.get('depends', '').split(',')
                 depends = {m.strip() for m in depends if m}
                 if not depends.issubset(self.modules):

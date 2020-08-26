@@ -2,19 +2,18 @@
 # this repository contains the full copyright notices and license terms.
 import datetime
 import logging
+import math
 import os
+import random
 import threading
 import time
 from decimal import Decimal
 from weakref import WeakKeyDictionary
 
-_FIX_ROWCOUNT = False
 try:
     from pysqlite2 import dbapi2 as sqlite
     from pysqlite2.dbapi2 import IntegrityError as DatabaseIntegrityError
     from pysqlite2.dbapi2 import OperationalError as DatabaseOperationalError
-    # pysqlite2 < 2.5 doesn't return correct rowcount
-    _FIX_ROWCOUNT = sqlite.version_info < (2, 5, 0)
 except ImportError:
     import sqlite3 as sqlite
     from sqlite3 import IntegrityError as DatabaseIntegrityError
@@ -30,6 +29,8 @@ from trytond.transaction import Transaction
 
 __all__ = ['Database', 'DatabaseIntegrityError', 'DatabaseOperationalError']
 logger = logging.getLogger(__name__)
+
+_default_name = config.get('database', 'default_name', default=':memory:')
 
 
 class SQLiteExtract(Function):
@@ -230,6 +231,10 @@ class SQLiteTrim(Trim):
         return function + '(%s, %s)' % (
             format(self.string), format(self.characters))
 
+    @property
+    def params(self):
+        return [self.string, self.characters]
+
 
 def sign(value):
     if value > 0:
@@ -254,6 +259,18 @@ def least(*args):
         return min(args)
     else:
         return None
+
+
+def cbrt(value):
+    return math.pow(value, 1 / 3)
+
+
+def div(a, b):
+    return a // b
+
+
+def trunc(value, digits):
+    return math.trunc(value * 10 ** digits) / 10 ** digits
 
 
 MAPPING = {
@@ -306,13 +323,13 @@ class Database(DatabaseInterface):
         'BOOL': SQLType('BOOLEAN', 'BOOLEAN'),
         }
 
-    def __new__(cls, name=':memory:'):
+    def __new__(cls, name=_default_name):
         if (name == ':memory:'
                 and getattr(cls._local, 'memory_database', None)):
             return cls._local.memory_database
         return DatabaseInterface.__new__(cls, name=name)
 
-    def __init__(self, name=':memory:'):
+    def __init__(self, name=_default_name):
         super(Database, self).__init__(name=name)
         if name == ':memory:':
             Database._local.memory_database = self
@@ -327,7 +344,7 @@ class Database(DatabaseInterface):
             db_filename = self.name + '.sqlite'
             path = os.path.join(config.get('database', 'path'), db_filename)
             if not os.path.isfile(path):
-                raise IOError('Database "%s" doesn\'t exist!' % db_filename)
+                raise IOError('Database "%s" doesn\'t exist!' % path)
         if self._conn is not None:
             return self
         self._conn = sqlite.connect(path,
@@ -336,16 +353,40 @@ class Database(DatabaseInterface):
         self._conn.create_function('extract', 2, SQLiteExtract.extract)
         self._conn.create_function('date_trunc', 2, date_trunc)
         self._conn.create_function('split_part', 3, split_part)
-        self._conn.create_function('position', 2, SQLitePosition.position)
         self._conn.create_function('to_char', 2, to_char)
-        self._conn.create_function('overlay', 3, SQLiteOverlay.overlay)
-        self._conn.create_function('overlay', 4, SQLiteOverlay.overlay)
         if sqlite.sqlite_version_info < (3, 3, 14):
             self._conn.create_function('replace', 3, replace)
         self._conn.create_function('now', 0, now)
-        self._conn.create_function('sign', 1, sign)
         self._conn.create_function('greatest', -1, greatest)
         self._conn.create_function('least', -1, least)
+
+        # Mathematical functions
+        self._conn.create_function('cbrt', 1, cbrt)
+        self._conn.create_function('ceil', 1, math.ceil)
+        self._conn.create_function('degrees', 1, math.degrees)
+        self._conn.create_function('div', 2, div)
+        self._conn.create_function('exp', 1, math.exp)
+        self._conn.create_function('floor', 1, math.floor)
+        self._conn.create_function('ln', 1, math.log)
+        self._conn.create_function('log', 1, math.log10)
+        self._conn.create_function('mod', 2, math.fmod)
+        self._conn.create_function('pi', 0, lambda: math.pi)
+        self._conn.create_function('power', 2, math.pow)
+        self._conn.create_function('radians', 1, math.radians)
+        self._conn.create_function('sign', 1, sign)
+        self._conn.create_function('sqrt', 1, math.sqrt)
+        self._conn.create_function('trunc', 1, math.trunc)
+        self._conn.create_function('trunc', 2, trunc)
+
+        # Random functions
+        self._conn.create_function('random', 0, random.random)
+        self._conn.create_function('setseed', 1, random.seed)
+
+        # String functions
+        self._conn.create_function('overlay', 3, SQLiteOverlay.overlay)
+        self._conn.create_function('overlay', 4, SQLiteOverlay.overlay)
+        self._conn.create_function('position', 2, SQLitePosition.position)
+
         if (hasattr(self._conn, 'set_trace_callback')
                 and logger.isEnabledFor(logging.DEBUG)):
             self._conn.set_trace_callback(logger.debug)
@@ -413,6 +454,8 @@ class Database(DatabaseInterface):
                 try:
                     database = Database(db_name).connect()
                 except Exception:
+                    logger.debug(
+                        'Test failed for "%s"', db_name, exc_info=True)
                     continue
                 if database.test(hostname=hostname):
                     res.append(db_name)
@@ -514,10 +557,11 @@ class Database(DatabaseInterface):
                 value = int(value)
         return value
 
-    def json_get(self, column, key):
+    def json_get(self, column, key=None):
         if key:
             column = JSONExtract(column, '$.%s' % key)
         return NullIf(JSONQuote(column), JSONQuote(Null))
+
 
 sqlite.register_converter('NUMERIC', lambda val: Decimal(val.decode('utf-8')))
 sqlite.register_adapter(Decimal, lambda val: str(val).encode('utf-8'))
@@ -525,6 +569,8 @@ sqlite.register_adapter(Decimal, lambda val: str(val).encode('utf-8'))
 
 def adapt_datetime(val):
     return val.replace(tzinfo=None).isoformat(" ")
+
+
 sqlite.register_adapter(datetime.datetime, adapt_datetime)
 sqlite.register_adapter(datetime.time, lambda val: val.isoformat())
 sqlite.register_converter('TIME',
@@ -540,6 +586,8 @@ def convert_interval(value):
     elif value <= _interval_min:
         return datetime.timedelta.min
     return datetime.timedelta(seconds=value)
+
+
 _interval_max = datetime.timedelta.max.total_seconds()
 _interval_min = datetime.timedelta.min.total_seconds()
 sqlite.register_converter('INTERVAL', convert_interval)

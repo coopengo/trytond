@@ -42,7 +42,6 @@ def _get_remote_addr(context):
 
 
 def login(dbname, loginname, parameters, cache=True, context=None):
-    DatabaseOperationalError = backend.get('DatabaseOperationalError')
     for count in range(config.getint('database', 'retry'), -1, -1):
         with Transaction().start(dbname, 0, context=context) as transaction:
             pool = _get_pool(dbname)
@@ -50,7 +49,7 @@ def login(dbname, loginname, parameters, cache=True, context=None):
             try:
                 user_id = User.get_login(loginname, parameters)
                 break
-            except DatabaseOperationalError:
+            except backend.DatabaseOperationalError:
                 if count:
                     continue
                 raise
@@ -87,7 +86,6 @@ def logout(dbname, user, session, context=None):
         if name:
             redis.del_session(dbname, user, session)
         return name
-    DatabaseOperationalError = backend.get('DatabaseOperationalError')
     for count in range(config.getint('database', 'retry'), -1, -1):
         with Transaction().start(dbname, 0, context=context):
             pool = _get_pool(dbname)
@@ -95,7 +93,7 @@ def logout(dbname, user, session, context=None):
             try:
                 name = Session.remove(session)
                 break
-            except DatabaseOperationalError:
+            except backend.DatabaseOperationalError:
                 if count:
                     continue
                 raise
@@ -116,7 +114,6 @@ def check(dbname, user, session, context=None):
                 redis.time_user(dbname, user, ttl)
             return user
         return
-    DatabaseOperationalError = backend.get('DatabaseOperationalError')
     for count in range(config.getint('database', 'retry'), -1, -1):
         with Transaction().start(dbname, user, context=context) as transaction:
             pool = _get_pool(dbname)
@@ -124,7 +121,7 @@ def check(dbname, user, session, context=None):
             try:
                 find = Session.check(user, session)
                 break
-            except DatabaseOperationalError:
+            except backend.DatabaseOperationalError:
                 if count:
                     continue
                 raise
@@ -145,21 +142,19 @@ def check(dbname, user, session, context=None):
 
 
 def check_token(dbname, token):
-    DatabaseOperationalError = backend.get('DatabaseOperationalError')
     for count in range(config.getint('database', 'retry'), -1, -1):
         with Transaction().start(dbname, 0, readonly=True):
             pool = _get_pool(dbname)
             Token = pool.get('api.token')
             try:
                 return Token.check(token)
-            except DatabaseOperationalError:
+            except backend.DatabaseOperationalError:
                 if count:
                     continue
                 raise
 
 
 def check_timeout(dbname, user, session, context=None):
-    DatabaseOperationalError = backend.get('DatabaseOperationalError')
     for count in range(config.getint('database', 'retry'), -1, -1):
         with Transaction().start(dbname, user, context=context) as transaction:
             pool = _get_pool(dbname)
@@ -167,7 +162,7 @@ def check_timeout(dbname, user, session, context=None):
             try:
                 valid = Session.check_timeout(user, session)
                 break
-            except DatabaseOperationalError:
+            except backend.DatabaseOperationalError:
                 if count:
                     continue
                 raise
@@ -186,22 +181,20 @@ def reset_user_session(dbname, user, session):
         if ttl is not None and config_session_audit():
             redis.time_user(dbname, user, ttl)
         return
-    DatabaseOperationalError = backend.get('DatabaseOperationalError')
     try:
         with Transaction().start(dbname, 0):
             pool = _get_pool(dbname)
             Session = pool.get('ir.session')
             Session.reset(session)
-    except DatabaseOperationalError:
+    except backend.DatabaseOperationalError:
         pass
 
 
 def reset(dbname, session, context):
-    DatabaseOperationalError = backend.get('DatabaseOperationalError')
     try:
         with Transaction().start(dbname, 0, context=context):
             pool = _get_pool(dbname)
             Session = pool.get('ir.session')
             Session.reset(session)
-    except DatabaseOperationalError:
+    except backend.DatabaseOperationalError:
         logger.debug('Reset session failed', exc_info=True)
