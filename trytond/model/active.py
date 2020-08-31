@@ -25,6 +25,8 @@ class DeactivableMixin(Model):
         for name, field in cls._fields.items():
             if name == 'active':
                 continue
+            if field.states.get('editable_when_inactive', False):
+                continue
             if 'readonly' in field.states:
                 field.states['readonly'] |= inactive
             else:
