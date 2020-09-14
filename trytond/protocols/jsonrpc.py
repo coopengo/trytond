@@ -194,7 +194,7 @@ class JSONProtocol:
 
         # AKE: log RPC method (uwsgi and header)
         if uwsgi:
-            uwsgi.set_logvar('rpc', parsed_data['method'])
+            uwsgi.set_logvar(b'rpc', parsed_data['method'].encode('utf-8'))
         headers = Headers()
         headers.add('RPC-Method', parsed_data['method'])
 
