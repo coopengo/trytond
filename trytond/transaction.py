@@ -225,6 +225,10 @@ class Transaction(object):
         self._sub_transactions.extend(sub_transactions)
 
     def add_sub_transaction_to_close(self, sub_transaction):
+        # Needed by sub_transaction_retry Coog decorator
+        # We need to close connection that will not
+        # be committed to prevent depletion of
+        # the connection pool.
         self._sub_transactions_to_close.append(sub_transaction)
 
     def commit(self):
