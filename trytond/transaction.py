@@ -120,6 +120,7 @@ class Transaction(object):
         self.counter = 0
         self._datamanagers = []
         self._sub_transactions = []
+        self._sub_transactions_to_close = []
         if database_name:
             from trytond.cache import Cache
             try:
@@ -150,6 +151,12 @@ class Transaction(object):
                     finally:
                         self.database.put_connection(
                             self.connection, self.close)
+                        to_put = {x.connection for x in
+                            self._sub_transactions_to_close
+                            if not x.connection.closed}
+                        for conn in to_put:
+                            self.database.put_connection(
+                                conn, self.close)
                 finally:
                     self.database = None
                     self.readonly = False
@@ -213,6 +220,13 @@ class Transaction(object):
 
     def add_sub_transactions(self, sub_transactions):
         self._sub_transactions.extend(sub_transactions)
+
+    def add_sub_transaction_to_close(self, sub_transaction):
+        # Needed by sub_transaction_retry Coog decorator
+        # We need to close connection that will not
+        # be committed to prevent depletion of
+        # the connection pool.
+        self._sub_transactions_to_close.append(sub_transaction)
 
     def commit(self):
         from trytond.cache import Cache
