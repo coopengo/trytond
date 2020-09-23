@@ -322,6 +322,7 @@ class Database(DatabaseInterface):
                             ) as conn:
                         if self._test(conn, hostname=hostname):
                             res.append(db_name)
+                        conn.close()
                 except Exception:
                     logger.debug(
                         'Test failed for "%s"', db_name, exc_info=True)
