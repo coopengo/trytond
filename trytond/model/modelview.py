@@ -301,7 +301,11 @@ class ModelView(Model):
                     ModelView._reset_modules_list()
                     raise_p = True
             parser = etree.XMLParser(remove_comments=True)
-            tree = etree.fromstring(result['arch'], parser=parser)
+            try:
+                encoded_arch = result['arch'].encode('utf-8')
+            except UnicodeEncodeError:
+                encoded_arch = result['arch']
+            tree = etree.fromstring(encoded_arch, parser=parser)
             for view in views:
                 if view.domain:
                     if not PYSONDecoder({'context': Transaction().context}
@@ -351,7 +355,11 @@ class ModelView(Model):
 
         # Update arch and compute fields from arch
         parser = etree.XMLParser(remove_blank_text=True)
-        tree = etree.fromstring(result['arch'], parser)
+        try:
+            encoded_arch = result['arch'].encode('utf-8')
+        except UnicodeEncodeError:
+            encoded_arch = result['arch']
+        tree = etree.fromstring(encoded_arch, parser)
         xarch, xfields = cls._view_look_dom_arch(
             tree, result['type'], result['field_childs'], level=level)
         result['arch'] = xarch

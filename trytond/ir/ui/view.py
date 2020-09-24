@@ -133,7 +133,11 @@ class View(ModelSQL, ModelView):
             if not xml:
                 continue
             try:
-                tree = etree.fromstring(xml)
+                try:
+                    encoded = xml.encode('utf-8')
+                except UnicodeEncodeError:
+                    encoded = xml
+                tree = etree.fromstring(encoded)
             except Exception:
                 # JCA : print faulty xml
                 try:
