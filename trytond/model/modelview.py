@@ -270,7 +270,11 @@ class ModelView(Model):
         # Update arch and compute fields from arch
         parser = etree.XMLParser(
             remove_blank_text=True, resolve_entities=False)
-        tree = etree.fromstring(result['arch'], parser)
+        try:
+            encoded_arch = result['arch'].encode('utf-8')
+        except UnicodeEncodeError:
+            encoded_arch = result['arch']
+        tree = etree.fromstring(encoded_arch, parser)
         result['arch'], result['fields'] = cls.parse_view(
             tree, result['type'], view_id=view_id,
             field_children=result['field_childs'], level=level)
