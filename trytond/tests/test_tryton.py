@@ -275,7 +275,12 @@ class ModuleTestCase(unittest.TestCase):
             Model = pool.get(model)
             res = Model.fields_view_get(view_id)
             self.assertEqual(res['model'], model)
-            tree = etree.fromstring(res['arch'])
+
+            try:
+                encoded_arch = res['arch'].encode('utf-8')
+            except UnicodeEncodeError:
+                encoded_arch = res['arch']
+            tree = etree.fromstring(encoded_arch)
 
             validator = etree.RelaxNG(etree=View.get_rng(res['type']))
             validator.assertValid(tree)
