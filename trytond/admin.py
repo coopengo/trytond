@@ -105,7 +105,7 @@ def run(options):
             cursor = transaction.connection.cursor()
             if options.check_update:
                 cursor.execute("LOCK upgrade_version_control IN EXCLUSIVE MODE;")
-            
+
             is_upgrade_needed, new_version = _check_update_needed(db_name,
                 options, transaction)
             if not is_upgrade_needed:
