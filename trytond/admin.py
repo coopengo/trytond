@@ -12,7 +12,6 @@ from trytond.transaction import Transaction
 from trytond.pool import Pool
 from trytond.config import config
 from trytond.sendmail import send_test_email
-from trytond.server_context import ServerContext
 
 from trytond.modules import get_module_info
 
@@ -98,8 +97,7 @@ def run(options):
         # Create upgrade version control table if it doesn't exist
         _init_upgrade_version_control_table(db_name)
 
-        with ServerContext().set_context(disable_auto_cache=True),\
-                Transaction().start(db_name, 0) as transaction:
+        with Transaction().start(db_name, 0) as transaction:
             # This lock of table will block others workers /
             # processes until the current upgrade is finished
             # Attention: lock activated only when -cu is activated
