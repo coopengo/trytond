@@ -428,6 +428,7 @@ class Field(object):
             'context': encoder.encode(self.context),
             'loading': self.loading,
             'name': self.name,
+            'depends': self.depends,
             'on_change': list(self.on_change),
             'on_change_with': list(self.on_change_with),
             'readonly': self.readonly,
