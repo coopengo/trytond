@@ -411,7 +411,7 @@ class ModelView(Model):
         relates = Action.get_keyword('form_relate', (cls.__name__, -1))
         quick_actions = Action.get_keyword('form_toolbar', (cls.__name__, -1))
         # JMO : Coog users do not want to see exports
-        # in the popup menu below "Open" because that is
+        # in the popup menu below "Open report" because that is
         # too much clutter, too much noise
         #  exports = Export.search_read(
         #      [('resource', '=', cls.__name__)],
