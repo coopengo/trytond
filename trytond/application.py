@@ -52,7 +52,7 @@ if db_names:
 
 
 if uwsgidecorators is not None:
-    # When running under uwsgi, the behaviour will be to the application
+    # When running under uwsgi, the behaviour will be to fork the application
     # process once it is loaded.
     # If database names were provided, the cache / iwc listener will be
     # initialized before forking, and the actual fork will break them.
