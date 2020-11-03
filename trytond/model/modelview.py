@@ -401,7 +401,7 @@ class ModelView(Model):
         """
         pool = Pool()
         Action = pool.get('ir.action.keyword')
-        Export = pool.get('ir.export')
+        #  Export = pool.get('ir.export')
         key = cls.__name__
         result = cls._view_toolbar_get_cache.get(key)
         if result:
@@ -410,9 +410,13 @@ class ModelView(Model):
         actions = Action.get_keyword('form_action', (cls.__name__, -1))
         relates = Action.get_keyword('form_relate', (cls.__name__, -1))
         quick_actions = Action.get_keyword('form_toolbar', (cls.__name__, -1))
-        exports = Export.search_read(
-            [('resource', '=', cls.__name__)],
-            fields_names=['name', 'export_fields.name'])
+        # JMO : Coog users do not want to see exports
+        # in the popup menu below "Open" because that is
+        # too much clutter, too much noise
+        #  exports = Export.search_read(
+        #      [('resource', '=', cls.__name__)],
+        #      fields_names=['name', 'export_fields.name'])
+        exports = []
         result = {
             'print': prints,
             'action': actions,
