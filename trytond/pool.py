@@ -182,18 +182,6 @@ class Pool(object):
                 iwc.broadcast_init_pool(self.database_name)
 
     def post_init(self, update):
-        try:
-            User = self.get('res.user')
-            User._clear_all_caches()
-            # reset _all_configuration_caches
-            User._clear_caches = -1
-        except KeyError:
-            # res.user is not guaranteed to exist when initialising ir
-            pass
-        except AttributeError:
-            # _clear_all_caches is only defined after coog_core has been
-            # init()-ed
-            pass
         for hook in self._post_init_calls[self.database_name]:
             hook(self, update)
 
