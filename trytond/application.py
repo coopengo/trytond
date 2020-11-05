@@ -19,6 +19,7 @@ if not log_file:
     # Logging must be set before importing
     logging_config = os.environ.get('TRYTOND_LOGGING_CONFIG')
     if logging_config:
+        import logging.config
         logging.config.fileConfig(logging_config)
     else:
         logging.basicConfig(level=getattr(logging, log_level), format=LF)
