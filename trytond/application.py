@@ -58,19 +58,44 @@ if uwsgidecorators is not None:
     # If database names were provided, the cache / iwc listener will be
     # initialized before forking, and the actual fork will break them.
     #
-    # So we need to manually fix them after each fork so they are properly set
-    # on each worker
+    # So we need to:
+    #   - Remove those threads from the master process, which will not need
+    #   them anyway
+    #   - Manually fix them after each fork so they are properly set
+    #   on each worker
+
+    from trytond.cache import Cache
+    from trytond import iwc
+    from trytond.bus import Bus
+
+    Cache._listener_lock = threading.Lock()
+    Cache._listener.clear()
+
+    iwc.Listener._listener_lock = threading.Lock()
+    iwc.Listener._listener.clear()
+
+    Bus._queues_lock = threading.Lock()
+    Bus._queues.clear()
+
     @uwsgidecorators.postfork
-    def preload():
+    def reset_application_threads():
         from trytond.cache import Cache
         from trytond import iwc
-        from trytond.transaction import Transaction
+        from trytond.bus import Bus
         db_names = os.environ.get('TRYTOND_DATABASE_NAMES')
         if db_names:
             # Read with csv so database name can include special chars
             reader = csv.reader(StringIO(db_names))
+            Cache._listener_lock = threading.Lock()
             Cache._listener.clear()
+
+            iwc.Listener._listener_lock = threading.Lock()
             iwc.Listener._listener.clear()
+
+            Bus._queues_lock = threading.Lock()
+            Bus._queues.clear()
+
+            from trytond.transaction import Transaction
             for name in next(reader):
                 iwc.start(name)
                 with Transaction().start(name, 0) as transaction:
