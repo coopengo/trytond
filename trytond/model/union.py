@@ -19,7 +19,7 @@ class UnionMixin:
         models = cls.union_models()
         length = len(models)
         i = models.index(model)
-        return ((column * length) + i)
+        return ((Cast(column, 'BIGINT') * length) + i)
 
     @classmethod
     def union_unshard(cls, record_id):
