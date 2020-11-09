@@ -1,6 +1,6 @@
 # This file is part of Tryton.  The COPYRIGHT file at the toplevel of this
 # repository contains the full copyright notices and license terms.
-from sql import Column, Literal, Union
+from sql import Cast, Column, Literal, Union
 
 from trytond.model import fields
 from trytond.pool import Pool
@@ -19,7 +19,7 @@ class UnionMixin:
         models = cls.union_models()
         length = len(models)
         i = models.index(model)
-        return ((column * length) + i)
+        return ((Cast(column, 'BIGINT') * length) + i)
 
     @classmethod
     def union_unshard(cls, record_id):
