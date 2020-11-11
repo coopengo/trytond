@@ -73,11 +73,14 @@ if uwsgidecorators is not None:
 
     @uwsgidecorators.postfork
     def reset_application_threads():
+        import logging
         from trytond.cache import Cache
         from trytond import iwc
         from trytond.bus import Bus
+
         db_names = os.environ.get('TRYTOND_DATABASE_NAMES')
         if db_names:
+            logging.getLogger('uwsgi').info('Postfork Triggered')
             # Read with csv so database name can include special chars
             reader = csv.reader(StringIO(db_names))
             Cache._listener_lock = threading.Lock()
