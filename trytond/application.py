@@ -63,21 +63,8 @@ if uwsgidecorators is not None:
     #   them anyway
     #   - Manually fix them after each fork so they are properly set
     #   on each worker
-
-    from trytond.cache import Cache
-    from trytond import iwc
-    from trytond.bus import Bus
-
-    Cache._listener_lock = threading.Lock()
-    Cache._listener.clear()
-
-    iwc.Listener._listener_lock = threading.Lock()
-    iwc.Listener._listener.clear()
-
-    Bus._queues_lock = threading.Lock()
-    Bus._queues.clear()
-
     @uwsgidecorators.postfork
+    @uwsgidecorators.lock
     def reset_application_threads():
         import logging
         from trytond.cache import Cache
@@ -89,14 +76,15 @@ if uwsgidecorators is not None:
             logging.getLogger('uwsgi').info('Postfork Triggered')
             # Read with csv so database name can include special chars
             reader = csv.reader(StringIO(db_names))
-            Cache._listener_lock = threading.Lock()
+            Cache._listener_lock.clear()
             Cache._listener.clear()
 
-            iwc.Listener._listener_lock = threading.Lock()
+            iwc.Listener._listener_lock.clear()
             iwc.Listener._listener.clear()
 
-            Bus._queues_lock = threading.Lock()
+            Bus._queues_lock.clear()
             Bus._queues.clear()
+            Bus._messages.clear()
 
             from trytond.transaction import Transaction
             for name in next(reader):

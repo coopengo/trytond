@@ -1,5 +1,6 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
+import os
 import datetime as dt
 import json
 import logging
@@ -104,7 +105,7 @@ class MemoryCache(BaseCache):
     _clean_last = datetime.now()
     _default_lower = Transaction.monotonic_time()
     _listener = {}
-    _listener_lock = threading.Lock()
+    _listener_lock = defaultdict(lambda: threading.Lock())
     _table = 'ir_cache'
     _channel = _table
 
@@ -172,7 +173,7 @@ class MemoryCache(BaseCache):
         database = transaction.database
         dbname = database.name
         if not _clear_timeout and database.has_channel():
-            with cls._listener_lock:
+            with cls._listener_lock[os.getpid()]:
                 if dbname not in cls._listener:
                     cls._listener[dbname] = listener = threading.Thread(
                         target=cls._listen, args=(dbname,), daemon=True)
@@ -267,7 +268,7 @@ class MemoryCache(BaseCache):
 
     @classmethod
     def drop(cls, dbname):
-        with cls._listener_lock:
+        with cls._listener_lock[os.getpid()]:
             listener = cls._listener.pop(dbname, None)
         if listener:
             database = backend.Database(dbname)
@@ -322,7 +323,7 @@ class MemoryCache(BaseCache):
             raise
         finally:
             database.put_connection(conn)
-            with cls._listener_lock:
+            with cls._listener_lock[os.getpid()]:
                 if cls._listener.get(dbname) == threading.current_thread():
                     del cls._listener[dbname]
 
