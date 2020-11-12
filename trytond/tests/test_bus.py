@@ -1,5 +1,6 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
+import os
 import time
 import unittest
 from unittest.mock import patch
@@ -96,7 +97,7 @@ class BusTestCase(unittest.TestCase):
 
     def tearDown(self):
         if DB_NAME in Bus._queues:
-            with Bus._queues_lock:
+            with Bus._queues_lock[os.getpid()]:
                 Bus._queues[DB_NAME]['timeout'] = 0
                 listener = Bus._queues[DB_NAME]['listener']
             listener.join()
