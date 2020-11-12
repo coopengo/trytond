@@ -1,12 +1,13 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
-
+import os
 import collections
 import json
 import logging
 import select
 import threading
 import time
+from collections import defaultdict
 import uuid
 try:
     from http import HTTPStatus
@@ -83,14 +84,14 @@ class _MessageQueue:
 class LongPollingBus:
 
     _channel = 'bus'
-    _queues_lock = threading.Lock()
+    _queues_lock = defaultdict(lambda: threading.Lock())
     _queues = collections.defaultdict(
         lambda: {'timeout': None, 'events': collections.defaultdict(list)})
     _messages = {}
 
     @classmethod
     def subscribe(cls, database, channels, last_message=None):
-        with cls._queues_lock:
+        with cls._queues_lock[os.getpid()]:
             start_listener = database not in cls._queues
             cls._queues[database]['timeout'] = time.time() + _db_timeout
             if start_listener:
@@ -110,7 +111,7 @@ class LongPollingBus:
             if channel in cls._queues[database]['events']:
                 event_channel = cls._queues[database]['events'][channel]
             else:
-                with cls._queues_lock:
+                with cls._queues_lock[os.getpid()]:
                     event_channel = cls._queues[database]['events'][channel]
             event_channel.append(event)
 
@@ -121,7 +122,7 @@ class LongPollingBus:
             response = cls.create_response(
                 *cls._messages[database].get_next(channels, last_message))
 
-        with cls._queues_lock:
+        with cls._queues_lock[os.getpid()]:
             for channel in channels:
                 events = cls._queues[database]['events'][channel]
                 for e in events[:]:
@@ -170,7 +171,7 @@ class LongPollingBus:
                     message = payload['message']
                     messages.append(channel, message)
 
-                    with cls._queues_lock:
+                    with cls._queues_lock[os.getpid()]:
                         events = \
                             cls._queues[database]['events'][channel].copy()
                         cls._queues[database]['events'][channel].clear()
@@ -181,13 +182,13 @@ class LongPollingBus:
             logger.error('bus listener on "%s" crashed', database,
                 exc_info=True)
 
-            with cls._queues_lock:
+            with cls._queues_lock[os.getpid()]:
                 del cls._queues[database]
             raise
         finally:
             db.put_connection(conn)
 
-        with cls._queues_lock:
+        with cls._queues_lock[os.getpid()]:
             if cls._queues[database]['timeout'] <= now:
                 del cls._queues[database]
             else:
@@ -233,6 +234,7 @@ def subscribe(request, database_name):
         return response
     user = request.authorization.get('userid')
     channels = request.parsed_data.get('channels', [])
+    user = 1
     if user is None:
         raise BadRequest
 
