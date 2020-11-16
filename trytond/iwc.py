@@ -3,11 +3,13 @@
 import os
 import threading
 import json
+from urllib.parse import urlparse
 import logging
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 import select
 
 from trytond.pool import Pool
+from trytond.config import config
 from trytond import backend
 
 logger = logging.getLogger(__name__)
@@ -18,13 +20,13 @@ broker = None
 
 class Listener:
     _listener = {}
-    _listener_lock = defaultdict(lambda: threading.Lock())
+    _listener_lock = threading.Lock()
 
     @classmethod
     def run(cls, dbname):
         database = backend.Database(dbname)
         if database.has_channel():
-            with cls._listener_lock[os.getpid()]:
+            with cls._listener_lock:
                 if dbname not in cls._listener:
                     cls._listener[dbname] = listener = threading.Thread(
                         target=cls._listen, args=(dbname,), daemon=True)
@@ -64,7 +66,7 @@ class Listener:
             raise
         finally:
             database.put_connection(conn)
-            with cls._listener_lock[os.getpid()]:
+            with cls._listener_lock:
                 if cls._listener.get(dbname) == threading.current_thread():
                     del cls._listener[dbname]
 
@@ -77,7 +79,7 @@ class Listener:
     @classmethod
     def stop(cls):
         to_join = []
-        with cls._listener_lock[os.getpid()]:
+        with cls._listener_lock:
             for dbname in list(cls._listener):
                 to_join.append(cls._listener.pop(dbname, None))
                 try:
