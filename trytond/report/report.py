@@ -411,7 +411,8 @@ class Report(URLMixin, PoolBase):
                 if r.status_code < 300:
                     return oext, r.content
                 else:
-                    raise UnoConversionError(r)
+                    raise UnoConversionError('Conversion failed. '
+                        'Unoconv responsed with "%s"' % r.reason)
             except UnoConversionError:
                 if count:
                     time.sleep(0.1)
