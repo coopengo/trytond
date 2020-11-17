@@ -7,7 +7,6 @@ import inspect
 import logging
 import subprocess
 import tempfile
-import time
 import warnings
 import zipfile
 import requests
@@ -420,7 +419,7 @@ class Report(URLMixin, PoolBase):
                     time.sleep(0.1)
                     continue
                 user = User(Transaction().user)
-                logger.error(e.message + ' User: %s' % user.name)
+                logger.error(e.message + ' User: %s' % user.name or '')
                 raise
 
     @classmethod
