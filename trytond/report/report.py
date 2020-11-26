@@ -364,6 +364,7 @@ class Report(URLMixin, PoolBase):
     @classmethod
     def convert_api(cls, report, data, timeout):
         # AKE: support printing via external api
+        User = Pool().get('res.user')
         input_format = report.template_extension
         output_format = report.extension or report.template_extension
 
@@ -380,11 +381,15 @@ class Report(URLMixin, PoolBase):
                 if r.status_code < 300:
                     return oext, r.content
                 else:
-                    raise UnoConversionError(r)
-            except UnoConversionError:
+                    raise UnoConversionError('Conversion of "%s" failed. '
+                        'Unoconv responsed with "%s".' % (
+                            report.report_name, r.reason))
+            except UnoConversionError as e:
                 if count:
                     time.sleep(0.1)
                     continue
+                user = User(Transaction().user)
+                logger.error(e.message + ' User: %s' % user.name or '')
                 raise
 
     @classmethod
