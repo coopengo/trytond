@@ -1,9 +1,9 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
-import os
 import datetime as dt
 import json
 import logging
+import os
 import select
 import threading
 from collections import OrderedDict, defaultdict
@@ -105,7 +105,7 @@ class MemoryCache(BaseCache):
     _clean_last = datetime.now()
     _default_lower = Transaction.monotonic_time()
     _listener = {}
-    _listener_lock = defaultdict(lambda: threading.Lock())
+    _listener_lock = defaultdict(threading.Lock)
     _table = 'ir_cache'
     _channel = _table
 
@@ -173,9 +173,10 @@ class MemoryCache(BaseCache):
         database = transaction.database
         dbname = database.name
         if not _clear_timeout and database.has_channel():
-            with cls._listener_lock[os.getpid()]:
-                if dbname not in cls._listener:
-                    cls._listener[dbname] = listener = threading.Thread(
+            pid = os.getpid()
+            with cls._listener_lock[pid]:
+                if (pid, dbname) not in cls._listener:
+                    cls._listener[pid, dbname] = listener = threading.Thread(
                         target=cls._listen, args=(dbname,), daemon=True)
                     listener.start()
             return
@@ -268,8 +269,9 @@ class MemoryCache(BaseCache):
 
     @classmethod
     def drop(cls, dbname):
-        with cls._listener_lock[os.getpid()]:
-            listener = cls._listener.pop(dbname, None)
+        pid = os.getpid()
+        with cls._listener_lock[pid]:
+            listener = cls._listener.pop((pid, dbname), None)
         if listener:
             database = backend.Database(dbname)
             conn = database.get_connection()
@@ -293,12 +295,14 @@ class MemoryCache(BaseCache):
 
         logger.info("listening on channel '%s' of '%s'", cls._channel, dbname)
         conn = database.get_connection()
+        pid = os.getpid()
+        current_thread = threading.current_thread()
         try:
             cursor = conn.cursor()
             cursor.execute('LISTEN "%s"' % cls._channel)
             conn.commit()
 
-            while cls._listener.get(dbname) == threading.current_thread():
+            while cls._listener.get((pid, dbname)) == current_thread:
                 readable, _, _ = select.select([conn], [], [])
                 if not readable:
                     continue
@@ -323,9 +327,9 @@ class MemoryCache(BaseCache):
             raise
         finally:
             database.put_connection(conn)
-            with cls._listener_lock[os.getpid()]:
-                if cls._listener.get(dbname) == threading.current_thread():
-                    del cls._listener[dbname]
+            with cls._listener_lock[pid]:
+                if cls._listener.get((pid, dbname)) == current_thread:
+                    del cls._listener[pid, dbname]
 
 
 class DefaultCacheValue:
