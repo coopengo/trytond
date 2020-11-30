@@ -6,10 +6,6 @@ import logging
 import threading
 from io import StringIO
 
-try:
-    import uwsgidecorators
-except ImportError:
-    uwsgidecorators = None
 
 __all__ = ['app']
 
@@ -44,47 +40,5 @@ if db_names:
     reader = csv.reader(StringIO(db_names))
     for db_name in next(reader):
         Pool(db_name).init()
-
-
-if uwsgidecorators is not None:
-    # When running under uwsgi, the behaviour will be to fork the application
-    # process once it is loaded.
-    # If database names were provided, the cache / iwc listener will be
-    # initialized before forking, and the actual fork will break them.
-    #
-    # So we need to:
-    #   - Remove those threads from the master process, which will not need
-    #   them anyway
-    #   - Manually fix them after each fork so they are properly set
-    #   on each worker
-    @uwsgidecorators.postfork
-    @uwsgidecorators.lock
-    def reset_application_threads():
-        import logging
-        from trytond.cache import Cache
-        from trytond import iwc
-        from trytond.bus import Bus
-
-        db_names = os.environ.get('TRYTOND_DATABASE_NAMES')
-        if db_names:
-            logging.getLogger('uwsgi').info('Postfork Triggered')
-            # Read with csv so database name can include special chars
-            reader = csv.reader(StringIO(db_names))
-            Cache._listener_lock.clear()
-            Cache._listener.clear()
-
-            iwc.Listener._listener_lock.clear()
-            iwc.Listener._listener.clear()
-
-            Bus._queues_lock.clear()
-            Bus._queues.clear()
-            Bus._messages.clear()
-
-            from trytond.transaction import Transaction
-            for name in next(reader):
-                iwc.start(name)
-                with Transaction().start(name, 0) as transaction:
-                    Cache.sync(transaction)
-
 
 application = app

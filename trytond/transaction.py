@@ -128,6 +128,13 @@ class Transaction(object):
             except BaseException:
                 self.stop(False)
                 raise
+
+            from trytond import iwc
+            try:
+                iwc.start(database_name)
+            except BaseException:
+                self.stop(False)
+                raise
         return self
 
     def __enter__(self):
