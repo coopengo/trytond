@@ -157,7 +157,7 @@ class Pool(object):
         from trytond import iwc
         with self._lock:
             # AKE: inter-workers communication
-            iwc.start()
+            iwc.start(self.database_name)
             if not self._started:
                 self.start()
 
