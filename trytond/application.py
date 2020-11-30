@@ -37,3 +37,5 @@ if db_names:
     reader = csv.reader(StringIO(db_names))
     for db_name in next(reader):
         Pool(db_name).init()
+
+application = app

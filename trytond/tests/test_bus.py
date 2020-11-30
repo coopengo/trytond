@@ -95,10 +95,11 @@ class BusTestCase(unittest.TestCase):
             setattr, bus, '_select_timeout', reset_select_timeout)
 
     def tearDown(self):
-        if DB_NAME in Bus._queues:
-            with Bus._queues_lock:
-                Bus._queues[DB_NAME]['timeout'] = 0
-                listener = Bus._queues[DB_NAME]['listener']
+        pid = os.getpid()
+        if (pid, DB_NAME) in Bus._queues:
+            with Bus._queues_lock[pid]:
+                Bus._queues[pid, DB_NAME]['timeout'] = 0
+                listener = Bus._queues[pid, DB_NAME]['listener']
             listener.join()
         Bus._messages.clear()
 
