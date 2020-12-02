@@ -2,6 +2,8 @@
 # this repository contains the full copyright notices and license terms.
 import hashlib
 
+from trytond.transaction import Transaction
+
 
 class TableHandlerInterface(object):
     '''
@@ -74,6 +76,19 @@ class TableHandlerInterface(object):
         :param column_type: the column definition
         '''
         raise NotImplementedError
+
+    def column_type(self, column_name):
+        '''
+        Return the column type
+
+        :param column_name: the column name
+        '''
+        database = Transaction().database
+        type_ = self._columns[column_name]['typname']
+        for tryton_name, sql_type in database.TYPES_MAPPING.items():
+            if sql_type.base.lower() == type_:
+                return tryton_name
+        return type_.upper()
 
     def alter_type(self, column_name, column_type):
         '''
