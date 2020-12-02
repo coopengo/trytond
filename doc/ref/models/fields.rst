@@ -175,9 +175,7 @@ Instance methods:
     database.
 
     sql_type is using the `_sql_type` attribute to compute its return value.
-    The backend is responsible for the computation using usually its
-    `TYPES_MAPPING` attribute mapping an actual SQL Type to the named tuple
-    related to the database.
+    The backend is responsible for the computation.
 
     For the list of supported types by Tryton see 
     :ref:`backend types <topics-backend_types>`.
