@@ -28,6 +28,7 @@ except ImportError:
     PYDATE, PYDATETIME, PYTIME, PYINTERVAL = None, None, None, None
 from psycopg2 import IntegrityError as DatabaseIntegrityError
 from psycopg2 import OperationalError as DatabaseOperationalError
+from psycopg2.extensions import TransactionRollbackError
 from psycopg2 import ProgrammingError
 from psycopg2.extras import register_default_json, register_default_jsonb
 
@@ -83,7 +84,10 @@ class PerfCursor(cursor):
         except Exception:
             perf_logger.exception('analyse_before failed')
             context = None
-        ret = super(PerfCursor, self).execute(query, vars)
+        try:
+            ret = super(PerfCursor, self).execute(query, vars)
+        except TransactionRollbackError:
+            raise DatabaseIntegrityError
         if context is not None:
             try:
                 analyze_after(*context)

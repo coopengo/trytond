@@ -198,3 +198,5 @@ def reset(dbname, session, context):
             Session.reset(session)
     except backend.DatabaseOperationalError:
         logger.debug('Reset session failed', exc_info=True)
+    except backend.DatabaseIntegrityError:
+        pass
