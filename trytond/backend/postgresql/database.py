@@ -84,10 +84,7 @@ class PerfCursor(cursor):
         except Exception:
             perf_logger.exception('analyse_before failed')
             context = None
-        try:
-            ret = super(PerfCursor, self).execute(query, vars)
-        except TransactionRollbackError:
-            raise DatabaseIntegrityError
+        ret = super(PerfCursor, self).execute(query, vars)
         if context is not None:
             try:
                 analyze_after(*context)
