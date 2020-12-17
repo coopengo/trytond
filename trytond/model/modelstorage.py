@@ -1268,6 +1268,14 @@ class ModelStorage(Model):
                 if hasattr(field, 'selection') and field.selection:
                     if isinstance(field.selection, (tuple, list)):
                         test = set(dict(field.selection).keys())
+                        instance_sel_func = False
+                    else:
+                        sel_func = getattr(cls, field.selection)
+                        instance_sel_func = is_instance_method(
+                            cls, field.selection)
+                        if not instance_sel_func:
+                            test = set(dict(sel_func()))
+
                     for record in records:
                         value = getattr(record, field_name)
                         if field._type == 'reference':
@@ -1275,16 +1283,8 @@ class ModelStorage(Model):
                                 value = value.__class__.__name__
                             elif value:
                                 value, _ = value.split(',')
-                        if not isinstance(field.selection, (tuple, list)):
-                            sel_func = getattr(cls, field.selection)
-                            if not is_instance_method(cls, field.selection):
-                                test = sel_func()
-                            else:
-                                test = sel_func(record)
-                            try:
-                                test = set(dict(test))
-                            except:
-                                raise Exception((test, field_name, cls))
+                        if instance_sel_func:
+                            test = set(dict(sel_func(record)))
                         # None and '' are equivalent
                         if '' in test or None in test:
                             test.add('')
