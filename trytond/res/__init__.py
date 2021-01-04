@@ -6,12 +6,15 @@ from . import group
 from . import user
 from . import ir
 from . import routes
+from . import config
 
 __all__ = ['register', 'routes']
 
 
 def register():
     Pool.register(
+        config.ConfigParameter,
+        config.ConfigSection,
         group.Group,
         user.User,
         user.LoginAttempt,

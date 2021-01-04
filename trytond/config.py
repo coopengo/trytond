@@ -5,6 +5,13 @@ import configparser
 import urllib.parse
 import logging
 
+try:
+    import psycopg2
+    from psycopg2.extras import RealDictCursor
+except ImportError:
+    import psycopg2cffi as psycopg2
+    from psycopg2cffi.extras import RealDictCursor
+
 import six
 
 __all__ = ['config', 'get_hostname', 'get_port', 'split_netloc',
@@ -107,6 +114,7 @@ class TrytonConfigParser(configparser.ConfigParser):
         self.add_section('html')
         self.update_environ()
         self.update_etc()
+        self.update_db()
 
     def update_environ(self):
         for key, value in os.environ.items():
@@ -132,6 +140,30 @@ class TrytonConfigParser(configparser.ConfigParser):
             logger.error('could not load %s',
                 ','.join(set(configfile) - set(read_files)))
         return configfile
+
+    def update_db(self):
+        uri = parse_uri(self.get('database', 'uri', default=''))
+        if uri.scheme == 'postgresql':
+            section = 'database'
+            conn = psycopg2.connect(
+                database=uri.path.split('/')[-1],
+                host=uri.hostname,
+                port=uri.port,
+                connect_timeout=5,  # in seconds
+                cursor_factory=RealDictCursor)
+            try:
+                cursor = conn.cursor()
+                cursor.execute('select s.name as section, p.name, p.value from res_config_section '
+                    'as s inner join res_config_parameter as p on p.section = s.id;')
+                for params in cursor.fetchall():
+                    self.set(params['section'], params['name'], params['value'] )
+                conn.close()
+
+            except psycopg2.errors.UndefinedTable:
+                pass
+            except Exception:
+                raise
+
 
     def get(self, section, option, *args, **kwargs):
         default = kwargs.pop('default', None)
