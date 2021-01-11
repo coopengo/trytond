@@ -1,3 +1,5 @@
+* Eager load Function field with same multiple getter
+
 Version 5.6.3 - 2020-07-01
 * Bug fixes (see mercurial logs for details)
 
