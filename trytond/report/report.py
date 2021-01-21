@@ -336,6 +336,15 @@ class Report(URLMixin, PoolBase):
             cmd = ['soffice',
                 '--headless', '--nolockcheck', '--nodefault', '--norestore',
                 '--convert-to', oext, '--outdir', dtemp, path]
+            if output_format == 'csv':
+                # https://ask.libreoffice.org/en/question/213090/wrong-encoding-with-convert-from-csv-to-xlsx/
+                # field delimiter, string delimiter, encoding, header
+                # 44 => ,
+                # 34 => "
+                # 76 => UTF-8
+                # No header line
+                cmd.extend(
+                    ['--infilter="Text - txt - csv (StarCalc):44,34,76,"'])
             output = os.path.splitext(path)[0] + os.extsep + oext
             subprocess.check_call(cmd, timeout=timeout)
             # ABDC: Please don't judge me... Soffice makes me do this because
