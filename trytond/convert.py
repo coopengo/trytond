@@ -13,7 +13,6 @@ from . import __version__
 from .tools import grouped_slice
 from .transaction import Transaction
 from .pyson import PYSONEncoder, CONTEXT
-from trytond.server_context import ServerContext
 
 logger = logging.getLogger(__name__)
 
