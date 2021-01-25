@@ -13,6 +13,7 @@ from . import __version__
 from .tools import grouped_slice
 from .transaction import Transaction
 from .pyson import PYSONEncoder, CONTEXT
+from trytond.server_context import ServerContext
 
 logger = logging.getLogger(__name__)
 
@@ -425,6 +426,7 @@ class TrytondXmlHandler(sax.handler.ContentHandler):
         self.grouped_creations = defaultdict(dict)
         self.grouped_write = defaultdict(list)
         self.grouped_model_data = []
+        self.precommit_validation = None
         self.skip_data = False
         self.modules = modules
 
@@ -472,6 +474,8 @@ class TrytondXmlHandler(sax.handler.ContentHandler):
             elif name == "data":
                 self.noupdate = bool(int(attributes.get("noupdate", '0')))
                 self.grouped = bool(int(attributes.get('grouped', 0)))
+                self.precommit_validation = bool(
+                    int(attributes.get('precommit_validation', 0)))
                 self.skip_data = False
                 depends = attributes.get('depends', '').split(',')
                 depends = {m.strip() for m in depends if m}
@@ -689,7 +693,11 @@ class TrytondXmlHandler(sax.handler.ContentHandler):
     def create_records(self, model, vlist, fs_ids):
         Model = self.pool.get(model)
 
-        with Transaction().set_context(module=self.module, language='en'):
+        with Transaction().set_context(module=self.module, language='en',
+                precommit_validation=self.precommit_validation):
+            print('*' * 80)
+            print(self.precommit_validation)
+            print('*' * 80)
             records = Model.create(vlist)
 
         mdata_values = []

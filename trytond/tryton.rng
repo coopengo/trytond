@@ -49,6 +49,17 @@
   </define>
   <define name="attlist.data" combine="interleave">
     <optional>
+      <attribute a:defaultValue="0">
+        <name ns="">precommit_validation</name>
+        <choice>
+          <value>0</value>
+          <value>1</value>
+        </choice>
+      </attribute>
+    </optional>
+  </define>
+  <define name="attlist.data" combine="interleave">
+    <optional>
       <attribute>
         <name ns="">depends</name>
         <text/>
