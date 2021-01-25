@@ -695,9 +695,6 @@ class TrytondXmlHandler(sax.handler.ContentHandler):
 
         with Transaction().set_context(module=self.module, language='en',
                 precommit_validation=self.precommit_validation):
-            print('*' * 80)
-            print(self.precommit_validation)
-            print('*' * 80)
             records = Model.create(vlist)
 
         mdata_values = []
