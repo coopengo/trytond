@@ -832,6 +832,7 @@ class ModelView(Model):
         init_values = self._init_values or {}
         if not self._values:
             return changed
+        init_record = self.__class__(self.id)
         for fname, value in self._values.items():
             field = self._fields[fname]
             # Always test key presence in case value is None
@@ -857,8 +858,10 @@ class ModelView(Model):
                         value = value.id
             elif field._type in ['one2many', 'many2many']:
                 targets = value
-                init_targets = list(init_values.get(
-                        fname, targets if field._type == 'one2many' else []))
+                if fname in init_values:
+                    init_targets = init_values.get(fname)
+                else:
+                    init_targets = getattr(init_record, fname, [])
                 value = collections.defaultdict(list)
                 previous = [t.id for t in init_targets if t.id]
                 for i, target in enumerate(targets):

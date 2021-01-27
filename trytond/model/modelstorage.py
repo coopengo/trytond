@@ -1591,12 +1591,8 @@ class ModelStorage(Model):
                     if field._type in ('many2one', 'one2one', 'one2many',
                             'many2many', 'reference'):
                         fvalue = instantiate(field, data[fname], data)
-                    if data['id'] == self.id:
-                        if (self._init_values is not None
-                                and fname not in self._init_values):
-                            self._init_values[fname] = fvalue
-                        if fname == name:
-                            value = fvalue
+                    if data['id'] == self.id and fname == name:
+                        value = fvalue
                     if (field._type not in ('many2one', 'one2one', 'one2many',
                                 'many2many', 'reference', 'binary')
                             and not isinstance(field, fields.Function)):
