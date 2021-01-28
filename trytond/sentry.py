@@ -8,7 +8,7 @@ from werkzeug.exceptions import Forbidden
 
 logger = logging.getLogger(__name__)
 sentry_dsn = config.get('sentry', 'dsn')
-client = None
+init_done = False
 
 
 class SentryError(UserError):
@@ -36,12 +36,13 @@ def handle_exception(e: Exception, reraise=True) -> Exception:
             raise
         return e
 
-    global client
+    global init_done
     from sentry_sdk import capture_exception
-    if client is None:
+    if not init_done:
         from sentry_sdk import init
         logger.info('setting sentry: %s' % sentry_dsn)
         init(sentry_dsn)
+        init_done = True
 
     event_id = capture_exception(e)
     sentry_error = SentryError(
