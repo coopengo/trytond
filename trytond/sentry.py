@@ -48,8 +48,8 @@ def handle_exception(e: Exception, reraise=True) -> Exception:
     sentry_error = SentryError(
         'An error occured\n\n'
         'Maintenance has been notified of this failure.\n'
-        'In case you wish to discuss this issue with the team, please '
-        'provide the following reference :\n\n%s' % event_id,
+        'You can create an issue at https://support.coopengo.com. Please '
+        'provide the following reference:\n\n%s' % event_id,
         event_id)
     if reraise:
         raise sentry_error
