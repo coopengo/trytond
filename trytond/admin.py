@@ -37,7 +37,7 @@ def _init_upgrade_version_control_table(db_name):
                         cursor.execute(line)
 
 
-def _check_update_needed(db_name, options, transaction):
+def _check_update_needed(db_name, options):
     # Get current main module version
     main_module = config.get('version', 'module', default='coog_core')
     current_main_module_version = get_module_info(main_module)['version']
@@ -48,15 +48,61 @@ def _check_update_needed(db_name, options, transaction):
 
     # Get main module version which stocked in the database
     version_control_table = Table('upgrade_version_control')
-    cursor = transaction.connection.cursor()
+    cursor = Transaction().connection.cursor()
     cursor.execute(
         *version_control_table.select(version_control_table.current_version))
     db_main_module_version = cursor.fetchone()[0]
 
-    if options.check_update and current_main_module_version != db_main_module_version:
+    if (options.check_update and current_main_module_version !=
+            db_main_module_version):
+        logger.warning(
+            f'Current code version ({current_main_module_version}) is '
+            'different from the last update version '
+            '({db_main_module_version}), updating')
         return True, current_main_module_version
 
+    logger.warning(
+        f'Current code version ({current_main_module_version}) '
+        'matches last update version, nothing to do')
     return False, current_main_module_version
+
+
+def _init_pool(db_name, options, lang):
+    pool = Pool(db_name)
+
+    with Transaction().start(db_name, 0) as transaction:
+        try:
+            if options.check_update:
+                # This lock of table will block others workers /
+                # processes until the current upgrade is finished
+                # Attention: lock activated only when -cu is activated
+                # -u can do the update normally
+                cursor = transaction.connection.cursor()
+                cursor.execute(
+                    "LOCK upgrade_version_control IN EXCLUSIVE MODE")
+
+            upgrade_needed, new_version = _check_update_needed(
+                db_name, options)
+            if not upgrade_needed:
+                options.update, options.check_update = [], []
+            updated_needed = options.update or options.check_update
+
+            pool.init(
+                update=updated_needed, lang=list(lang),
+                activatedeps=options.activatedeps)
+
+            if updated_needed:
+                # If upgrade finishes correctly->update version in database
+                version_control_table = Table('upgrade_version_control')
+                cursor = transaction.connection.cursor()
+                cursor.execute(*version_control_table.update(
+                    columns=[version_control_table.current_version],
+                    values=[new_version]))
+            transaction.commit()
+        except Exception:
+            transaction.rollback()
+            raise
+    return pool
 
 
 def run(options):
@@ -91,41 +137,12 @@ def run(options):
             lang = set()
 
         lang |= set(options.languages)
-        pool = Pool(db_name)
 
         # XUNG
         # Create upgrade version control table if it doesn't exist
         _init_upgrade_version_control_table(db_name)
 
-        with Transaction().start(db_name, 0) as transaction:
-            # This lock of table will block others workers /
-            # processes until the current upgrade is finished
-            # Attention: lock activated only when -cu is activated
-            # -u can do the update normally
-            cursor = transaction.connection.cursor()
-            if options.check_update:
-                cursor.execute("LOCK upgrade_version_control IN EXCLUSIVE MODE;")
-
-            is_upgrade_needed, new_version = _check_update_needed(db_name,
-                options, transaction)
-            if not is_upgrade_needed:
-                options.update = []
-                options.check_update = []
-            pool.init(update=options.update or options.check_update,
-                lang=list(lang), activatedeps=options.activatedeps)
-            if is_upgrade_needed:
-                # If upgrade finishes correctly->update version in database
-                try:
-                    version_control_table = Table('upgrade_version_control')
-                    cursor = transaction.connection.cursor()
-                    cursor.execute(*version_control_table.update(
-                        columns=[version_control_table.current_version],
-                        values=[new_version]))
-                    transaction.commit()
-
-                except:
-                    transaction.rollback()
-                    raise
+        pool = _init_pool(db_name, options, lang)
 
         if options.update_modules_list:
             with Transaction().start(db_name, 0) as transaction:
