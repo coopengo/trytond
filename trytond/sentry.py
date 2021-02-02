@@ -23,7 +23,7 @@ class SentryError(UserError):
         self.original_error = sys.exc_info()
 
 
-def handle_exception(e: Exception, reraise=True) -> Exception:
+def handle_exception(e, reraise=True):
     '''
     Handles an exception, sending it to the configured Sentry instance if
     appliable.
