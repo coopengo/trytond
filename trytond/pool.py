@@ -6,6 +6,7 @@ from collections import OrderedDict, defaultdict
 from threading import RLock
 
 from trytond.modules import load_modules, register_classes
+from trytond.server_context import ServerContext
 from trytond.transaction import Transaction
 
 __all__ = ['Pool', 'PoolMeta', 'PoolBase', 'isregisteredby']
@@ -179,9 +180,10 @@ class Pool(object):
                 self._pool[self.database_name][type] = {}
             self._post_init_calls[self.database_name] = []
             try:
-                restart = not load_modules(
-                    self.database_name, self, update=update, lang=lang,
-                    activatedeps=activatedeps)
+                with ServerContext().set_context(disable_auto_cache=True):
+                    restart = not load_modules(
+                        self.database_name, self, update=update, lang=lang,
+                        activatedeps=activatedeps)
             except Exception:
                 del self._pool[self.database_name]
                 self._modules = None
