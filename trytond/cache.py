@@ -336,10 +336,10 @@ class MemoryCache(BaseCache):
         '''
         Purges all listeners for a given database
         '''
-        for pid in cls._listener_lock:
-            with cls._listener_lock[pid]:
-                if (pid, dbname) in cls._listener:
-                    del cls._listener[pid, dbname]
+        pid = os.getpid()
+        with cls._listener_lock[pid]:
+            if (pid, dbname) in cls._listener:
+                del cls._listener[pid, dbname]
 
 
 class DefaultCacheValue:
