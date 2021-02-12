@@ -192,8 +192,7 @@ def _pg_dump(cache_file):
             transaction.database.create(
                 transaction.connection, cache_name, DB_NAME)
         open(cache_file, 'a').close()
-        if DB_NAME in Cache._listener:
-            del Cache._listener[DB_NAME]
+        Cache.purge_listeners(DB_NAME)
         return True
 
 
@@ -815,8 +814,7 @@ def drop_db(name=DB_NAME):
     if db_exist(name):
         database = backend.Database(name)
         database.close()
-        if name in Cache._listener:
-            del Cache._listener[name]
+        Cache.purge_listeners(name)
 
         with Transaction().start(
                 None, 0, close=True, autocommit=True) as transaction:
