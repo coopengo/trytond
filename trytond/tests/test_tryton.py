@@ -815,8 +815,6 @@ def drop_db(name=DB_NAME):
     if db_exist(name):
         database = backend.Database(name)
         database.close()
-        if name in Cache._listener:
-            del Cache._listener[name]
 
         with Transaction().start(
                 None, 0, close=True, autocommit=True) as transaction:
