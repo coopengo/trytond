@@ -336,10 +336,6 @@ def _dispatch(request, pool, *args, **kwargs):
                 raise
             # Need to commit to unlock SQLite database
             transaction.commit()
-        if request.authorization.type == 'session':
-            # AKE: moved all session ops to security script
-            security.reset_user_session(
-                pool.database_name, user, request.authorization.get('session'))
         while transaction.tasks:
             task_id = transaction.tasks.pop()
             run_task(pool, task_id)

@@ -179,27 +179,10 @@ def check_timeout(dbname, user, session, context=None):
     return valid
 
 
-def reset_user_session(dbname, user, session):
-    # AKE: manage session on redis
-    if config_session_redis():
-        ttl = redis.hit_session(dbname, user, session)
-        if ttl is not None and config_session_audit():
-            redis.time_user(dbname, user, ttl)
-        return
-    DatabaseOperationalError = backend.get('DatabaseOperationalError')
-    try:
-        with Transaction().start(dbname, 0):
-            pool = _get_pool(dbname)
-            Session = pool.get('ir.session')
-            Session.reset(session)
-    except DatabaseOperationalError:
-        pass
-
-
 def reset(dbname, session, context):
     DatabaseOperationalError = backend.get('DatabaseOperationalError')
     try:
-        with Transaction().start(dbname, 0, context=context):
+        with Transaction().start(dbname, 0, context=context, autocommit=True):
             pool = _get_pool(dbname)
             Session = pool.get('ir.session')
             Session.reset(session)
