@@ -186,6 +186,7 @@ def instantiate_context(field, record):
 def on_change_result(record):
     return record._changed_values
 
+
 def with_inactive_records(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
