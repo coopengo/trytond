@@ -863,7 +863,8 @@ class ModelView(Model):
                 else:
                     init_targets = getattr(init_record, fname, [])
                 value = collections.defaultdict(list)
-                previous = [t.id for t in init_targets if t.id]
+                previous = [t.id for t in init_targets if
+                    getattr(t, 'id', False)]
                 for i, target in enumerate(targets):
                     if (field._type == 'one2many'
                             and field.field
