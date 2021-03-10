@@ -184,8 +184,9 @@ def instantiate_context(field, record):
 
 
 def on_change_result(record):
-    return record._changed_values
-
+    if hasattr(record, '_changed_values'):
+        return record._changed_values
+    return {}
 
 def with_inactive_records(func):
     @wraps(func)
