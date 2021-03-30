@@ -515,7 +515,7 @@ class ModelSQL(ModelStorage):
                 where.append((table.id == id_)
                     & (Extract('EPOCH',
                             Coalesce(table.write_date, table.create_date)
-                            ).cast(sql_type) > timestamp))
+                            ) > timestamp))
             if where:
                 cursor.execute(*table.select(table.id, where=where, limit=1))
                 if cursor.fetchone():
