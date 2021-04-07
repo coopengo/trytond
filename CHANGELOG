@@ -1,3 +1,4 @@
+* Remove eval fuctions for security reasons
 * Eager load Function field with same multiple getter
 
 Version 5.6.3 - 2020-07-01

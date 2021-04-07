@@ -1,5 +1,7 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
+import ast
+
 import time
 import datetime
 from xml import sax
@@ -56,7 +58,7 @@ class MenuitemTagHandler:
         values['icon'] = attributes.get('icon', 'tryton-folder')
 
         if attributes.get('active'):
-            values['active'] = bool(eval(attributes['active']))
+            values['active'] = bool(ast.literal_eval(attributes['active']))
 
         if values.get('parent'):
             values['parent'] = self.mh.get_id(values['parent'])
@@ -225,7 +227,7 @@ class RecordTagHandler:
                 search_model = self.model._fields[field_name].model_name
                 SearchModel = self.mh.pool.get(search_model)
                 with Transaction().set_context(active_test=False):
-                    found, = SearchModel.search(eval(search_attr))
+                    found, = SearchModel.search(ast.literal_eval(search_attr))
                     self.values[field_name] = found.id
 
             elif ref_attr:

@@ -1,5 +1,7 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
+import ast
+
 import base64
 import http.client
 import logging
@@ -222,9 +224,9 @@ if config.has_section('wsgi middleware'):
         section = 'wsgi %s' % middleware
         if config.has_section(section):
             if config.has_option(section, 'args'):
-                args = eval(config.get(section, 'args'))
+                args = ast.literal_eval(config.get(section, 'args'))
             if config.has_option(section, 'kwargs'):
-                kwargs = eval(config.get(section, 'kwargs'))
+                kwargs = ast.literal_eval(config.get(section, 'kwargs'))
         app.wsgi_app = Middleware(app.wsgi_app, *args, **kwargs)
 
 import trytond.protocols.dispatcher  # noqa: E402,F401
