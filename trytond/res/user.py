@@ -644,18 +644,24 @@ class User(DeactivableMixin, ModelSQL, ModelView):
             LoginAttempt.add(login, device_cookie)
             raise RateLimitException()
         Transaction().atexit(time.sleep, random.randint(0, 2 ** count - 1))
-        for method in config.get(
+        for methods in config.get(
                 'session', 'authentications', default='password').split(','):
-            try:
-                func = getattr(cls, '_login_%s' % method)
-            except AttributeError:
-                logger.info('Missing login method: %s', method)
-                continue
-            user_id = func(login, parameters)
-            if user_id:
+            user_ids = set()
+            for method in methods.split('+'):
+                try:
+                    func = getattr(cls, '_login_%s' % method)
+                except AttributeError:
+                    logger.info('Missing login method: %s', method)
+                    break
+                user_ids.add(func(login, parameters))
+                if len(user_ids) != 1 or not all(user_ids):
+                    break
+            if len(user_ids) == 1 and all(user_ids):
                 LoginAttempt.remove(login)
-                return user_id
+                LoginAttempt.remove(login, device_cookie)
+                return user_ids.pop()
         LoginAttempt.add(login)
+        LoginAttempt.add(login, device_cookie)
 
     @classmethod
     def _login_password(cls, login, parameters):
