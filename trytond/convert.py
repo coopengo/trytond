@@ -663,7 +663,12 @@ class TrytondXmlHandler(sax.handler.ContentHandler):
                 # expected value differs from the actual value, _and_
                 # if they are not false in a boolean context (ie None,
                 # False, {} or [])
-                if db_field != expected_value and (db_field or expected_value):
+
+                # RSE #19451
+                # The verification should be made only on noupdate mode,
+                # otherwise the DB should be squashed with the XML content
+                if self.noupdate and db_field != expected_value and (
+                        db_field or expected_value):
                     logger.warning(
                         "Field %s of %s@%s not updated (id: %s), because "
                         "it has changed since the last update",
