@@ -657,7 +657,6 @@ class User(DeactivableMixin, ModelSQL, ModelView):
                 if len(user_ids) != 1 or not all(user_ids):
                     break
             if len(user_ids) == 1 and all(user_ids):
-                LoginAttempt.remove(login)
                 LoginAttempt.remove(login, device_cookie)
                 return user_ids.pop()
         LoginAttempt.add(login)
