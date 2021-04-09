@@ -53,6 +53,7 @@ _timeout = config.getint('database', 'timeout')
 _minconn = config.getint('database', 'minconn', default=1)
 _maxconn = config.getint('database', 'maxconn', default=64)
 _default_name = config.get('database', 'default_name', default='template1')
+_slow_threshold = config.getfloat('database', 'log_time_threshold', default=-1)
 
 
 def unescape_quote(s):
@@ -83,7 +84,16 @@ class PerfCursor(cursor):
         except Exception:
             perf_logger.exception('analyse_before failed')
             context = None
+
+        # JCA: Log slow queries
+        if _slow_threshold > 0 and logger.isEnabledFor(logging.WARNING):
+            start = time.time()
         ret = super(PerfCursor, self).execute(query, vars)
+        if _slow_threshold > 0 and logger.isEnabledFor(logging.WARNING):
+            end = time.time()
+            if end - start > _slow_threshold:
+                logger.warning(':slow:(%s s):%s' % (
+                        end - start, self.mogrify(query, vars)))
         if context is not None:
             try:
                 analyze_after(*context)
