@@ -1,5 +1,4 @@
-Version 5.2.14 - 2020-04-04
-* Bug fixes (see mercurial logs for details)
+* Allow column sql types to be tested from the table handler
 
 Version 5.2.13 - 2020-03-09
 * Bug fixes (see mercurial logs for details)
