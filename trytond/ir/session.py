@@ -14,6 +14,7 @@ except ImportError:
 
 from trytond.model import ModelSQL, fields
 from trytond.config import config
+from trytond.cache import Cache
 
 __all__ = [
     'Session', 'SessionWizard',
@@ -26,6 +27,7 @@ class Session(ModelSQL):
     _rec_name = 'key'
 
     key = fields.Char('Key', required=True, select=True)
+    _session_last_reset = Cache('ir_session.session_timeout', context=False)
 
     @classmethod
     def __setup__(cls):
@@ -42,6 +44,13 @@ class Session(ModelSQL):
     @classmethod
     def default_key(cls, nbytes=None):
         return token_hex(nbytes)
+
+    @classmethod
+    def write(cls, *args):
+        super().write(*args)
+        for sessions in args[0:None:2]:
+            for session in sessions:
+                cls._session_last_reset.set(session.key, None)
 
     @classmethod
     def new(cls, values=None):
@@ -80,17 +89,20 @@ class Session(ModelSQL):
                 ('create_uid', '=', user),
                 domain or [],
                 ])
-        find = None
+        find, last_reset = None, None
         to_delete = []
         for session in sessions:
             if abs(session.create_date - now) < timeout:
                 if session.key == key:
                     find = True
+                    last_reset = session.write_date or session.create_date
             else:
                 if find is None and session.key == key:
                     find = False
                 to_delete.append(session)
         cls.delete(to_delete)
+        if find:
+            cls._session_last_reset.set(key, last_reset)
         return find
 
     @classmethod
@@ -119,16 +131,20 @@ class Session(ModelSQL):
         now = datetime.datetime.now()
         timeout = datetime.timedelta(
             seconds=config.getint('session', 'timeout'))
-        timestamp = now - timeout
-        sessions = cls.search([
-                ('key', '=', key),
-                ['OR',
-                    ('create_date', '>=', timestamp),
-                    ('write_date', '>=', timestamp),
-                    ],
-                domain or [],
-                ])
-        cls.write(sessions, {})
+        reset_timeout = datetime.timedelta(
+            seconds=config.getint('session', 'timeout') // 10)
+        last_reset = cls._session_last_reset.get(key)
+        if last_reset is None or (now - reset_timeout) > last_reset:
+            timestamp = now - timeout
+            sessions = cls.search([
+                    ('key', '=', key),
+                    ['OR',
+                        ('create_date', '>=', timestamp),
+                        ('write_date', '>=', timestamp),
+                        ],
+                    domain or [],
+                    ])
+            cls.write(sessions, {})
 
     @classmethod
     def clear(cls, users, domain=None):
