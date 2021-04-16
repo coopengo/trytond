@@ -53,7 +53,7 @@ def decode_hook(o):
     elif '__time__' in o:
         return datetime.time(*o['data'])
     elif '__timedelta__' in o:
-        return datetime.timedelta(o['data'])
+        return datetime.timedelta(seconds=o['data'])
     elif '__set__' in o:
         return set(o['data'])
     return o
