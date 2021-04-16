@@ -192,8 +192,9 @@ def _pg_dump(cache_file):
             transaction.database.create(
                 transaction.connection, cache_name, DB_NAME)
         open(cache_file, 'a').close()
-        if DB_NAME in Cache._listener:
-            del Cache._listener[DB_NAME]
+        cache_key = (os.getpid(), DB_NAME)
+        if cache_key in Cache._listener:
+            del Cache._listener[cache_key]
         return True
 
 
