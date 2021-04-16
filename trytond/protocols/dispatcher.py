@@ -287,6 +287,8 @@ def _dispatch(request, pool, *args, **kwargs):
                 else:
                     meth = wrapped_meth
 
+                c_args, c_kwargs = rpc.apply_limitations(
+                    meth, c_args, c_kwargs)
                 if (rpc.instantiate is None
                         or not is_instance_method(obj, method)):
                     result = rpc.result(meth(*c_args, **c_kwargs))

@@ -2,6 +2,8 @@
 # this repository contains the full copyright notices and license terms.
 import copy
 import datetime as dt
+import inspect
+from inspect import Parameter
 
 from trytond.transaction import Transaction
 
@@ -17,13 +19,16 @@ class RPC(object):
     check_access: If access right must be checked
     fresh_session: If a fresh session is required
     unique: Check instances are unique
+    rate_limitations: A dictionary of function used to impose rate limitation
+                      on incoming parameters
     '''
 
     __slots__ = ('readonly', 'instantiate', 'result', 'check_access',
-        'fresh_session', 'unique', 'cache')
+        'fresh_session', 'unique', 'cache', 'rate_limitations')
 
     def __init__(self, readonly=True, instantiate=None, result=None,
-            check_access=True, fresh_session=False, unique=True, cache=None):
+            check_access=True, fresh_session=False, unique=True, cache=None,
+            rate_limitations=None):
         self.readonly = readonly
         self.instantiate = instantiate
         if result is None:
@@ -37,6 +42,7 @@ class RPC(object):
             if not isinstance(cache, RPCCache):
                 cache = RPCCache(**cache)
         self.cache = cache
+        self.rate_limitations = rate_limitations or {}
 
     def convert(self, obj, *args, **kwargs):
         args = list(args)
@@ -83,6 +89,30 @@ class RPC(object):
         if self.check_access:
             context['_check_access'] = True
         return args, kwargs, context, timestamp
+
+    def apply_limitations(self, method, c_args, c_kwargs):
+        signature = inspect.signature(method)
+        bounded = signature.bind(*c_args, **c_kwargs)
+        bounded.apply_defaults()
+
+        n_args, n_kwargs = [], {}
+        for name, value in bounded.arguments.items():
+            if name in self.rate_limitations:
+                value = self.rate_limitations[name](value)
+
+            kind = signature.parameters[name].kind
+            if kind == Parameter.POSITIONAL_ONLY:
+                n_args.append(value)
+            elif kind == Parameter.VAR_POSITIONAL:
+                n_args.extend(value)
+            elif kind == Parameter.POSITIONAL_OR_KEYWORD:
+                n_args.append(value)
+            elif kind == Parameter.KEYWORD_ONLY:
+                n_kwargs[name] = value
+            elif kind == Parameter.VAR_KEYWORD:
+                n_kwargs.update(value)
+
+        return n_args, n_kwargs
 
 
 class RPCCache:

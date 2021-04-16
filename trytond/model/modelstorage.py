@@ -115,19 +115,33 @@ class ModelStorage(Model):
             cls.__rpc__.update({
                     'create': RPC(readonly=False,
                         result=lambda r: list(map(int, r))),
-                    'read': RPC(),
+                    'read': RPC(rate_limitations={
+                            'ids': lambda v: v[:1_000_000],
+                            }),
                     'write': RPC(readonly=False,
                         instantiate=slice(0, None, 2)),
                     'delete': RPC(readonly=False, instantiate=0),
                     'copy': RPC(readonly=False, instantiate=0, unique=False,
                         result=lambda r: list(map(int, r))),
-                    'search': RPC(result=lambda r: list(map(int, r))),
+                    'search': RPC(result=lambda r: list(map(int, r)),
+                        rate_limitations={
+                            'limit': lambda v: min(v or 1_000_000, 1_000_000),
+                            }),
                     'search_count': RPC(),
-                    'search_read': RPC(),
+                    'search_read': RPC(rate_limitations={
+                            'limit': lambda v: min(v or 1_000_000, 1_000_000),
+                            }),
                     'resources': RPC(instantiate=0, unique=False),
-                    'export_data_domain': RPC(),
-                    'export_data': RPC(instantiate=0, unique=False),
-                    'import_data': RPC(readonly=False),
+                    'export_data_domain': RPC(rate_limitations={
+                            'limit': lambda v: min(v or 100_000, 100_000),
+                            }),
+                    'export_data': RPC(instantiate=0, unique=False,
+                        rate_limitations={
+                            'limit': lambda v: min(v or 100_000, 100_000),
+                            }),
+                    'import_data': RPC(readonly=False, rate_limitations={
+                            'data': lambda v: v[:100_000],
+                            }),
                     })
 
     @classmethod
