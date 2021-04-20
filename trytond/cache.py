@@ -65,7 +65,11 @@ class BaseCache(object):
 
     def _key(self, key):
         if self.context:
-            return (key, Transaction().user, freeze(Transaction().context))
+            # Remove client key from cache's context.
+            # See redmine issue #19794
+            context = Transaction().context
+            context.pop('client', None)
+            return (key, Transaction().user, freeze(context))
         return key
 
     def get(self, key, default=None):
