@@ -699,8 +699,6 @@ class ModelSQL(ModelStorage):
 
         fields_related = defaultdict(set)
         extra_fields = set()
-        if 'write_date' not in fields_names:
-            extra_fields.add('write_date')
         for field_name in fields_names:
             if field_name == '_timestamp':
                 continue
@@ -750,6 +748,13 @@ class ModelSQL(ModelStorage):
         if len(columns):
             if 'id' not in fields_names:
                 columns.append(table.id.as_('id'))
+            if 'write_date' not in fields_names:
+                extra_fields.add('write_date')
+                wd_field = cls._fields.get('write_date')
+                columns.append(wd_field.sql_column(table).as_('write_date'))
+                if backend.name == 'sqlite':
+                    columns[-1].output_name += (' [%s]'
+                        % wd_field.sql_type().base)
 
             tables = {None: (table, None)}
             if domain:
