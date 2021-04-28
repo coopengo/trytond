@@ -1,3 +1,4 @@
+* Reset less often the user sessions
 * Protect trusted devices against brute force attack
 * Eager load Function field with same multiple getter
 
