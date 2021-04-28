@@ -131,6 +131,8 @@ class Session(ModelSQL):
         now = datetime.datetime.now()
         timeout = datetime.timedelta(
             seconds=config.getint('session', 'timeout'))
+        # reset_timeout must be way shorter than the session timeout in order
+        # to not bother users with popup asking their password
         reset_timeout = datetime.timedelta(
             seconds=config.getint('session', 'timeout') // 10)
         last_reset = cls._session_last_reset.get(key)
