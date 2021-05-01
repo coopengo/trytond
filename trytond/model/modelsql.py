@@ -734,27 +734,22 @@ class ModelSQL(ModelStorage):
             history_order = (column.desc, Column(table, '__id').desc)
             history_limit = 1
 
-        columns = []
+        columns = {}
         for f in all_fields:
             field = cls._fields.get(f)
             if field and field.sql_type():
-                columns.append(field.sql_column(table).as_(f))
+                columns[f] = field.sql_column(table).as_(f)
             elif f == '_timestamp' and not callable(cls.table_query):
                 sql_type = fields.Char('timestamp').sql_type().base
-                columns.append(Extract('EPOCH',
-                        Coalesce(table.write_date, table.create_date)
-                        ).cast(sql_type).as_('_timestamp'))
+                columns[f] = Extract(
+                    'EPOCH', Coalesce(table.write_date, table.create_date)
+                    ).cast(sql_type).as_('_timestamp')
 
-        if len(columns):
+        only_write_date = ('write_date' not in fields_names
+            and set(columns) <= {'write_date'})
+        if not only_write_date:
             if 'id' not in fields_names:
-                columns.append(table.id.as_('id'))
-            if 'write_date' not in fields_names:
-                extra_fields.add('write_date')
-                wd_field = cls._fields.get('write_date')
-                columns.append(wd_field.sql_column(table).as_('write_date'))
-                if backend.name == 'sqlite':
-                    columns[-1].output_name += (' [%s]'
-                        % wd_field.sql_type().base)
+                columns['id'] = table.id.as_('id')
 
             tables = {None: (table, None)}
             if domain:
@@ -769,7 +764,7 @@ class ModelSQL(ModelStorage):
                     where &= history_clause
                 if domain:
                     where &= dom_exp
-                cursor.execute(*from_.select(*columns, where=where,
+                cursor.execute(*from_.select(*columns.values(), where=where,
                         order_by=history_order, limit=history_limit))
                 fetchall = list(cursor_dict(cursor))
                 if not len(fetchall) == len({}.fromkeys(sub_ids)):
@@ -785,7 +780,7 @@ class ModelSQL(ModelStorage):
         max_write_date = max(
             (r['write_date'] for r in result if r.get('write_date')),
             default=None)
-        for column in columns:
+        for fname, column in columns.items():
             # Split the output name to remove SQLite type detection
             fname = column.output_name.split()[0]
             if fname == '_timestamp':
@@ -799,7 +794,7 @@ class ModelSQL(ModelStorage):
                         cached_after=max_write_date)
                     for row in result:
                         row[fname] = translations.get(row['id']) or row[fname]
-                if fname != 'id':
+                if fname != 'id' and not only_write_date:
                     cachable_fields.append(fname)
 
         # all fields for which there is a get attribute
@@ -895,6 +890,8 @@ class ModelSQL(ModelStorage):
 
         to_del = set()
         for fname in set(fields_related.keys()) | extra_fields:
+            if fname == 'write_date' and only_write_date:
+                continue
             if fname not in fields_names:
                 to_del.add(fname)
             if fname not in cls._fields:
