@@ -699,6 +699,8 @@ class ModelSQL(ModelStorage):
 
         fields_related = defaultdict(set)
         extra_fields = set()
+        if 'write_date' not in fields_names:
+            extra_fields.add('write_date')
         for field_name in fields_names:
             if field_name == '_timestamp':
                 continue
@@ -745,9 +747,9 @@ class ModelSQL(ModelStorage):
                     'EPOCH', Coalesce(table.write_date, table.create_date)
                     ).cast(sql_type).as_('_timestamp')
 
-        only_write_date = ('write_date' not in fields_names
-            and set(columns) <= {'write_date'})
-        if not only_write_date:
+        if 'write_date' not in fields_names and len(columns) == 0:
+            columns.pop('write_date')
+        if columns:
             if 'id' not in fields_names:
                 columns['id'] = table.id.as_('id')
 
@@ -781,8 +783,6 @@ class ModelSQL(ModelStorage):
             (r['write_date'] for r in result if r.get('write_date')),
             default=None)
         for fname, column in columns.items():
-            # Split the output name to remove SQLite type detection
-            fname = column.output_name.split()[0]
             if fname == '_timestamp':
                 continue
             field = cls._fields[fname]
@@ -794,7 +794,7 @@ class ModelSQL(ModelStorage):
                         cached_after=max_write_date)
                     for row in result:
                         row[fname] = translations.get(row['id']) or row[fname]
-                if fname != 'id' and not only_write_date:
+                if fname != 'id':
                     cachable_fields.append(fname)
 
         # all fields for which there is a get attribute
@@ -890,9 +890,9 @@ class ModelSQL(ModelStorage):
 
         to_del = set()
         for fname in set(fields_related.keys()) | extra_fields:
-            if fname == 'write_date' and only_write_date:
-                continue
-            if fname not in fields_names:
+            # 'write_date' has been added to extra_fields but not read
+            if ((fname != 'write_date' or 'write_date' in columns)
+                    and fname not in fields_names):
                 to_del.add(fname)
             if fname not in cls._fields:
                 continue
