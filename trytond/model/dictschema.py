@@ -76,6 +76,7 @@ class DictSchemaMixin(object):
     def __setup__(cls):
         super(DictSchemaMixin, cls).__setup__()
         cls.__rpc__.update({
+                'get_keys': RPC(instantiate=0),
                 'search_get_keys': RPC(cache=dict(days=1)),
                 })
 
