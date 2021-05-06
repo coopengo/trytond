@@ -1124,7 +1124,7 @@ class ModelStorage(Model):
         def validate_relation_domain(field, records, Relation, domain):
             relations = relation_domain(field, records)
             if relations:
-                for sub_relations in grouped_slice(relations, 1):
+                for sub_relations in grouped_slice(relations):
                     sub_relations = set(sub_relations)
                     # Use root user to skip access rules
                     with Transaction().set_user(0):
