@@ -3,6 +3,7 @@
 from lxml import etree
 from functools import wraps
 import collections
+import datetime
 
 from trytond.exceptions import UserError
 from trytond.i18n import gettext
@@ -15,6 +16,7 @@ from trytond.config import config
 from trytond.pool import Pool
 from trytond.rpc import RPC
 from trytond.server_context import ServerContext
+from trytond.config import config
 
 from .fields import on_change_result
 
@@ -220,6 +222,14 @@ class ModelView(Model):
                     continue
                 cls.__change_buttons[button] |= getattr(
                     parent_meth, 'change', set())
+
+        for method_name, rpc in cls.__rpc__.items():
+            if not rpc.cache:
+                continue
+            cache_name = 'rpc.%s.%s' % (cls.__name__, method_name)
+            cache_duration = config.getint('cache', cache_name, default=None)
+            if cache_duration is not None:
+                rpc.cache.duration = datetime.timedelta(seconds=cache_duration)
 
     @classmethod
     def fields_view_get(cls, view_id=None, view_type='form', level=None):
