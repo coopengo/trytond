@@ -112,7 +112,7 @@ def run(options):
         init[db_name] = False
         database = backend.Database(db_name)
         database.connect()
-        if options.update:
+        if options.update or options.check_update:
             if not database.test():
                 logger.info("init db")
                 database.init()
