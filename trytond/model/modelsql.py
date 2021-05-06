@@ -694,6 +694,77 @@ class ModelSQL(ModelStorage):
         if not ids:
             return []
 
+        created_read_cache = False
+        read_cache = transaction.get_cache().get('current_read_cache', -1)
+        if read_cache == -1:
+            read_cache = defaultdict(dict)
+            transaction.get_cache()['current_read_cache'] = read_cache
+            created_read_cache = True
+
+        # Original requested values, for constructing the call
+        original_ids = ids
+        requested_fields = set(fields_names)
+
+        # What we actually must read
+        ids_to_read, fields_to_read = [], set()
+        if cls.__name__ in read_cache:
+            model_read_cache = read_cache[cls.__name__]
+
+            # Once this is true, there is no need to do those expensive set
+            # merges
+            all_fields = False
+            for cur_id in ids:
+                if cur_id not in model_read_cache:
+                    # New id: we will read it, with all the fields
+                    ids_to_read.append(cur_id)
+                    model_read_cache[cur_id] = {}
+                    if not all_fields:
+                        fields_to_read = requested_fields
+                        all_fields = True
+                    continue
+                # Fields we really need to read because they are not in the
+                # cache
+                missing_fields = requested_fields - set(
+                    model_read_cache[cur_id].keys())
+                if not missing_fields:
+                    # All requested fields are in the cache for this record
+                    continue
+                ids_to_read.append(cur_id)
+                if not all_fields:
+                    fields_to_read |= missing_fields
+                    if fields_to_read == requested_fields:
+                        all_fields = True
+        else:
+            model_read_cache = {x: {} for x in ids}
+            read_cache[cls.__name__] = model_read_cache
+            ids_to_read = ids
+            fields_to_read = requested_fields
+
+        # At this point :
+        #   - fields_to_read contains the fields we actually need to read
+        #   - ids_to_read contains the ids we actually need to read as well
+        #   - model_read_cache is ready to accept values for all the ids
+
+        if not fields_to_read:
+            # Everything in cache!
+            result = []
+            for cur_id in original_ids:
+                cached_value = model_read_cache[cur_id]
+                value = {'id': cur_id}
+                for fname in requested_fields:
+                    splitted = fname.split('.')
+                    if len(splitted) == 1:
+                        value[fname] = cached_value[fname]
+                    else:
+                        name = '{}.'.format(splitted[0])
+                        value[name] = cached_value[name]
+                result.append(value)
+            return result
+
+        # We now "change" the parameters to only read what we need
+        ids = ids_to_read
+        fields_names = list(fields_to_read)
+
         # construct a clause for the rules :
         domain = Rule.domain_get(cls.__name__, mode='read')
 
@@ -773,6 +844,8 @@ class ModelSQL(ModelStorage):
                     cls.__check_domain_rule(ids, 'read')
                     raise RuntimeError("Undetected access error")
                 result.extend(fetchall)
+                for row in result:
+                    model_read_cache[row['id']].update(row)
         else:
             result = [{'id': x} for x in ids]
 
@@ -794,6 +867,9 @@ class ModelSQL(ModelStorage):
                         cached_after=max_write_date)
                     for row in result:
                         row[fname] = translations.get(row['id']) or row[fname]
+
+                        # Overwrite existing value which was not translated
+                        model_read_cache[row['id']][fname] = row[fname]
                 if fname != 'id':
                     cachable_fields.append(fname)
 
@@ -809,6 +885,7 @@ class ModelSQL(ModelStorage):
                     cache[row['id']] = {}
                 for fname in cachable_fields:
                     cache[row['id']][fname] = row[fname]
+                    model_read_cache[row['id']].setdefault(fname, row[fname])
 
         func_fields = {}
         for fname in getter_fields:
@@ -824,11 +901,14 @@ class ModelSQL(ModelStorage):
                         date_result = field.get([row['id']], cls, fname,
                             values=[row])
                     row[fname] = date_result[row['id']]
+                    model_read_cache[row['id']].setdefault(fname, row[fname])
             else:
                 # get the value of that field for all records/ids
                 getter_result = field.get(ids, cls, fname, values=result)
                 for row in result:
                     row[fname] = getter_result[row['id']]
+                    # No setdefault here because dict fields
+                    model_read_cache[row['id']][fname] = row[fname]
 
         for key in func_fields:
             field_list = func_fields[key]
@@ -844,12 +924,16 @@ class ModelSQL(ModelStorage):
                     for fname in field_list:
                         date_result = date_results[fname]
                         row[fname] = date_result[row['id']]
+                        model_read_cache[row['id']].setdefault(
+                            fname, row[fname])
             else:
                 getter_results = field.get(ids, cls, field_list, values=result)
                 for fname in field_list:
                     getter_result = getter_results[fname]
                     for row in result:
                         row[fname] = getter_result[row['id']]
+                        model_read_cache[row['id']].setdefault(
+                            fname, row[fname])
 
         def read_related(field, Target, rows, fields):
             name = field.name
@@ -878,6 +962,7 @@ class ModelSQL(ModelStorage):
                     for target in row[name]:
                         if target is not None:
                             values.append(targets[target])
+                    model_read_cache[row['id']].setdefault(key, row[key])
             else:
                 for row in rows:
                     value = row[name]
@@ -887,6 +972,7 @@ class ModelSQL(ModelStorage):
                         row[key] = targets[value]
                     else:
                         row[key] = None
+                    model_read_cache[row['id']].setdefault(key, row[key])
 
         to_del = set()
         for fname in set(fields_related.keys()) | extra_fields:
@@ -935,6 +1021,22 @@ class ModelSQL(ModelStorage):
 
         for row, field in product(result, to_del):
             del row[field]
+
+        result = []
+        for cur_id in original_ids:
+            cached_value = model_read_cache[cur_id]
+            value = {'id': cur_id}
+            for fname in requested_fields:
+                splitted = fname.split('.')
+                if len(splitted) == 1:
+                    value[fname] = cached_value[fname]
+                else:
+                    name = '{}.'.format(splitted[0])
+                    value[name] = cached_value[name]
+            result.append(value)
+
+        if created_read_cache:
+            del transaction.get_cache()['current_read_cache']
 
         return result
 
