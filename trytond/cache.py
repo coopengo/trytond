@@ -67,8 +67,9 @@ class BaseCache(object):
         if self.context:
             # Remove client key from cache's context.
             # See redmine issue #19794
-            context = Transaction().context
-            context.pop('client', None)
+            context = Transaction().context.copy()
+            for key in {'client', '_request', 'session', 'token'}:
+                context.pop(key, None)
             return (key, Transaction().user, freeze(context))
         return key
 
