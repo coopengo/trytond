@@ -747,7 +747,7 @@ class ModelSQL(ModelStorage):
                     'EPOCH', Coalesce(table.write_date, table.create_date)
                     ).cast(sql_type).as_('_timestamp')
 
-        if 'write_date' not in fields_names and len(columns) == 0:
+        if 'write_date' not in fields_names and len(columns) == 1:
             columns.pop('write_date')
         if columns:
             if 'id' not in fields_names:
