@@ -77,6 +77,7 @@ class DictSchemaMixin(object):
         super(DictSchemaMixin, cls).__setup__()
         cls.__rpc__.update({
                 'get_keys': RPC(instantiate=0),
+                'search_get_keys': RPC(cache=dict(days=1)),
                 })
 
     @staticmethod
@@ -163,6 +164,11 @@ class DictSchemaMixin(object):
                 new_key['sequence_order'] = record.sequence_order
             keys.append(new_key)
         return keys
+
+    @classmethod
+    def search_get_keys(cls, domain, limit=None):
+        schemas = cls.search(domain, limit=limit)
+        return cls.get_keys(schemas)
 
     @classmethod
     def get_relation_fields(cls):

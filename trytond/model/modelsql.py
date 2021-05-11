@@ -564,6 +564,7 @@ class ModelSQL(ModelStorage):
         table = cls.__table__()
         modified_fields = set()
         defaults_cache = {}  # Store already computed default values
+        missing_defaults = {}  # Store missing default values by schema
         new_ids = []
         vlist = [v.copy() for v in vlist]
         for values in vlist:
@@ -575,26 +576,29 @@ class ModelSQL(ModelStorage):
             modified_fields |= set(values.keys())
 
             # Get default values
-            default = []
-            for fname, field in cls._fields.items():
-                if fname in values:
-                    continue
-                if fname in [
-                        'create_uid', 'create_date',
-                        'write_uid', 'write_date', 'id']:
-                    continue
-                if isinstance(field, fields.Function) and not field.setter:
-                    continue
-                if fname in defaults_cache:
-                    values[fname] = defaults_cache[fname]
-                else:
-                    default.append(fname)
+            values_schema = tuple(sorted(values))
+            if values_schema not in missing_defaults:
+                default = []
+                missing_defaults[values_schema] = default_values = {}
+                for fname, field in cls._fields.items():
+                    if fname in values:
+                        continue
+                    if fname in [
+                            'create_uid', 'create_date',
+                            'write_uid', 'write_date', 'id']:
+                        continue
+                    if isinstance(field, fields.Function) and not field.setter:
+                        continue
+                    if fname in defaults_cache:
+                        default_values[fname] = defaults_cache[fname]
+                    else:
+                        default.append(fname)
 
-            if default:
-                defaults = cls.default_get(default, with_rec_name=False)
-                defaults = cls._clean_defaults(defaults)
-                values.update(defaults)
-                defaults_cache.update(defaults)
+                if default:
+                    defaults = cls.default_get(default, with_rec_name=False)
+                    default_values.update(cls._clean_defaults(defaults))
+                    defaults_cache.update(default_values)
+            values.update(missing_defaults[values_schema])
 
             insert_columns = [table.create_uid, table.create_date]
             insert_values = [transaction.user, CurrentTimestamp()]
@@ -732,20 +736,22 @@ class ModelSQL(ModelStorage):
             history_order = (column.desc, Column(table, '__id').desc)
             history_limit = 1
 
-        columns = []
+        columns = {}
         for f in all_fields:
             field = cls._fields.get(f)
             if field and field.sql_type():
-                columns.append(field.sql_column(table).as_(f))
+                columns[f] = field.sql_column(table).as_(f)
             elif f == '_timestamp' and not callable(cls.table_query):
                 sql_type = fields.Char('timestamp').sql_type().base
-                columns.append(Extract('EPOCH',
-                        Coalesce(table.write_date, table.create_date)
-                        ).cast(sql_type).as_('_timestamp'))
+                columns[f] = Extract(
+                    'EPOCH', Coalesce(table.write_date, table.create_date)
+                    ).cast(sql_type).as_('_timestamp')
 
-        if len(columns):
+        if 'write_date' not in fields_names and len(columns) == 1:
+            columns.pop('write_date')
+        if columns:
             if 'id' not in fields_names:
-                columns.append(table.id.as_('id'))
+                columns['id'] = table.id.as_('id')
 
             tables = {None: (table, None)}
             if domain:
@@ -760,7 +766,7 @@ class ModelSQL(ModelStorage):
                     where &= history_clause
                 if domain:
                     where &= dom_exp
-                cursor.execute(*from_.select(*columns, where=where,
+                cursor.execute(*from_.select(*columns.values(), where=where,
                         order_by=history_order, limit=history_limit))
                 fetchall = list(cursor_dict(cursor))
                 if not len(fetchall) == len({}.fromkeys(sub_ids)):
@@ -776,9 +782,7 @@ class ModelSQL(ModelStorage):
         max_write_date = max(
             (r['write_date'] for r in result if r.get('write_date')),
             default=None)
-        for column in columns:
-            # Split the output name to remove SQLite type detection
-            fname = column.output_name.split()[0]
+        for fname, column in columns.items():
             if fname == '_timestamp':
                 continue
             field = cls._fields[fname]
@@ -886,7 +890,9 @@ class ModelSQL(ModelStorage):
 
         to_del = set()
         for fname in set(fields_related.keys()) | extra_fields:
-            if fname not in fields_names:
+            # 'write_date' has been added to extra_fields but not read
+            if ((fname != 'write_date' or 'write_date' in columns)
+                    and fname not in fields_names):
                 to_del.add(fname)
             if fname not in cls._fields:
                 continue

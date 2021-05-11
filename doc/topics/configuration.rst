@@ -215,6 +215,12 @@ channels if the back-end supports them.
 
 Default: `300`
 
+rpc.<model>.<method>
+~~~~~~~~~~~~~~~~~~~~
+
+The duration in seconds of the cache for the RPC answer to `method` of the
+model named `model`. It will override the value defined in the model.
+
 queue
 -----
 

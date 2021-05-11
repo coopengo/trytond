@@ -1,4 +1,6 @@
 * Add support for database connection parameters to configuration URI
+* Combine search and get_keys in DictSchemaMixin
+* Reset less often the user sessions
 * Protect trusted devices against brute force attack
 * Eager load Function field with same multiple getter
 
