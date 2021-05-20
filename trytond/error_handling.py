@@ -8,7 +8,7 @@ from trytond.tools import resolve
 from trytond.config import config
 from trytond.exceptions import UserError, UserWarning, ConcurrencyException
 
-ErrorHandlingClass = None
+error_handler_configuration = config.get('admin', 'error_handling_class')
 
 
 class HandledError(UserError):
@@ -34,6 +34,21 @@ class ErrorHandler(object):
     Provides the main entry point for handling error.
     '''
     _message = '{}'
+    _ErrorHandlingClass = None
+
+    @staticmethod
+    def _get_handling_class():
+        if (ErrorHandler._ErrorHandlingClass is not None or
+                not error_handler_configuration):
+            return ErrorHandler._ErrorHandlingClass
+
+        HandlingClass = resolve(
+            config.get('admin', 'error_handling_class'))
+        if not issubclass(HandlingClass, ErrorHandler):
+            raise ValueError(
+                'Invalid error handling class in configuration')
+        ErrorHandler._ErrorHandlingClass = HandlingClass
+        return HandlingClass
 
     @staticmethod
     def handle_exception(error, reraise=True):
@@ -44,11 +59,11 @@ class ErrorHandler(object):
         the end user, else the error will be returned so the caller can do
         something with it.
         '''
-        set_handling_class()
-        if ErrorHandlingClass is None:
+        Handler = ErrorHandler._get_handling_class()
+        if Handler is None:
             raise
-        error_id = ErrorHandlingClass.do_handle_exception(error)
-        wrapped_error = HandledError(ErrorHandlingClass._message, error_id)
+        error_id = Handler.do_handle_exception(error)
+        wrapped_error = HandledError(Handler._message, error_id)
         if reraise:
             raise wrapped_error
         return wrapped_error
@@ -78,15 +93,3 @@ def error_wrap(func):
         except Exception as e:
             ErrorHandler.handle_exception(e)
     return wrap
-
-
-def set_handling_class():
-    global ErrorHandlingClass
-    if ErrorHandlingClass is not None:
-        return
-
-    if config.get('admin', 'error_handling_class'):
-        ErrorHandlingClass = resolve(config.get('admin', 'error_handling_class'))
-        assert issubclass(ErrorHandlingClass, ErrorHandler)
-    else:
-        ErrorHandlingClass = None
