@@ -40,12 +40,13 @@ class Listener:
             raise NotImplementedError
 
         logger.info("listening on channel ir_update of '%s'", dbname)
-        conn = database.get_connection(autocommit=True)
+        conn = database.get_connection()
         pid = os.getpid()
         current_thread = threading.current_thread()
         try:
             cursor = conn.cursor()
             cursor.execute('LISTEN "ir_update"')
+            conn.commit()
 
             while cls._listener.get((pid, dbname)) == current_thread:
                 readable, _, _ = select.select([conn], [], [])
