@@ -299,13 +299,12 @@ class MemoryCache(BaseCache):
             raise NotImplementedError
 
         logger.info("listening on channel '%s' of '%s'", cls._channel, dbname)
-        conn = database.get_connection()
+        conn = database.get_connection(autocommit=True)
         pid = os.getpid()
         current_thread = threading.current_thread()
         try:
             cursor = conn.cursor()
             cursor.execute('LISTEN "%s"' % cls._channel)
-            conn.commit()
 
             while cls._listener.get((pid, dbname)) == current_thread:
                 readable, _, _ = select.select([conn], [], [])
@@ -335,16 +334,6 @@ class MemoryCache(BaseCache):
             with cls._listener_lock[pid]:
                 if cls._listener.get((pid, dbname)) == current_thread:
                     del cls._listener[pid, dbname]
-
-    @classmethod
-    def purge_listeners(cls, dbname):
-        '''
-        Purges all listeners for a given database
-        '''
-        pid = os.getpid()
-        with cls._listener_lock[pid]:
-            if (pid, dbname) in cls._listener:
-                del cls._listener[pid, dbname]
 
 
 class DefaultCacheValue:

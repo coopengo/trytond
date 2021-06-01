@@ -5,7 +5,6 @@ from threading import RLock
 import logging
 from trytond.modules import load_modules, register_classes
 from trytond.transaction import Transaction
-from trytond.server_context import ServerContext
 import builtins
 
 __all__ = ['Pool', 'PoolMeta', 'PoolBase', 'isregisteredby']
@@ -174,9 +173,8 @@ class Pool(object):
             for type in list(self.classes.keys()):
                 self._pool[self.database_name][type] = {}
             self._post_init_calls[self.database_name] = []
-            with ServerContext().set_context(disable_auto_cache=True):
-                restart = not load_modules(self.database_name, self,
-                    update=update, lang=lang, activatedeps=activatedeps)
+            restart = not load_modules(self.database_name, self, update=update,
+                    lang=lang, activatedeps=activatedeps)
             if restart:
                 self.init()
             # ABDC: inter-workers communication
