@@ -14,6 +14,7 @@ class SentryErrorHandler(ErrorHandler):
     '''
     Error handler that stores the error information in a sentry backend
     '''
+    _sentry_init = False
     _message = '''An error occured
 
 Maintenance has been notified of this failure.
@@ -30,9 +31,8 @@ Please provide the following reference:
 
     @staticmethod
     def _init_sentry():
-        global init_done
-        if not init_done:
+        if SentryErrorHandler._sentry_init is False:
             from sentry_sdk import init
             logger.info('setting sentry: %s' % sentry_dsn)
             init(sentry_dsn)
-            init_done = True
+            SentryErrorHandler._sentry_init = True
