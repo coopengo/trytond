@@ -63,10 +63,14 @@ class ErrorHandler(object):
         if Handler is None:
             raise
         error_id = Handler.do_handle_exception(error)
-        wrapped_error = HandledError(Handler._message, error_id)
+        wrapped_error = HandledError(Handler.get_message(), error_id)
         if reraise:
             raise wrapped_error
         return wrapped_error
+
+    @classmethod
+    def get_message(cls):
+        return cls._message
 
     @classmethod
     def do_handle_exception(e):
