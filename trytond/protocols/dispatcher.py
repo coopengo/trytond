@@ -27,7 +27,7 @@ from trytond.tools import is_instance_method
 from trytond.wsgi import app
 from trytond.perf_analyzer import PerfLog, profile
 from trytond.perf_analyzer import logger as perf_logger
-from trytond.sentry import sentry_wrap
+from trytond.error_handling import error_wrap
 from trytond.worker import run_task
 from .wrappers import with_pool
 
@@ -194,7 +194,7 @@ def help_method(request, pool):
 
 
 # AKE: hide tech exceptions and send them to sentry
-@sentry_wrap
+@error_wrap
 @app.auth_required
 @with_pool
 def _dispatch(request, pool, *args, **kwargs):
