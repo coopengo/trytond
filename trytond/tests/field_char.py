@@ -33,6 +33,13 @@ class CharSize(ModelSQL):
     char = fields.Char("Char", size=5)
 
 
+class CharStrip(ModelSQL):
+    "Char Strip"
+    __name__ = 'test.char_strip'
+    char = fields.Char("Char")
+    char_unstripped = fields.Char("Char", strip=False)
+
+
 class CharTranslate(ModelSQL):
     'Char Translate'
     __name__ = 'test.char_translate'
@@ -68,6 +75,7 @@ def register(module):
         CharDefault,
         CharRequired,
         CharSize,
+        CharStrip,
         CharTranslate,
         CharUnaccentedOn,
         CharUnaccentedOff,
