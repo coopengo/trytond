@@ -1582,7 +1582,7 @@ class ModelStorage(Model):
         with Transaction().set_current_transaction(self._transaction), \
                 self._transaction.set_user(self._user), \
                 self._transaction.reset_context(), \
-                self._transaction.set_context(self._context):
+                self._transaction.set_context(self._context) as transaction:
             if (self.id in self._cache and name in self._cache[self.id]
                     and not require_context_field):
                 # Use values from cache
@@ -1614,7 +1614,8 @@ class ModelStorage(Model):
                     if (field._type not in ('many2one', 'reference')
                             or field.context
                             or getattr(field, 'datetime_field', None)
-                            or isinstance(field, fields.Function)):
+                            or (isinstance(field, fields.Function)
+                                and not transaction.readonly)):
                         del data[fname]
                 if data['id'] not in self._cache:
                     self._cache[data['id']] = {}
