@@ -55,6 +55,17 @@ class SelectionMixin(Field):
                         (name, 'selection', language, source))
         return super().definition_translations(model, language) + selection
 
+    @classmethod
+    def get_selection(cls, model, name, inst):
+        selection = model.fields_get([name])[name]['selection']
+        if not isinstance(selection, (tuple, list)):
+            sel_func = getattr(model, selection)
+            if not is_instance_method(model, selection):
+                selection = sel_func()
+            else:
+                selection = sel_func(inst)
+        return dict(selection)
+
 
 class Selection(SelectionMixin, Field):
     '''
@@ -135,14 +146,8 @@ class TranslatedSelection(object):
         if inst is None:
             return self
         with Transaction().set_context(getattr(inst, '_context', {})):
-            selection = cls.fields_get([self.name])[self.name]['selection']
-            if not isinstance(selection, (tuple, list)):
-                sel_func = getattr(cls, selection)
-                if not is_instance_method(cls, selection):
-                    selection = sel_func()
-                else:
-                    selection = sel_func(inst)
-            selection = dict(selection)
+            selection = cls._fields[self.name].get_selection(
+                cls, self.name, inst)
         value = getattr(inst, self.name)
         # None and '' are equivalent
         if value is None or value == '':

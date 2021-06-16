@@ -875,13 +875,24 @@ class ModelSQL(ModelStorage):
 
         def add_related(field, rows, targets):
             name = field.name
-            key = name + '.'
+            key = name + (':string' if field._type == 'selection' else '.')
             if field._type.endswith('2many'):
                 for row in rows:
                     row[key] = values = list()
                     for target in row[name]:
                         if target is not None:
                             values.append(targets[target])
+            elif field._type == 'selection':
+                for row in rows:
+                    selection = fields.Selection.get_selection(
+                            cls, name, cls(row['id']))
+                    value = row[name]
+                    if value is None or value == '':
+                        if value not in selection:
+                            switch_value = {None: '', '': None}[value]
+                            if switch_value in selection:
+                                value = switch_value
+                    row[key] = selection[value]
             else:
                 for row in rows:
                     value = row[name]
@@ -912,7 +923,9 @@ class ModelSQL(ModelStorage):
                     ctx.update(PYSONDecoder(row).decode(pyson_context))
                 if datetime_field:
                     ctx['_datetime'] = row.get(datetime_field)
-                if field._type == 'reference':
+                if field._type == 'selection':
+                    Target = None
+                elif field._type == 'reference':
                     value = row[fname]
                     if not value:
                         Target = None
