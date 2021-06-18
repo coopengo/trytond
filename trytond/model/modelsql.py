@@ -707,6 +707,9 @@ class ModelSQL(ModelStorage):
             if '.' in field_name:
                 field_name, field_related = field_name.split('.', 1)
                 fields_related[field_name].add(field_related)
+            if field_name.endswith(':string'):
+                field_name = field_name[:-len(':string')]
+                fields_related[field_name]
             field = cls._fields[field_name]
             if hasattr(field, 'datetime_field') and field.datetime_field:
                 extra_fields.add(field.datetime_field)
