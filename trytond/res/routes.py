@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 @app.route('/liveness', methods=['GET'])
 @with_pool_by_config
+@with_transaction(readonly=True)
 def livenessness(request, pool):
     return 'alive\n'
 
