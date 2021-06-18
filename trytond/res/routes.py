@@ -8,13 +8,15 @@ from werkzeug.exceptions import abort
 
 from trytond.config import config
 from trytond.wsgi import app
-from trytond.protocols.wrappers import with_pool, with_transaction
+from trytond.protocols.wrappers import (with_pool, with_pool_by_config,
+    with_transaction)
 from trytond.transaction import Transaction
 
 logger = logging.getLogger(__name__)
 
 
 @app.route('/liveness', methods=['GET'])
+@with_pool_by_config
 def livenessness(request):
     return 'alive\n'
 
