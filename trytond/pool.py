@@ -157,11 +157,7 @@ class Pool(object):
         Set update to proceed to update
         lang is a list of language code to be updated
         '''
-        # ABDC: inter-workers communication
-        from trytond import iwc
         with self._lock:
-            # ABDC: inter-workers communication
-            iwc.start(self.database_name)
             if not self._started:
                 self.start()
 
@@ -173,7 +169,7 @@ class Pool(object):
             self._pool.setdefault(self.database_name, {})
             self._modules = []
             # Clean the _pool before loading modules
-            for type in list(self.classes.keys()):
+            for type in self.classes.keys():
                 self._pool[self.database_name][type] = {}
             try:
                 with ServerContext().set_context(disable_auto_cache=True):

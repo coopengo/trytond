@@ -11,7 +11,6 @@ import logging.handlers
 from contextlib import contextmanager
 
 from trytond import __version__
-from trytond import iwc
 
 logger = logging.getLogger(__name__)
 
@@ -167,7 +166,6 @@ def pidfile(options):
 def generate_signal_handler(pidfile):
     def shutdown(signum, frame):
         logger.info('shutdown')
-        iwc.stop()
         logging.shutdown()
         if pidfile:
             os.unlink(pidfile)
