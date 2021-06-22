@@ -16,12 +16,13 @@ from sql.functions import CurrentTimestamp, Function
 
 from trytond import backend
 from trytond.config import config
+from trytond.pool import Pool
 from trytond.transaction import Transaction
 from trytond.tools import resolve, grouped_slice
 from trytond.cache_serializer import pack, unpack
 
 
-__all__ = ['BaseCache', 'Cache', 'LRUDict']
+__all__ = ['BaseCache', 'Cache', 'LRUDict', 'LRUDictTransaction']
 _clear_timeout = config.getint('cache', 'clean_timeout', default=5 * 60)
 logger = logging.getLogger(__name__)
 
@@ -45,6 +46,15 @@ def freeze(o):
         return o
 
 
+def _get_modules(cursor):
+    ir_module = Table('ir_module')
+    cursor.execute(*ir_module.select(
+            ir_module.name,
+            where=ir_module.state.in_(
+                ['activated', 'to upgrade', 'to remove'])))
+    return {m for m, in cursor}
+
+
 class BaseCache(object):
     _instances = {}
 
@@ -52,6 +62,7 @@ class BaseCache(object):
         self._name = name
         self.size_limit = size_limit
         self.context = context
+        self.hit = self.miss = 0
         if isinstance(duration, dt.timedelta):
             self.duration = duration
         elif isinstance(duration, (int, float)):
@@ -62,6 +73,15 @@ class BaseCache(object):
             self.duration = None
         assert self._name not in self._instances
         self._instances[self._name] = self
+
+    @classmethod
+    def stats(cls):
+        for name, inst in cls._instances.items():
+            yield {
+                'name': name,
+                'hit': inst.hit,
+                'miss': inst.miss,
+                }
 
     def _key(self, key):
         if self.context:
@@ -81,6 +101,11 @@ class BaseCache(object):
 
     def clear(self):
         raise NotImplementedError
+
+    @classmethod
+    def clear_all(cls):
+        for inst in cls._instances.values():
+            inst.clear()
 
     @classmethod
     def sync(cls, transaction):
@@ -142,11 +167,14 @@ class MemoryCache(BaseCache):
         try:
             (expire, result) = cache.pop(key)
             if expire and expire < dt.datetime.now():
+                self.miss += 1
                 return default
             cache[key] = (expire, result)
+            self.hit += 1
             return result
         # JCA: Properly crash on type error
         except KeyError:
+            self.miss += 1
             return default
 
     def set(self, key, value):
@@ -194,8 +222,9 @@ class MemoryCache(BaseCache):
                 cursor.execute(*table.select(
                         _cast(table.timestamp), table.name))
                 timestamps = {}
-                for timestamp, name in cursor.fetchall():
+                for timestamp, name in cursor:
                     timestamps[name] = timestamp
+                modules = _get_modules(cursor)
         finally:
             database.put_connection(connection)
         for name, timestamp in timestamps.items():
@@ -206,6 +235,7 @@ class MemoryCache(BaseCache):
             inst_timestamp = inst._timestamp.get(dbname)
             if not inst_timestamp or timestamp > inst_timestamp:
                 inst._clear(dbname, timestamp)
+        Pool(dbname).refresh(modules)
         cls._clean_last = datetime.now()
 
     def sync_since(self, value):
@@ -293,19 +323,33 @@ class MemoryCache(BaseCache):
             inst._transaction_lower.pop(dbname, None)
 
     @classmethod
+    def refresh_pool(cls, transaction):
+        database = transaction.database
+        dbname = database.name
+        if not _clear_timeout and database.has_channel():
+            database = backend.Database(dbname)
+            conn = database.get_connection()
+            try:
+                cursor = conn.cursor()
+                cursor.execute(
+                    'NOTIFY "%s", %%s' % cls._channel, ('refresh pool',))
+                conn.commit()
+            finally:
+                database.put_connection(conn)
+
+    @classmethod
     def _listen(cls, dbname):
         database = backend.Database(dbname)
         if not database.has_channel():
             raise NotImplementedError
 
         logger.info("listening on channel '%s' of '%s'", cls._channel, dbname)
-        conn = database.get_connection()
+        conn = database.get_connection(autocommit=True)
         pid = os.getpid()
         current_thread = threading.current_thread()
         try:
             cursor = conn.cursor()
             cursor.execute('LISTEN "%s"' % cls._channel)
-            conn.commit()
 
             while cls._listener.get((pid, dbname)) == current_thread:
                 readable, _, _ = select.select([conn], [], [])
@@ -315,7 +359,9 @@ class MemoryCache(BaseCache):
                 conn.poll()
                 while conn.notifies:
                     notification = conn.notifies.pop()
-                    if notification.payload:
+                    if notification.payload == 'refresh pool':
+                        Pool(dbname).refresh(_get_modules(cursor))
+                    elif notification.payload:
                         reset = json.loads(notification.payload)
                         for name in reset:
                             # XUNG
@@ -346,24 +392,6 @@ class MemoryCache(BaseCache):
             if (pid, dbname) in cls._listener:
                 del cls._listener[pid, dbname]
 
-
-class DefaultCacheValue:
-    pass
-
-
-_default_cache_value = DefaultCacheValue()
-
-
-class SerializableMemoryCache(MemoryCache):
-    def get(self, key, default=None):
-        result = super(SerializableMemoryCache, self).get(key,
-            _default_cache_value)
-        return default if result == _default_cache_value else unpack(result)
-
-    def set(self, key, value):
-        super(SerializableMemoryCache, self).set(key, pack(value))
-
-
 if config.get('cache', 'class'):
     Cache = resolve(config.get('cache', 'class'))
 else:
@@ -375,18 +403,27 @@ class LRUDict(OrderedDict):
     """
     Dictionary with a size limit.
     If size limit is reached, it will remove the first added items.
+    The default_factory provides the same behavior as in standard
+    collections.defaultdict.
     """
     __slots__ = ('size_limit',)
 
-    def __init__(self, size_limit, *args, **kwargs):
+    def __init__(self, size_limit, default_factory=None, *args, **kwargs):
         assert size_limit > 0
         self.size_limit = size_limit
         super(LRUDict, self).__init__(*args, **kwargs)
+        self.default_factory = default_factory
         self._check_size_limit()
 
     def __setitem__(self, key, value):
         super(LRUDict, self).__setitem__(key, value)
         self._check_size_limit()
+
+    def __missing__(self, key):
+        if self.default_factory is None:
+            raise KeyError(key)
+        self[key] = value = self.default_factory()
+        return value
 
     def update(self, *args, **kwargs):
         super(LRUDict, self).update(*args, **kwargs)
@@ -404,7 +441,7 @@ class LRUDict(OrderedDict):
 
 class LRUDictTransaction(LRUDict):
     """
-    Dictionary with a size limit. (see LRUDict)
+    Dictionary with a size limit and default_factory. (see LRUDict)
     It is refreshed when transaction counter is changed.
     """
     __slots__ = ('transaction', 'counter')

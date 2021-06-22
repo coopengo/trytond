@@ -64,12 +64,16 @@ attlist.field &= [a:defaultValue = "1"] attribute completion { "0" | "1" }?
 attlist.field &= attribute string { text }?
 attlist.field &= [a:defaultValue = "1"] attribute factor { text }?
 attlist.field &= attribute filename { text }?
+attlist.field &= attribute help_field { text }?
 attlist.field &= attribute view_ids { text }?
+attlist.field &= attribute symbol { text }?
 prefix = element prefix { attlist.affix, empty }
 suffix = element suffix { attlist.affix, empty }
 attlist.affix &= attribute string { text }?
 attlist.affix &= ( attribute name { text } | attribute id { text } )
 attlist.affix &= attribute icon { text }?
+attlist.affix &= [a:defaultValue = "icon"] attribute icon_type { "icon" | "url" }?
+attlist.affix &= attribute url_size { text }?
 button = element button { attlist.button, empty }
 attlist.button &= attribute help { text }?
 attlist.button &= attribute string { text }?

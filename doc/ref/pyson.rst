@@ -137,7 +137,7 @@ true, then returns also true when both values of statements named by
 ``statement1`` and ``statement2`` are equal. In this case
 :class:`Greater` works as a *greater-than or equal* operator.
 
-.. note:: `None` value is replaced by `0` for the comparison.
+.. note:: ``None`` value is replaced by ``0`` for the comparison.
 
 .. class:: Less(statement1, statement2[, equal])
 
@@ -150,7 +150,7 @@ then returns also true when both values of the statements named by
 ``statement1`` and ``statement2`` are equal. In this case
 :class:`Less`  works as a *less-than or equal* operator.
 
-.. note:: `None` value is replaced by `0` for the comparison.
+.. note:: ``None`` value is replaced by ``0`` for the comparison.
 
 .. class:: If(condition, then_statement, else_statement)
 
@@ -218,9 +218,11 @@ Returns a date time object which represents the values of variables named by
 the *arguments* explained below.
 Missing values of arguments named by  ``year``, ``month``, ``day``, ``hour``,
 ``minute``, ``second``, ``microseconds`` take their defaults from ``start`` or
-the actual date and time in UTC.
+the actual date and time in `UTC`_.
 When values of arguments named by ``delta_*`` are given, these are added  to
 the appropriate attributes in a date and time preserving manner.
+
+.. _`UTC`: https://en.wikipedia.org/wiki/Coordinated_Universal_Time
 
 Arguments:
 
@@ -278,4 +280,4 @@ dictionary, list or string. Returns the number of items in ``value``.
 
 An :class:`Id` object represents the PYSON ``Id()`` statement for filesystem id
 evaluations. When converted into the internal dictionary, it returns the
-database id stored in `ir.model.data`.
+database id stored in ``ir.model.data``.

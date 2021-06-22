@@ -12,7 +12,8 @@ import sql.operators
 
 from trytond.tools import (
     reduce_ids, reduce_domain, decimal_, is_instance_method, file_open,
-    strip_wildcard, lstrip_wildcard, rstrip_wildcard, slugify)
+    strip_wildcard, lstrip_wildcard, rstrip_wildcard, slugify, sortable_values,
+    escape_wildcard, unescape_wildcard, is_full_text, firstline)
 from trytond.tools.string_ import StringPartitioned, LazyString
 from trytond.tools.domain_inversion import (
     domain_inversion, parse, simplify, merge, concat, unique_value,
@@ -194,6 +195,29 @@ class ToolsTestCase(unittest.TestCase):
 
     def test_rstrip_wildcard_diferent_wildcard(self):
         self.assertEqual(rstrip_wildcard('a___', '_'), 'a')
+
+    def test_escape_wildcard(self):
+        self.assertEqual(
+            escape_wildcard('foo%bar_baz\\'),
+            'foo\\%bar\\_baz\\\\')
+
+    def test_unescape_wildcard(self):
+        "Test unescape_wildcard"
+        self.assertEqual(
+            unescape_wildcard('foo\\%bar\\_baz\\\\'),
+            'foo%bar_baz\\')
+
+    def test_is_full_text(self):
+        "Test is_full_text"
+        for value, result in [
+                ('foo', True),
+                ('%foo bar%', True),
+                ('foo%', False),
+                ('foo_bar', False),
+                ('foo\\_bar', True),
+                ]:
+            with self.subTest(value=value):
+                self.assertEqual(is_full_text(value), result)
 
     def test_slugify(self):
         "Test slugify"
@@ -520,13 +544,13 @@ class DomainInversionTestCase(unittest.TestCase):
         self.assertFalse(eval_domain(domain, {'x': 4}))
 
         domain = [['x', '>', None]]
-        self.assertTrue(eval_domain(domain, {'x': dt.date.today()}))
-        self.assertTrue(eval_domain(domain, {'x': dt.datetime.now()}))
+        self.assertFalse(eval_domain(domain, {'x': dt.date.today()}))
+        self.assertFalse(eval_domain(domain, {'x': dt.datetime.now()}))
 
         domain = [['x', '<', dt.date.today()]]
-        self.assertTrue(eval_domain(domain, {'x': None}))
+        self.assertFalse(eval_domain(domain, {'x': None}))
         domain = [['x', '<', dt.datetime.now()]]
-        self.assertTrue(eval_domain(domain, {'x': None}))
+        self.assertFalse(eval_domain(domain, {'x': None}))
 
         domain = [['x', 'in', [3, 5]]]
         self.assertTrue(eval_domain(domain, {'x': 3}))
@@ -534,6 +558,11 @@ class DomainInversionTestCase(unittest.TestCase):
         self.assertTrue(eval_domain(domain, {'x': [3]}))
         self.assertTrue(eval_domain(domain, {'x': [3, 4]}))
         self.assertFalse(eval_domain(domain, {'x': [1, 2]}))
+        self.assertFalse(eval_domain(domain, {'x': None}))
+
+        domain = [['x', 'in', [1, None]]]
+        self.assertTrue(eval_domain(domain, {'x': None}))
+        self.assertFalse(eval_domain(domain, {'x': 2}))
 
         domain = [['x', 'not in', [3, 5]]]
         self.assertFalse(eval_domain(domain, {'x': 3}))
@@ -541,6 +570,11 @@ class DomainInversionTestCase(unittest.TestCase):
         self.assertFalse(eval_domain(domain, {'x': [3]}))
         self.assertFalse(eval_domain(domain, {'x': [3, 4]}))
         self.assertTrue(eval_domain(domain, {'x': [1, 2]}))
+        self.assertFalse(eval_domain(domain, {'x': None}))
+
+        domain = [['x', 'not in', [1, None]]]
+        self.assertFalse(eval_domain(domain, {'x': None}))
+        self.assertTrue(eval_domain(domain, {'x': 2}))
 
         domain = [['x', 'like', 'abc']]
         self.assertTrue(eval_domain(domain, {'x': 'abc'}))
@@ -782,6 +816,37 @@ class DomainInversionTestCase(unittest.TestCase):
         self.assertEqual(
             extract_reference_models(domain, 'x'), {'model_A', 'model_B'})
         self.assertEqual(extract_reference_models(domain, 'y'), set())
+
+    def test_sortable_values(self):
+        def key(values):
+            return values
+
+        values = [
+            (('a', 1), ('b', None)),
+            (('a', 1), ('b', 3)),
+            (('a', 1), ('b', 2)),
+            ]
+
+        with self.assertRaises(TypeError):
+            sorted(values, key=key)
+        self.assertEqual(
+            sorted(values, key=sortable_values(key)), [
+                (('a', 1), ('b', 2)),
+                (('a', 1), ('b', 3)),
+                (('a', 1), ('b', None)),
+                ])
+
+    def test_firstline(self):
+        "Test firstline"
+        for text, result in [
+                ("", ""),
+                ("first line\nsecond line", "first line"),
+                ("\nsecond line", "second line"),
+                ("\n\nthird line", "third line"),
+                (" \nsecond line", "second line"),
+                ]:
+            with self.subTest(text=text, result=result):
+                self.assertEqual(firstline(text), result)
 
 
 def suite():

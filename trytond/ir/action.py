@@ -7,25 +7,19 @@ from functools import partial
 
 from sql import Null
 
+from trytond.cache import Cache, MemoryCache
 from trytond.config import config
 from trytond.i18n import gettext
-from trytond.model.exceptions import ValidationError
-from trytond.pyson import PYSONEncoder
-from ..model import (
+from trytond.model import (
     ModelView, ModelStorage, ModelSQL, DeactivableMixin, fields,
-    sequence_ordered)
-from ..tools import file_open
-from ..pyson import PYSONDecoder, PYSON, Eval
-from ..transaction import Transaction
-from ..pool import Pool
-from ..cache import Cache
-from ..rpc import RPC
-
-__all__ = [
-    'Action', 'ActionKeyword', 'ActionReport',
-    'ActionActWindow', 'ActionActWindowView', 'ActionActWindowDomain',
-    'ActionWizard', 'ActionURL',
-    ]
+    sequence_ordered, ModelSingleton)
+from trytond.model.exceptions import ValidationError
+from trytond.pool import Pool
+from trytond.pyson import PYSONDecoder, PYSON, Eval
+from trytond.pyson import PYSONEncoder
+from trytond.rpc import RPC
+from trytond.tools import file_open
+from trytond.transaction import Transaction
 
 if not config.get('html', 'plugins-ir.action.report-report_content_html'):
     config.set(
@@ -60,6 +54,11 @@ class Action(DeactivableMixin, ModelSQL, ModelView):
     __name__ = 'ir.action'
     name = fields.Char('Name', required=True, translate=True)
     type = fields.Char('Type', required=True, readonly=True)
+    records = fields.Selection([
+            ('selected', "Selected"),
+            ('listed', "Listed"),
+            ], "Records",
+        help="The records on which the action runs.")
     usage = fields.Char('Usage')
     keywords = fields.One2Many('ir.action.keyword', 'action',
             'Keywords')
@@ -71,6 +70,10 @@ class Action(DeactivableMixin, ModelSQL, ModelView):
         cls.__rpc__.update({
                 'get_action_value': RPC(instantiate=0, cache=dict(days=1)),
                 })
+
+    @classmethod
+    def default_records(cls):
+        return 'selected'
 
     @staticmethod
     def default_usage():
@@ -105,17 +108,32 @@ class Action(DeactivableMixin, ModelSQL, ModelView):
                     return action.action.id
 
     @classmethod
-    def get_action_values(cls, type_, action_ids):
-        Action = Pool().get(type_)
-        columns = set(Action._fields.keys())
-        columns.add('icon.rec_name')
-        to_remove = ()
+    def get_action_values(cls, type_, action_ids, columns=None):
+        pool = Pool()
+        Action = pool.get(type_)
+        if columns is None:
+            columns = []
+        columns += ['id', 'name', 'type', 'records', 'icon.rec_name']
         if type_ == 'ir.action.report':
-            to_remove = ('report_content_custom', 'report_content')
+            columns += ['report_name', 'direct_print']
         elif type_ == 'ir.action.act_window':
-            to_remove = ('domain', 'context', 'search_value')
-        columns.difference_update(to_remove)
-        return Action.read(action_ids, list(columns))
+            columns += [
+                'views', 'domains', 'res_model', 'limit',
+                'context_model', 'context_domain',
+                'pyson_domain', 'pyson_context', 'pyson_order',
+                'pyson_search_value']
+        elif type_ == 'ir.action.wizard':
+            columns += ['wiz_name', 'window']
+        elif type_ == 'ir.action.url':
+            columns += ['url']
+        actions = Action.read(action_ids, columns)
+        if type_ == 'ir.action.act_window':
+            for values in actions:
+                if (values['res_model']
+                        and issubclass(
+                            pool.get(values['res_model']), ModelSingleton)):
+                    values['res_id'] = 1
+        return actions
 
     def get_action_value(self):
         return self.get_action_values(
@@ -187,7 +205,7 @@ class ActionKeyword(ModelSQL, ModelView):
     def models_get():
         pool = Pool()
         Model = pool.get('ir.model')
-        return [(m.model, m.name) for m in Model.search([])]
+        return [(None, '')] + Model.get_name_items()
 
     @classmethod
     def delete(cls, keywords):
@@ -219,7 +237,9 @@ class ActionKeyword(ModelSQL, ModelView):
 
     @classmethod
     def get_keyword(cls, keyword, value):
-        Action = Pool().get('ir.action')
+        pool = Pool()
+        Action = pool.get('ir.action')
+        Menu = pool.get('ir.ui.menu')
         key = (keyword, tuple(value))
         keywords = cls._get_keyword_cache.get(key)
         if keywords is not None:
@@ -229,7 +249,10 @@ class ActionKeyword(ModelSQL, ModelView):
 
         clause = [
             ('keyword', '=', keyword),
-            ('model', '=', model + ',-1'),
+            ['OR',
+                ('model', '=', model + ',-1'),
+                ('model', '=', None),
+                ],
             ]
         if model_id >= 0:
             clause = ['OR',
@@ -249,6 +272,17 @@ class ActionKeyword(ModelSQL, ModelView):
             for value in Action.get_action_values(type_, action_ids):
                 value['keyword'] = keyword
                 keywords.append(value)
+        if keyword == 'tree_open' and model == Menu.__name__:
+            menu = Menu(model_id)
+            if menu.parent:
+                for value in keywords:
+                    if value['type'] == 'ir.action.act_window':
+                        parent = menu.parent
+                        if parent.name == value['name']:
+                            parent = parent.parent
+                        if parent:
+                            value['name'] = (
+                                parent.rec_name + ' / ' + value['name'])
         keywords.sort(key=itemgetter('name'))
         cls._get_keyword_cache.set(key, keywords)
         return keywords
@@ -516,10 +550,7 @@ class ActionReport(ActionMixin, ModelSQL, ModelView):
         string='Extension', help='Leave empty for the same as template, '
         'see LibreOffice documentation for compatible format.')
     module = fields.Char('Module', readonly=True, select=True)
-    email = fields.Char('Email',
-        help='Python dictonary where keys define "to" "cc" "subject"\n'
-        "Example: {'to': 'test@example.com', 'cc': 'user@example.com'}")
-    pyson_email = fields.Function(fields.Char('PySON Email'), 'get_pyson')
+    _template_cache = MemoryCache('ir.action.report.template', context=False)
 
     @classmethod
     def __register__(cls, module_name):
@@ -571,31 +602,6 @@ class ActionReport(ActionMixin, ModelSQL, ModelView):
     def default_module():
         return Transaction().context.get('module') or ''
 
-    @classmethod
-    def validate(cls, reports):
-        super(ActionReport, cls).validate(reports)
-        cls.check_email(reports)
-
-    @classmethod
-    def check_email(cls, reports):
-        "Check email"
-        for report in reports:
-            if report.email:
-                try:
-                    value = PYSONDecoder().decode(report.email)
-                except Exception:
-                    value = None
-                if isinstance(value, dict):
-                    inkeys = set(value)
-                    if not inkeys <= EMAIL_REFKEYS:
-                        raise EmailError(
-                            gettext('ir.msg_report_invalid_email',
-                                name=report.rec_name))
-                else:
-                    raise EmailError(
-                        gettext('ir.msg_report_invalid_email',
-                            name=report.rec_name))
-
     def get_is_custom(self, name):
         return bool(self.report_content_custom)
 
@@ -645,9 +651,7 @@ class ActionReport(ActionMixin, ModelSQL, ModelView):
     def get_pyson(cls, reports, name):
         pysons = {}
         field = name[6:]
-        defaults = {
-            'email': '{}',
-            }
+        defaults = {}
         for report in reports:
             pysons[report.id] = (getattr(report, field)
                 or defaults.get(field, 'null'))
@@ -682,7 +686,14 @@ class ActionReport(ActionMixin, ModelSQL, ModelView):
                 args.extend((reports, values))
             reports, values = args[:2]
             args = args[2:]
+        cls._template_cache.clear()
         super(ActionReport, cls).write(reports, values, *args)
+
+    def get_template_cached(self):
+        return self._template_cache.get(self.id)
+
+    def set_template_cached(self, template):
+        self._template_cache.set(self.id, template)
 
 
 class ActionActWindow(ActionMixin, ModelSQL, ModelView):
@@ -1019,12 +1030,22 @@ class ActionWizard(ActionMixin, ModelSQL, ModelView):
     action = fields.Many2One('ir.action', 'Action', required=True,
             ondelete='CASCADE')
     model = fields.Char('Model')
-    email = fields.Char('Email')
     window = fields.Boolean('Window', help='Run wizard in a new window.')
 
     @staticmethod
     def default_type():
         return 'ir.action.wizard'
+
+    @classmethod
+    def get_models(cls, name, action_id=None):
+        # TODO add cache
+        domain = [
+            (cls._action_name, '=', name),
+            ]
+        if action_id:
+            domain.append(('id', '=', action_id))
+        actions = cls.search(domain)
+        return {a.model for a in actions if a.model}
 
 
 class ActionURL(ActionMixin, ModelSQL, ModelView):

@@ -8,8 +8,8 @@ from werkzeug.exceptions import abort
 
 from trytond.config import config
 from trytond.wsgi import app
-from trytond.protocols.wrappers import (with_pool, with_pool_by_config,
-    with_transaction)
+from trytond.protocols.wrappers import (
+    with_pool, with_transaction, allow_null_origin, with_pool_by_config)
 from trytond.transaction import Transaction
 
 logger = logging.getLogger(__name__)
@@ -29,6 +29,7 @@ def readiness(request, pool):
 
 
 @app.route('/<database_name>/user/application/', methods=['POST', 'DELETE'])
+@allow_null_origin
 @with_pool
 @with_transaction(readonly=False)
 def user_application(request, pool):
@@ -65,7 +66,7 @@ def user_application(request, pool):
         return key
     elif request.method == 'DELETE':
         count = LoginAttempt.count(login)
-        if count > config.get('session', 'max_attempt', default=5):
+        if count > config.getint('session', 'max_attempt', default=5):
             LoginAttempt.add(login)
             abort(429)
         Transaction().atexit(time.sleep, 2 ** count - 1)

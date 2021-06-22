@@ -21,14 +21,15 @@ A module is a directory in trytond/modules which contains at least two files:
 --------------------
 
 It is the Python ``__init__.py`` to define a module. It must contains a method
-named `register()` that must register to the pool all the objects of the module.
+named ``register()`` that must register to the pool all the objects of the
+module.
 
 
 ``tryton.cfg`` file
 -------------------
 
 It is a configuration file using the format of `ConfigParser`_ that must
-contain `tryton` section with this following name:
+contain ``tryton`` section with this following name:
 
    * ``version``: The version number of the module.
 
@@ -38,7 +39,7 @@ contain `tryton` section with this following name:
      *may* depend.
 
    * ``xml``: The one per line list of the XML files of the module. They will
-     be loaded in the given order at the installation or update of the module.
+     be loaded in the given order when the module is activated or updated.
 
 Here is an example::
 
@@ -116,8 +117,9 @@ Here is the list of the tags:
 
         * ``noupdate`` to prevent the framework to update the records,
         * ``depends`` to import data only if all modules in the comma separated
-          module list value are installed,
+          module list value are activated,
         * ``grouped`` to create records at the end with a grouped call.
+        * ``language`` to import data only if the language is translatable.
 
     * ``record``: Create a record of the model defined by the attribute
       ``model`` in the database. The ``id`` attribute can be used to refer to
@@ -149,7 +151,7 @@ Here is the list of the tags:
           string.
 
         * ``depends``: set value only if all modules in the comma separated
-          module list value are installed.
+          module list value are activated.
 
         .. note::
             Field content is considered as a string. So for fields that require

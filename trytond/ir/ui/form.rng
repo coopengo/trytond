@@ -190,6 +190,7 @@
           <value>date</value>
           <value>datetime</value>
           <value>dict</value>
+          <value>document</value>
           <value>email</value>
           <value>float</value>
           <value>html</value>
@@ -467,12 +468,28 @@
   </define>
   <define name="attlist.field" combine="interleave">
     <optional>
+      <attribute>
+        <name ns="">help_field</name>
+        <text/>
+      </attribute>
+    </optional>
+  </define>
+  <define name="attlist.field" combine="interleave">
+    <optional>
       <attribute a:defaultValue="0">
         <name ns="">toolbar</name>
         <choice>
           <value>0</value>
           <value>1</value>
         </choice>
+      </attribute>
+    </optional>
+  </define>
+  <define name="attlist.field" combine="interleave">
+    <optional>
+      <attribute>
+        <name ns="">symbol</name>
+        <text/>
       </attribute>
     </optional>
   </define>
@@ -488,6 +505,25 @@
       <name ns="">name</name>
       <text/>
     </attribute>
+  </define>
+  <define name="attlist.image" combine="interleave">
+    <optional>
+      <attribute a:defaultValue="icon">
+        <name ns="">type</name>
+        <choice>
+          <value>icon</value>
+          <value>url</value>
+        </choice>
+      </attribute>
+    </optional>
+  </define>
+  <define name="attlist.affix" combine="interleave">
+    <optional>
+      <attribute>
+        <name ns="">url_size</name>
+        <text/>
+      </attribute>
+    </optional>
   </define>
   <define name="attlist.image" combine="interleave">
     <optional>
@@ -912,6 +948,7 @@
           <ref name="separator"/>
           <ref name="newline"/>
           <ref name="button"/>
+          <ref name="link"/>
           <ref name="notebook"/>
           <ref name="group"/>
           <ref name="hpaned"/>

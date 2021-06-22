@@ -7,8 +7,11 @@ import os
 import random
 import threading
 import time
+import urllib.parse
+import warnings
 from decimal import Decimal
 from weakref import WeakKeyDictionary
+from werkzeug.security import safe_join
 
 try:
     from pysqlite2 import dbapi2 as sqlite
@@ -24,7 +27,7 @@ from sql.functions import (Function, Extract, Position, Substring,
     Overlay, CharLength, CurrentTimestamp, Trim)
 
 from trytond.backend.database import DatabaseInterface, SQLType
-from trytond.config import config
+from trytond.config import config, parse_uri
 from trytond.transaction import Transaction
 
 __all__ = ['Database', 'DatabaseIntegrityError', 'DatabaseOperationalError']
@@ -321,6 +324,7 @@ class Database(DatabaseInterface):
         'DATETIME': SQLType('TIMESTAMP', 'TIMESTAMP'),
         'BIGINT': SQLType('INTEGER', 'INTEGER'),
         'BOOL': SQLType('BOOLEAN', 'BOOLEAN'),
+        'FULLTEXT': SQLType('TEXT', 'TEXT'),
         }
 
     def __new__(cls, name=_default_name):
@@ -338,16 +342,10 @@ class Database(DatabaseInterface):
         return 'SELECT 1'
 
     def connect(self):
-        if self.name == ':memory:':
-            path = ':memory:'
-        else:
-            db_filename = self.name + '.sqlite'
-            path = os.path.join(config.get('database', 'path'), db_filename)
-            if not os.path.isfile(path):
-                raise IOError('Database "%s" doesn\'t exist!' % path)
         if self._conn is not None:
             return self
-        self._conn = sqlite.connect(path,
+        self._conn = sqlite.connect(
+            self._make_uri(), uri=True,
             detect_types=sqlite.PARSE_DECLTYPES | sqlite.PARSE_COLNAMES,
             factory=SQLiteConnection)
         self._conn.create_function('extract', 2, SQLiteExtract.extract)
@@ -378,6 +376,17 @@ class Database(DatabaseInterface):
         self._conn.create_function('trunc', 1, math.trunc)
         self._conn.create_function('trunc', 2, trunc)
 
+        # Trigonomentric functions
+        self._conn.create_function('acos', 1, math.acos)
+        self._conn.create_function('asin', 1, math.asin)
+        self._conn.create_function('atan', 1, math.atan)
+        self._conn.create_function('atan2', 2, math.atan2)
+        self._conn.create_function('cos', 1, math.cos)
+        self._conn.create_function(
+            'cot', 1, lambda x: 1 / math.tan(x) if x else math.inf)
+        self._conn.create_function('sin', 1, math.sin)
+        self._conn.create_function('tan', 1, math.tan)
+
         # Random functions
         self._conn.create_function('random', 0, random.random)
         self._conn.create_function('setseed', 1, random.seed)
@@ -392,6 +401,30 @@ class Database(DatabaseInterface):
             self._conn.set_trace_callback(logger.debug)
         self._conn.execute('PRAGMA foreign_keys = ON')
         return self
+
+    def _make_uri(self):
+        uri = config.get('database', 'uri')
+        base_uri = parse_uri(uri)
+        if base_uri.path and base_uri.path != '/':
+            warnings.warn("The path specified in the URI will be overridden")
+
+        if self.name == ':memory:':
+            query_string = urllib.parse.parse_qs(base_uri.query)
+            query_string['mode'] = 'memory'
+            query = urllib.parse.urlencode(query_string, doseq=True)
+            db_uri = base_uri._replace(netloc='', path='/', query=query)
+        else:
+            db_path = safe_join(
+                config.get('database', 'path'), self.name + '.sqlite')
+            if not os.path.isfile(db_path):
+                raise IOError("Database '%s' doesn't exist!" % db_path)
+            db_uri = base_uri._replace(path=db_path)
+
+        # Use unparse before replacing sqlite with file because SQLite accepts
+        # a relative path URI like file:db/test.sqlite which doesn't conform to
+        # RFC8089 which urllib follows and enforces when the scheme is 'file'
+        db_uri = urllib.parse.urlunparse(db_uri)
+        return db_uri.replace('sqlite', 'file', 1)
 
     def get_connection(self, autocommit=False, readonly=False):
         if self._conn is None:
@@ -522,7 +555,7 @@ class Database(DatabaseInterface):
                             configuration.hostname))
                 except Exception:
                     return False
-                hostnames = {h for h, in cursor.fetchall() if h}
+                hostnames = {h for h, in cursor if h}
                 if hostnames and hostname not in hostnames:
                     return False
         return True

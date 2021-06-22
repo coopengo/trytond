@@ -12,7 +12,6 @@ except ImportError:
     from http import client as HTTPStatus
 
 from werkzeug.wrappers import Request as _Request, Response
-from werkzeug.utils import cached_property
 from werkzeug.http import wsgi_to_bytes, bytes_to_wsgi
 from werkzeug.datastructures import Authorization
 from werkzeug.exceptions import abort, HTTPException
@@ -20,6 +19,7 @@ from werkzeug.exceptions import abort, HTTPException
 from trytond import security, backend
 from trytond.exceptions import RateLimitException
 from trytond.pool import Pool
+from trytond.tools import cached_property
 from trytond.transaction import Transaction
 from trytond.config import config, parse_uri
 
@@ -29,6 +29,24 @@ logger = logging.getLogger(__name__)
 class Request(_Request):
 
     view_args = None
+
+    def __repr__(self):
+        args = []
+        try:
+            if self.url is None or isinstance(self.url, str):
+                url = self.url
+            else:
+                url = self.url.decode(self.url_charset)
+            auth = self.authorization
+            args.append("%s@%s" % (
+                    auth.get('userid', auth.username), self.remote_addr))
+            args.append("'%s'" % url)
+            args.append("[%s]" % self.method)
+            args.append("%s" % (self.rpc_method or ''))
+        except Exception:
+            args.append("(invalid WSGI environ)")
+        return "<%s %s>" % (
+            self.__class__.__name__, " ".join(filter(None, args)))
 
     @property
     def decoded_data(self):
@@ -73,6 +91,8 @@ class Request(_Request):
 
     @cached_property
     def user_id(self):
+        if not self.view_args:
+            return None
         database_name = self.view_args.get('database_name')
         if not database_name:
             return None
@@ -135,6 +155,11 @@ def set_max_request_size(size):
         func.max_request_size = size
         return func
     return decorator
+
+
+def allow_null_origin(func):
+    func.allow_null_origin = True
+    return func
 
 
 def with_pool(func):

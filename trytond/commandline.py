@@ -64,18 +64,25 @@ def get_parser_worker():
     return parser
 
 
+def get_parser_cron():
+    parser = get_parser_daemon()
+    parser.add_argument("-1", "--once", dest='once', action='store_true',
+        help="run pending tasks and halt")
+    return parser
+
+
 def get_parser_admin():
     parser = get_parser()
 
     parser.add_argument("-u", "--update", dest="update", nargs='+', default=[],
-        metavar='MODULE', help="update a module")
+        metavar='MODULE', help="activate or update a module")
     # ABDC: Add option to check if update is needed
     parser.add_argument("-cu", "--check-update", dest="check_update",
         nargs='+', default=[], metavar='VALUE',
         help="Verify if installed module versions has changed before playing "
         "the update")
     parser.add_argument("--all", dest="update", action="append_const",
-        const="ir", help="update all installed modules")
+        const="ir", help="update all activated modules")
     parser.add_argument("--activate-dependencies", dest="activatedeps",
         action="store_true",
         help="Activate missing dependencies of updated modules")
@@ -92,6 +99,11 @@ def get_parser_admin():
         default=[], metavar='CODE', help="Load language translations")
     parser.add_argument("--hostname", dest="hostname", default=None,
         help="Limit database listing to the hostname")
+    parser.add_argument("--validate", dest="validate", nargs='*',
+        metavar='MODEL', help="validate records of models")
+    parser.add_argument("--validate-percentage", dest="validate_percentage",
+        type=float, default=100, metavar="PERCENTAGE",
+        help="percentage of records to validate (default: 100)")
 
     parser.epilog = ('The first time a database is initialized '
         'or when the password is set, the admin password is read '
@@ -111,6 +123,12 @@ def get_parser_console():
     parser.add_argument("--histsize", dest="histsize", type=int, default=500,
         help="The number of commands to remember in the command history")
     parser.epilog = "To store changes, `transaction.commit()` must be called."
+    return parser
+
+
+def get_parser_stat():
+    parser = get_base_parser()
+    parser.epilog = "To exit press 'q', to inverse sort order press 'r'."
     return parser
 
 

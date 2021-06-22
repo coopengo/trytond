@@ -27,7 +27,11 @@ this repository contains the full copyright notices and license terms. -->
             <field name="sequence" eval="20"/>
             <field name="act_window" ref="act_message_form"/>
         </record>
-        <menuitem name="Messages" parent="menu_localization" action="act_message_form" id="menu_message_form" sequence="10"/>
+        <menuitem
+            parent="menu_localization"
+            action="act_message_form"
+            sequence="20"
+            id="menu_message_form"/>
     </data>
     <data grouped="1">
         <record model="ir.message" id="msg_ID">
@@ -108,8 +112,17 @@ this repository contains the full copyright notices and license terms. -->
         <record model="ir.message" id="msg_dict_schema_selection_sorted_help">
             <field name="text">If the selection must be sorted on label.</field>
         </record>
+        <record model="ir.message" id="msg_dict_schema_help_selection">
+            <field name="text">Help Selection</field>
+        </record>
+        <record model="ir.message" id="msg_dict_schema_help_selection_help">
+            <field name="text">The key followed by the help text separated by a ":", one per line.</field>
+        </record>
         <record model="ir.message" id="msg_dict_schema_selection_json">
             <field name="text">Selection JSON</field>
+        </record>
+        <record model="ir.message" id="msg_dict_schema_help_selection_json">
+            <field name="text">Help Selection JSON</field>
         </record>
         <record model="ir.message" id="msg_sequence">
             <field name="text">Sequence</field>
@@ -149,6 +162,9 @@ this repository contains the full copyright notices and license terms. -->
         </record>
         <record model="ir.message" id="msg_digits_validation_record">
             <field name="text">The number of digits in the value "%(value)s" for field "%(field)s" in "%(model)s" exceeds the limit of "%(digits)i".</field>
+        </record>
+        <record model="ir.message" id="msg_forbidden_char_validation_record">
+            <field name="text">The value "%(value)s" for field "%(field)s" in "%(model)s" contains some invalid chars "%(chars)s".</field>
         </record>
         <record model="ir.message" id="msg_selection_validation_record">
             <field name="text">The value "%(value)s" for field "%(field)s" in "%(model)s" is not one of the allowed options.</field>
@@ -195,6 +211,9 @@ this repository contains the full copyright notices and license terms. -->
         </record>
         <record model="ir.message" id="msg_dict_schema_invalid_selection">
             <field name="text">Invalid selection in schema "%(schema)s".</field>
+        </record>
+        <record model="ir.message" id="msg_dict_schema_invalid_help_selection">
+            <field name="text">Invalid help selection in schema "%(schema)s".</field>
         </record>
         <record model="ir.message" id="msg_recursion_error">
             <field name="text">Recursion error: Record "%(rec_name)s" with parent "%(parent_rec_name)s" was configured as ancestor of itself.</field>
@@ -245,6 +264,9 @@ this repository contains the full copyright notices and license terms. -->
         <record model="ir.message" id="msg_sequence_last_timestamp_future">
             <field name="text">The "Last Timestamp" cannot be in the future for sequence "%s".</field>
         </record>
+        <record model="ir.message" id="msg_sequence_change_sequence_type">
+            <field name="text">You cannot change the sequence type of a sequence instead create a new sequence.</field>
+        </record>
 
         <record model="ir.message" id="msg_language_invalid_grouping">
             <field name="text">Invalid grouping "%(grouping)s" for language "%(language)s".</field>
@@ -253,10 +275,10 @@ this repository contains the full copyright notices and license terms. -->
             <field name="text">Invalid date format "%(format)s" for language "%(language)s".</field>
         </record>
         <record model="ir.message" id="msg_language_default_translatable">
-            <field name="text">The default language must be translatable.</field>
+            <field name="text">The default language "%(language)s" must be translatable.</field>
         </record>
         <record model="ir.message" id="msg_language_delete_default">
-            <field name="text">The default language can not be deleted.</field>
+            <field name="text">The default language "%(language)s" can not be deleted.</field>
         </record>
 
         <record model="ir.message" id="msg_rule_invalid_domain">
@@ -310,6 +332,39 @@ this repository contains the full copyright notices and license terms. -->
         </record>
         <record model="ir.message" id="msg_notes">
             <field name="text">Notes</field>
+        </record>
+        <record model="ir.message" id="msg_access_wizard_error">
+            <field name="text">You are not allowed to execute wizard "%(wizard)s".</field>
+        </record>
+        <record model="ir.message" id="msg_access_wizard_model_error">
+            <field name="text">You are not allowed to execute wizard "%(wizard)s" on "%(model)s".</field>
+        </record>
+        <record model="ir.message" id="msg_email_template_invalid_subject">
+            <field name="text">Invalid subject in e-mail template "%(template)s" with exception "%(exception)s".</field>
+        </record>
+        <record model="ir.message" id="msg_email_template_invalid_body">
+            <field name="text">Invalid body in e-mail template "%(template)s" with exception "%(exception)s".</field>
+        </record>
+        <record model="ir.message" id="msg_email_template_invalid_field_pyson">
+            <field name="text">Invalid PYSON %(field)s in e-mail template "%(template)s" with exception "%(exception)s".</field>
+        </record>
+        <record model="ir.message" id="msg_email_template_invalid_field_pyson_type">
+            <field name="text">The PYSON %(field)s in e-mail template "%(template)s" must generate a list.</field>
+        </record>
+        <record model="ir.message" id="msg_avatar_resource_unique">
+            <field name="text">Only one avatar is allowed per resource.</field>
+        </record>
+        <record model="ir.message" id="msg_avatar_size_unique">
+            <field name="text">The size of an avatar must be unique.</field>
+        </record>
+        <record model="ir.message" id="msg_avatar">
+            <field name="text">Avatar</field>
+        </record>
+        <record model="ir.message" id="msg_avatars">
+            <field name="text">Avatars</field>
+        </record>
+        <record model="ir.message" id="msg_avatar_url">
+            <field name="text">Avatar URL</field>
         </record>
     </data>
 </tryton>

@@ -2,9 +2,11 @@
 # this repository contains the full copyright notices and license terms.
 import time
 import datetime
+import dateutil.tz
 import os
 import inspect
 import logging
+import math
 import subprocess
 import tempfile
 import warnings
@@ -14,6 +16,7 @@ import operator
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from io import BytesIO
+from itertools import groupby
 
 try:
     import html2text
@@ -90,7 +93,6 @@ TIMEDELTA_DEFAULT_CONVERTER['w'] = TIMEDELTA_DEFAULT_CONVERTER['d'] * 7
 TIMEDELTA_DEFAULT_CONVERTER['M'] = TIMEDELTA_DEFAULT_CONVERTER['d'] * 30
 TIMEDELTA_DEFAULT_CONVERTER['Y'] = TIMEDELTA_DEFAULT_CONVERTER['d'] * 365
 
-
 class UnoConversionError(UserError):
     pass
 
@@ -104,45 +106,14 @@ class ReportFactory:
         data.update(kwargs)
         return data
 
-
 class TranslateFactory:
 
-    def __init__(self, report_name, language, translation):
+    def __init__(self, report_name, translation):
         self.report_name = report_name
-        self.language = language
         self.translation = translation
-        self.cache = {}
 
     def __call__(self, text):
-        from trytond.ir.lang import get_parent_language
-        if self.language not in self.cache:
-            cache = self.cache[self.language] = {}
-            code = self.language
-            while code:
-                # Order to get empty module/custom report first
-                translations = self.translation.search([
-                    ('lang', '=', code),
-                    ('type', '=', 'report'),
-                    ('name', '=', self.report_name),
-                    ('value', '!=', ''),
-                    ('value', '!=', None),
-                    ('fuzzy', '=', False),
-                    ('res_id', '=', -1),
-                    ], order=[('module', 'DESC')])
-                for translation in translations:
-                    cache.setdefault(translation.src, translation.value)
-                code = get_parent_language(code)
-        return self.cache[self.language].get(text, text)
-
-    def set_language(self, language=None):
-        pool = Pool()
-        Config = pool.get('ir.configuration')
-        Lang = pool.get('ir.lang')
-        if isinstance(language, Lang):
-            language = language.code
-        if not language:
-            language = Config.get_language()
-        self.language = language
+        return self.translation.get_report(self.report_name, text)
 
 
 class Report(URLMixin, PoolBase):
@@ -167,6 +138,10 @@ class Report(URLMixin, PoolBase):
         report_groups = ActionReport.get_groups(cls.__name__)
         if report_groups and not groups & report_groups:
             raise UserError('Calling report %s is not allowed!' % cls.__name__)
+
+    @classmethod
+    def header_key(cls, record):
+        return ()
 
     @classmethod
     def execute(cls, ids, data):
@@ -194,31 +169,59 @@ class Report(URLMixin, PoolBase):
         else:
             action_report = ActionReport(action_id)
 
+        def report_name(records):
+            name = '-'.join(r.rec_name for r in records[:5])
+            if len(records) > 5:
+                name += '__' + str(len(records[5:]))
+            return name
+
         records = []
         model = action_report.model or data.get('model')
         if model:
             records = cls._get_records(ids, model, data)
-        if action_report.single and len(records) > 1:
+
+        if action_report.single:
+            groups = [[r] for r in records]
+            headers = [dict(cls.header_key(r)) for r in records]
+        else:
+            groups = []
+            headers = []
+            for key, group in groupby(records, key=cls.header_key):
+                groups.append(list(group))
+                headers.append(dict(key))
+
+        n = len(groups)
+        if n > 1:
+            padding = math.ceil(math.log10(n))
             content = BytesIO()
             with zipfile.ZipFile(content, 'w') as content_zip:
-                for record in records:
+                for i, (header, group_records) in enumerate(
+                        zip(headers, groups), 1):
                     oext, rcontent = cls._execute(
-                        [record], data, action_report)
-                    filename = slugify('%s-%s' % (record.id, record.rec_name))
+                        group_records, header, data, action_report)
+                    filename = report_name(group_records)
+                    number = str(i).zfill(padding)
+                    filename = slugify('%s-%s' % (number, filename))
                     rfilename = '%s.%s' % (filename, oext)
                     content_zip.writestr(rfilename, rcontent)
             content = content.getvalue()
             oext = 'zip'
         else:
-            oext, content = cls._execute(records, data, action_report)
+            oext, content = cls._execute(
+                groups[0], headers[0], data, action_report)
         if not isinstance(content, str):
             content = bytearray(content) if bytes == str else bytes(content)
-        return (oext, content, action_report.direct_print, action_report.name)
+        filename = '-'.join(
+            filter(None, [action_report.name, report_name(records)]))
+        return (oext, content, action_report.direct_print, filename)
 
     @classmethod
-    def _execute(cls, records, data, action):
-        report_context = cls.get_context(records, data)
-        return cls.convert(action, cls.render(action, report_context))
+    def _execute(cls, records, header, data, action):
+        # Ensure to restore original context
+        # set_lang may modify it
+        with Transaction().set_context(Transaction().context):
+            report_context = cls.get_context(records, header, data)
+            return cls.convert(action, cls.render(action, report_context))
 
     @classmethod
     def _get_records(cls, ids, model, data):
@@ -263,69 +266,62 @@ class Report(URLMixin, PoolBase):
         return [TranslateModel(id) for id in ids]
 
     @classmethod
-    def get_context(cls, records, data):
+    def get_context(cls, records, header, data):
         pool = Pool()
         User = pool.get('res.user')
+        Lang = pool.get('ir.lang')
 
         report_context = {}
+        report_context['header'] = header
         report_context['data'] = data
         report_context['context'] = Transaction().context
         report_context['user'] = User(Transaction().user)
         report_context['records'] = records
         report_context['record'] = records[0] if records else None
         report_context['format_date'] = cls.format_date
+        report_context['format_datetime'] = cls.format_datetime
         report_context['format_timedelta'] = cls.format_timedelta
         report_context['format_currency'] = cls.format_currency
         report_context['format_number'] = cls.format_number
         report_context['datetime'] = datetime
 
+        def set_lang(language=None):
+            if isinstance(language, Lang):
+                language = language.code
+            Transaction().set_context(language=language)
+        report_context['set_lang'] = set_lang
+
         return report_context
 
     @classmethod
-    def _prepare_template_file(cls, report):
-        # Convert to str as value from DB is not supported by StringIO
-        report_content = (bytes(report.report_content) if report.report_content
-            else None)
-        if not report_content:
-            raise Exception('Error', 'Missing report file!')
-
-        fd, path = tempfile.mkstemp(
-            suffix=(os.extsep + report.template_extension),
-            prefix='trytond_')
-        with open(path, 'wb') as f:
-            f.write(report_content)
-        return fd, path
-
-    @classmethod
-    def _add_translation_hook(cls, relatorio_report, context):
-        pool = Pool()
-        Translation = pool.get('ir.translation')
-
-        translate = TranslateFactory(cls.__name__, Transaction().language,
-            Translation)
-        context['set_lang'] = lambda language: translate.set_language(language)
-        translator = Translator(lambda text: translate(text))
-        relatorio_report.filters.insert(0, translator)
+    def _callback_loader(cls, report, template):
+        if report.translatable:
+            pool = Pool()
+            Translation = pool.get('ir.translation')
+            translate = TranslateFactory(cls.__name__, Translation)
+            translator = Translator(lambda text: translate(text))
+            # Do not use Translator.setup to add filter at the end
+            # after set_lang evaluation
+            template.filters.append(translator)
+            if hasattr(template, 'add_directives'):
+                template.add_directives(Translator.NAMESPACE, translator)
 
     @classmethod
     def render(cls, report, report_context):
         "calls the underlying templating engine to renders the report"
-        fd, path = cls._prepare_template_file(report)
-
-        mimetype = MIMETYPES[report.template_extension]
-        rel_report = relatorio.reporting.Report(path, mimetype,
-                ReportFactory(), relatorio.reporting.MIMETemplateLoader())
-        if report.translatable:
-            cls._add_translation_hook(rel_report, report_context)
-        else:
-            report_context['set_lang'] = lambda language: None
-
-        data = rel_report(**report_context).render()
+        template = report.get_template_cached()
+        if template is None:
+            mimetype = MIMETYPES[report.template_extension]
+            loader = relatorio.reporting.MIMETemplateLoader()
+            # JMO merge_60 TODO: check here if we need to use something
+            # like ReportFactory
+            klass = loader.factories[loader.get_type(mimetype)]
+            template = klass(BytesIO(report.report_content))
+            cls._callback_loader(report, template)
+            report.set_template_cached(template)
+        data = template.generate(**report_context).render()
         if hasattr(data, 'getvalue'):
             data = data.getvalue()
-        os.close(fd)
-        os.remove(path)
-
         return data
 
     @classmethod
@@ -440,6 +436,20 @@ class Report(URLMixin, PoolBase):
         return lang.strftime(value, format=format)
 
     @classmethod
+    def format_datetime(cls, value, lang=None, format=None, timezone=None):
+        pool = Pool()
+        Lang = pool.get('ir.lang')
+        if lang is None:
+            lang = Lang.get()
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=dateutil.tz.tzutc())
+        if timezone:
+            if isinstance(timezone, str):
+                timezone = dateutil.tz.gettz(timezone)
+            value = value.astimezone(timezone)
+        return lang.strftime(value, format)
+
+    @classmethod
     def format_timedelta(cls, value, converter=None, lang=None):
         pool = Pool()
         Lang = pool.get('ir.lang')
@@ -483,13 +493,14 @@ class Report(URLMixin, PoolBase):
         return text
 
     @classmethod
-    def format_currency(cls, value, lang, currency, symbol=True,
-            grouping=True):
+    def format_currency(
+            cls, value, lang, currency, symbol=True, grouping=True,
+            digits=None):
         pool = Pool()
         Lang = pool.get('ir.lang')
         if lang is None:
             lang = Lang.get()
-        return lang.currency(value, currency, symbol, grouping)
+        return lang.currency(value, currency, symbol, grouping, digits=digits)
 
     @classmethod
     def format_number(cls, value, lang, digits=2, grouping=True,

@@ -1,7 +1,7 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
 
-from trytond.model import ModelView, ModelSQL, fields
+from trytond.model import ModelView, ModelSQL, DictSchemaMixin, fields
 from trytond.pool import Pool
 from trytond.pyson import If, Eval
 
@@ -20,6 +20,16 @@ class ModelViewChangedValues(ModelView):
         'Targets')
     m2m_targets = fields.Many2Many('test.modelview.changed_values.target',
         None, None, 'Targets')
+    multiselection = fields.MultiSelection([
+            ('a', 'A'), ('b', 'B'),
+            ], "MultiSelection")
+    dictionary = fields.Dict(
+        'test.modelview.changed_values.dictionary', "Dictionary")
+
+
+class ModelViewChangedValuesDictSchema(DictSchemaMixin, ModelSQL):
+    'ModelView Changed Values Dict Schema'
+    __name__ = 'test.modelview.changed_values.dictionary'
 
 
 class ModelViewChangedValuesTarget(ModelView):
@@ -33,6 +43,20 @@ class ModelViewChangedValuesStoredTarget(ModelSQL):
     "ModelSQL Changed Values Target"
     __name__ = 'test.modelview.changed_values.stored_target'
     name = fields.Char("Name")
+
+
+class ModelViewStoredChangedValues(ModelSQL, ModelView):
+    "ModelView Stored Changed Values Stored"
+    __name__ = 'test.modelview.stored.changed_values'
+    targets = fields.One2Many(
+        'test.modelview.stored.changed_values.target', 'parent', "Targets")
+
+
+class ModelViewStoredChangedValuesTarget(ModelSQL, ModelView):
+    "ModelSQL Stored Changed Values Target"
+    __name__ = 'test.modelview.stored.changed_values.target'
+    name = fields.Char("Name")
+    parent = fields.Many2One('test.modelview.stored.changed_values', "Parent")
 
 
 class ModelViewButton(ModelView):
@@ -97,6 +121,29 @@ class ModelViewButtonAction(ModelView):
     @ModelView.button_action('tests.test_modelview_button_action')
     def test_update(cls, records):
         return {'url': 'http://www.tryton.org/'}
+
+
+class ModelViewButtonChange(ModelView):
+    "ModelView Button Change"
+    __name__ = 'test.modelview.button_change'
+
+    name = fields.Char("Name")
+    extra = fields.Char("Extra")
+
+    @classmethod
+    def __setup__(cls):
+        super().__setup__()
+        cls._buttons = {
+            'test': {}
+            }
+
+    @ModelView.button_change('name', methods=['extra_method'])
+    def test(self):
+        self.extra_method()
+
+    @fields.depends('extra')
+    def extra_method(self):
+        pass
 
 
 class ModelViewLink(ModelView):
@@ -175,6 +222,15 @@ class ModelViewCircularDepends(ModelView):
     foobar = fields.Char("Char", depends=['foo'])
 
 
+class ModeViewDependsDepends(ModelView):
+    "ModelView depends of depends"
+    __name__ = 'test.modelview.depends_depends'
+
+    foo = fields.Char("Foo", depends=['bar'])
+    bar = fields.Char("Bar", depends=['baz'])
+    baz = fields.Char("Baz")
+
+
 class ModelViewViewAttributes(ModelView):
     'ModelView View Attributes'
     __name__ = 'test.modelview.view_attributes'
@@ -207,16 +263,21 @@ class ModelViewViewAttributesDepends(ModelView):
 def register(module):
     Pool.register(
         ModelViewChangedValues,
+        ModelViewChangedValuesDictSchema,
         ModelViewChangedValuesTarget,
         ModelViewChangedValuesStoredTarget,
+        ModelViewStoredChangedValues,
+        ModelViewStoredChangedValuesTarget,
         ModelViewButton,
         ModelViewButtonDepends,
         ModelViewButtonAction,
+        ModelViewButtonChange,
         ModelViewLink,
         ModelViewLinkTarget,
         ModelViewRPC,
         ModelViewEmptyPage,
         ModelViewCircularDepends,
+        ModeViewDependsDepends,
         ModelViewViewAttributes,
         ModelViewViewAttributesDepends,
         module=module, type_='model')

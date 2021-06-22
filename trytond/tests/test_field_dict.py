@@ -7,9 +7,8 @@ from trytond.model.dictschema import SelectionError
 from trytond.model.exceptions import RequiredValidationError
 from trytond.pool import Pool
 from trytond.tests.test_tryton import activate_module, with_transaction
+from trytond.tests.test_tryton import ExtensionTestCase
 from trytond.transaction import Transaction
-
-from .test_field_char import UnaccentedTestCase
 
 
 class FieldDictTestCase(unittest.TestCase):
@@ -887,11 +886,25 @@ class FieldDictTestCase(unittest.TestCase):
         self.assertDictEqual(
             dict_.dico_string_keys, {'a': 'A', 'type': "Type"})
 
+    @with_transaction
+    def test_set_key(self):
+        "Test setting a key of dict"
+        Dict = Pool().get('test.dict')
+        self.create_schema()
+
+        dict_, = Dict.create([{
+                    'dico': {'a': 1, 'type': 'arabic'},
+                    }])
+
+        with self.assertRaises(TypeError):
+            dict.dico['a'] = 5
+
 
 @unittest.skipUnless(backend.name == 'postgresql',
     "unaccent works only on postgresql")
-class FieldDictUnaccentedTestCase(UnaccentedTestCase):
+class FieldDictUnaccentedTestCase(ExtensionTestCase):
     "Test Field Dict with unaccented searched"
+    extension = 'unaccent'
 
     @classmethod
     def setUpClass(cls):

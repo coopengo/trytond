@@ -3,21 +3,16 @@
 from sql import Null
 from sql.operators import Concat
 
+from trytond.config import config
 from trytond.i18n import lazy_gettext
-from ..model import ModelView, ModelSQL, fields
-from ..transaction import Transaction
-from ..pyson import Eval
+from trytond.model import ModelView, ModelSQL, fields
+from trytond.pool import Pool
+from trytond.pyson import Eval
+from trytond.tools import firstline
+from trytond.transaction import Transaction
 from .resource import ResourceMixin, resource_copy
-from ..config import config
 
 __all__ = ['AttachmentCopyMixin']
-
-
-def firstline(description):
-    try:
-        return next((x for x in description.splitlines() if x.strip()))
-    except StopIteration:
-        return ''
 
 
 if config.getboolean('attachment', 'filestore', default=True):
@@ -101,6 +96,17 @@ class Attachment(ResourceMixin, ModelSQL, ModelView):
     @fields.depends('description')
     def on_change_with_summary(self, name=None):
         return firstline(self.description or '')
+
+    @classmethod
+    def fields_view_get(cls, view_id=None, view_type='form', level=None):
+        pool = Pool()
+        ModelData = pool.get('ir.model.data')
+        if not view_id:
+            if Transaction().context.get('preview'):
+                view_id = ModelData.get_id(
+                    'ir', 'attachment_view_form_preview')
+        return super().fields_view_get(
+            view_id=view_id, view_type=view_type, level=level)
 
 
 class AttachmentCopyMixin(

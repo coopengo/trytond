@@ -102,6 +102,21 @@ class CommonTestCaseMixin:
         self.assertListEqual(one2manys, [one2many])
 
     @with_transaction()
+    def test_search_equals_no_link(self):
+        "Test search one2many equals without link"
+        One2Many = self.One2Many()
+        one2many, no_link = One2Many.create([{
+                    'targets': [('create', [{'name': "Target"}])],
+                    }, {
+                    }])
+
+        one2manys = One2Many.search([
+                ('targets', '=', "Target"),
+                ])
+
+        self.assertListEqual(one2manys, [one2many])
+
+    @with_transaction()
     def test_search_non_equals(self):
         "Test search one2many non equals"
         One2Many = self.One2Many()
@@ -146,6 +161,21 @@ class CommonTestCaseMixin:
                 ])
 
         self.assertListEqual(one2manys, [one2many1])
+
+    @with_transaction()
+    def test_search_non_equals_no_link(self):
+        "Test search one2many non equals without link"
+        One2Many = self.One2Many()
+        one2many, no_link = One2Many.create([{
+                    'targets': [('create', [{'name': "Target"}])],
+                    }, {
+                    }])
+
+        one2manys = One2Many.search([
+                ('targets', '!=', "Target"),
+                ])
+
+        self.assertListEqual(one2manys, [no_link])
 
     @with_transaction()
     def test_search_in(self):
@@ -369,6 +399,23 @@ class CommonTestCaseMixin:
 
         self.assertTupleEqual(one2many.targets, (target2,))
         self.assertListEqual(targets, [target2])
+
+    @with_transaction()
+    def test_write_not_readd(self):
+        "Test write one2many do not re-add existing"
+        One2Many = self.One2Many()
+        one2many, = One2Many.create([{
+                    'targets': [('create', [{}])],
+                    }])
+
+        target, = one2many.targets
+
+        One2Many.write([one2many], {
+                    'targets': [('add', {target.id})],
+                    })
+
+        target, = one2many.targets
+        self.assertIsNone(target.write_date)
 
 
 class FieldOne2ManyTestCase(unittest.TestCase, CommonTestCaseMixin):

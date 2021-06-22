@@ -11,6 +11,7 @@ import datetime
 import logging
 import uuid
 import mmap
+import re
 try:
     import secrets
 except ImportError:
@@ -23,7 +24,7 @@ from itertools import groupby
 from operator import attrgetter
 from ast import literal_eval
 
-from sql import Literal
+from sql import Literal, Null
 from sql.functions import CurrentTimestamp
 from sql.conditionals import Coalesce, Case
 from sql.aggregate import Count
@@ -37,31 +38,27 @@ try:
 except ImportError:
     bcrypt = None
 
+from trytond.cache import Cache
+from trytond.config import config
+from trytond.exceptions import LoginException, RateLimitException
 from trytond.exceptions import UserError
 from trytond.i18n import gettext
-from ..model import (
-    ModelView, ModelSQL, Workflow, DeactivableMixin, fields, Unique)
-from ..wizard import Wizard, StateView, Button, StateTransition
-from ..tools import grouped_slice
-from ..transaction import Transaction
-from ..cache import Cache
-from ..pool import Pool
-from ..config import config
-from ..pyson import PYSONEncoder, Eval, Bool
-from ..rpc import RPC
-from ..exceptions import LoginException, RateLimitException
+from trytond.model import (
+    ModelView, ModelSQL, Workflow, DeactivableMixin, fields, Unique,
+    avatar_mixin)
+from trytond.pool import Pool
+from trytond.pyson import PYSONEncoder, Eval, Bool
 from trytond.report import Report, get_email
+from trytond.rpc import RPC
 from trytond.sendmail import sendmail_transactional
+from trytond.tools import grouped_slice
+from trytond.transaction import Transaction
 from trytond.url import host, http_host
+from trytond.wizard import Wizard, StateView, Button, StateTransition
 
-__all__ = [
-    'User', 'LoginAttempt', 'UserAction', 'UserGroup', 'Warning_',
-    'UserApplication', 'EmailResetPassword',
-    'UserConfigStart', 'UserConfig',
-    ]
 logger = logging.getLogger(__name__)
-_has_password = 'password' in config.get(
-    'session', 'authentications', default='password').split(',')
+_has_password = 'password' in re.split('[,+]', config.get(
+    'session', 'authentications', default='password'))
 
 passlib_path = config.get('password', 'passlib')
 if passlib_path:
@@ -84,17 +81,16 @@ def gen_password(length=8):
 
 
 def _send_email(from_, users, email_func):
-    if from_ is None:
-        from_ = config.get('email', 'from')
+    from_cfg = config.get('email', 'from')
     for user in users:
         if not user.email:
             logger.info("Missing address for '%s' to send email", user.login)
             continue
         msg, title = email_func(user)
-        msg['From'] = from_
+        msg['From'] = from_ or from_cfg
         msg['To'] = user.email
         msg['Subject'] = Header(title, 'utf-8')
-        sendmail_transactional(from_, [user.email], msg)
+        sendmail_transactional(from_cfg, [user.email], msg)
 
 
 class PasswordError(UserError):
@@ -105,7 +101,7 @@ class DeleteError(UserError):
     pass
 
 
-class User(DeactivableMixin, ModelSQL, ModelView):
+class User(avatar_mixin(100, 'login'), DeactivableMixin, ModelSQL, ModelView):
     "User"
     __name__ = "res.user"
     name = fields.Char('Name', select=True)
@@ -134,7 +130,8 @@ class User(DeactivableMixin, ModelSQL, ModelView):
         domain=[('usage', '=', 'menu')], required=True)
     pyson_menu = fields.Function(fields.Char('PySON Menu'), 'get_pyson_menu')
     actions = fields.Many2Many('res.user-ir.action', 'user', 'action',
-        'Actions', help='Actions that will be run at login.')
+        'Actions', help='Actions that will be run at login.',
+        size=5)
     groups = fields.Many2Many('res.user-res.group',
        'user', 'group', 'Groups')
     applications = fields.One2Many(
@@ -147,11 +144,13 @@ class User(DeactivableMixin, ModelSQL, ModelView):
             'get_language_direction')
     email = fields.Char('Email')
     status_bar = fields.Function(fields.Char('Status Bar'), 'get_status_bar')
+    avatar_badge_url = fields.Function(
+        fields.Char("Avatar Badge URL"), 'get_avatar_badge_url')
     warnings = fields.One2Many('res.user.warning', 'user', 'Warnings')
     sessions = fields.Function(fields.Integer('Sessions'),
             'get_sessions')
     _get_preferences_cache = Cache('res_user.get_preferences')
-    _get_groups_cache = Cache('res_user.get_groups')
+    _get_groups_cache = Cache('res_user.get_groups', context=False)
     _get_login_cache = Cache('res_user._get_login', context=False)
 
     @classmethod
@@ -182,6 +181,9 @@ class User(DeactivableMixin, ModelSQL, ModelView):
             'pyson_menu',
             'actions',
             'status_bar',
+            'avatar',
+            'avatar_url',
+            'avatar_badge_url',
             'warnings',
             'applications',
         ]
@@ -194,6 +196,9 @@ class User(DeactivableMixin, ModelSQL, ModelView):
 
     @classmethod
     def __register__(cls, module_name):
+        pool = Pool()
+        ModelData = pool.get('ir.model.data')
+        model_data = ModelData.__table__()
         cursor = Transaction().connection.cursor()
         super(User, cls).__register__(module_name)
         table = cls.__table_handler__(module_name)
@@ -211,6 +216,13 @@ class User(DeactivableMixin, ModelSQL, ModelView):
 
         # Migration from 4.2: Remove required on name
         table.not_null_action('name', action='remove')
+
+        # Migration from 5.6: Set noupdate to admin
+        cursor.execute(*model_data.update(
+                [model_data.noupdate], [True],
+                where=(model_data.model == cls.__name__)
+                & (model_data.module == 'res')
+                & (model_data.fs_id == 'user_admin')))
 
     @staticmethod
     def default_menu():
@@ -237,6 +249,9 @@ class User(DeactivableMixin, ModelSQL, ModelView):
 
     def get_status_bar(self, name):
         return self.name
+
+    def get_avatar_badge_url(self, name):
+        pass
 
     def get_password(self, name):
         return 'x' * 10
@@ -279,9 +294,9 @@ class User(DeactivableMixin, ModelSQL, ModelView):
         for user in users:
             # Use getattr to allow to use non User instances
             for test, message in [
-                    (getattr(user, 'name', ''), 'msg_password_name'),
-                    (getattr(user, 'login', ''), 'msg_password_login'),
-                    (getattr(user, 'email', ''), 'msg_password_email'),
+                    (getattr(user, 'name', ''), 'res.msg_password_name'),
+                    (getattr(user, 'login', ''), 'res.msg_password_login'),
+                    (getattr(user, 'email', ''), 'res.msg_password_email'),
                     ]:
                 if test and password.lower() == test.lower():
                     raise PasswordError(gettext(message))
@@ -324,7 +339,7 @@ class User(DeactivableMixin, ModelSQL, ModelView):
         Session = Pool().get('ir.session')
         now = datetime.datetime.now()
         timeout = datetime.timedelta(
-            seconds=config.getint('session', 'timeout'))
+            seconds=config.getint('session', 'max_age'))
         result = dict((u.id, 0) for u in users)
         with Transaction().set_user(0):
             for sub_ids in grouped_slice(users):
@@ -393,8 +408,7 @@ class User(DeactivableMixin, ModelSQL, ModelView):
         for cache in Transaction().cache.values():
             if cls.__name__ in cache:
                 for user in all_users:
-                    if user.id in cache[cls.__name__]:
-                        cache[cls.__name__][user.id].clear()
+                    cache[cls.__name__].pop(user.id, None)
         # Restart the cache for domain_get method
         pool = Pool()
         pool.get('ir.rule')._domain_get_cache.clear()
@@ -471,14 +485,14 @@ class User(DeactivableMixin, ModelSQL, ModelView):
                     else:
                         res['language'] = Config.get_language()
                 else:
-                    res[field] = None
                     if getattr(user, field):
                         res[field] = getattr(user, field).id
                         res[field + '.rec_name'] = \
                             getattr(user, field).rec_name
             elif cls._fields[field]._type in ('one2many', 'many2many'):
                 res[field] = [x.id for x in getattr(user, field)]
-                if field == 'actions' and user.login == 'admin':
+                admin_id = ModelData.get_id('res.user_admin')
+                if field == 'actions' and user.id == admin_id:
                     config_wizard_id = ModelData.get_id('ir',
                         'act_module_config_wizard')
                     action_id = Action.get_action_id(config_wizard_id)
@@ -593,15 +607,22 @@ class User(DeactivableMixin, ModelSQL, ModelView):
         return res
 
     @classmethod
-    def get_groups(cls):
+    def get_groups(cls, name=None):
         '''
-        Return a list of group ids for the user
+        Return a list of all group ids for the user
         '''
         user = Transaction().user
         groups = cls._get_groups_cache.get(user)
         if groups is not None:
             return groups
-        groups = cls.read([Transaction().user], ['groups'])[0]['groups']
+        pool = Pool()
+        UserGroup = pool.get('res.user-res.group')
+        cursor = Transaction().connection.cursor()
+        user_group = UserGroup.user_group_all_table()
+        cursor.execute(*user_group.select(
+                user_group.group,
+                where=user_group.user == user))
+        groups = [g for g, in cursor]
         cls._get_groups_cache.set(user, groups)
         return groups
 
@@ -644,17 +665,21 @@ class User(DeactivableMixin, ModelSQL, ModelView):
             LoginAttempt.add(login, device_cookie)
             raise RateLimitException()
         Transaction().atexit(time.sleep, random.randint(0, 2 ** count - 1))
-        for method in config.get(
+        for methods in config.get(
                 'session', 'authentications', default='password').split(','):
-            try:
-                func = getattr(cls, '_login_%s' % method)
-            except AttributeError:
-                logger.info('Missing login method: %s', method)
-                continue
-            user_id = func(login, parameters)
-            if user_id:
+            user_ids = set()
+            for method in methods.split('+'):
+                try:
+                    func = getattr(cls, '_login_%s' % method)
+                except AttributeError:
+                    logger.info('Missing login method: %s', method)
+                    break
+                user_ids.add(func(login, parameters))
+                if len(user_ids) != 1 or not all(user_ids):
+                    break
+            if len(user_ids) == 1 and all(user_ids):
                 LoginAttempt.remove(login, device_cookie)
-                return user_id
+                return user_ids.pop()
         LoginAttempt.add(login, device_cookie)
 
     @classmethod
@@ -798,16 +823,17 @@ class LoginAttempt(ModelSQL):
 
     @classmethod
     @_login_size
-    def remove(cls, login, cookie):
+    def remove(cls, login, device_cookie=None):
         cursor = Transaction().connection.cursor()
         table = cls.__table__()
         cursor.execute(*table.delete(
-                where=(table.login == login) & (table.device_cookie == cookie)
+                where=(table.login == login)
+                & (table.device_cookie == device_cookie)
                 ))
 
     @classmethod
     @_login_size
-    def count(cls, login, device_cookie):
+    def count(cls, login, device_cookie=None):
         cursor = Transaction().connection.cursor()
         table = cls.__table__()
         cursor.execute(*table.select(Count(Literal('*')),
@@ -924,6 +950,68 @@ class UserGroup(ModelSQL):
     group = fields.Many2One('res.group', 'Group', ondelete='CASCADE',
             select=True, required=True)
 
+    @classmethod
+    def create(cls, vlist):
+        records = super().create(vlist)
+        pool = Pool()
+        # Restart the cache on the domain_get method
+        pool.get('ir.rule')._domain_get_cache.clear()
+        # Restart the cache for get_groups
+        pool.get('res.user')._get_groups_cache.clear()
+        # Restart the cache for get_preferences
+        pool.get('res.user')._get_preferences_cache.clear()
+        # Restart the cache for model access and view
+        pool.get('ir.model.access')._get_access_cache.clear()
+        pool.get('ir.model.field.access')._get_access_cache.clear()
+        ModelView._fields_view_get_cache.clear()
+        return records
+
+    @classmethod
+    def write(cls, groups, values, *args):
+        super().write(groups, values, *args)
+        pool = Pool()
+        # Restart the cache on the domain_get method
+        pool.get('ir.rule')._domain_get_cache.clear()
+        # Restart the cache for get_groups
+        pool.get('res.user')._get_groups_cache.clear()
+        # Restart the cache for get_preferences
+        pool.get('res.user')._get_preferences_cache.clear()
+        # Restart the cache for model access and view
+        pool.get('ir.model.access')._get_access_cache.clear()
+        pool.get('ir.model.field.access')._get_access_cache.clear()
+        ModelView._fields_view_get_cache.clear()
+
+    @classmethod
+    def delete(cls, groups):
+        super().delete(groups)
+        pool = Pool()
+        # Restart the cache on the domain_get method
+        pool.get('ir.rule')._domain_get_cache.clear()
+        # Restart the cache for get_groups
+        pool.get('res.user')._get_groups_cache.clear()
+        # Restart the cache for get_preferences
+        pool.get('res.user')._get_preferences_cache.clear()
+        # Restart the cache for model access and view
+        pool.get('ir.model.access')._get_access_cache.clear()
+        pool.get('ir.model.field.access')._get_access_cache.clear()
+        ModelView._fields_view_get_cache.clear()
+
+    @classmethod
+    def user_group_all_table(cls):
+        pool = Pool()
+        Group = pool.get('res.group')
+        user_group = cls.__table__()
+        group_parents = Group.group_parent_all_cte()
+
+        return (user_group
+            .join(group_parents,
+                condition=user_group.group == group_parents.id)
+            .select(
+                user_group.user.as_('user'),
+                group_parents.parent.as_('group'),
+                where=group_parents.parent != Null,
+                with_=group_parents))
+
 
 class Warning_(ModelSQL, ModelView):
     'User Warning'
@@ -935,8 +1023,10 @@ class Warning_(ModelSQL, ModelView):
 
     @classmethod
     def check(cls, warning_name):
-        user = Transaction().user
-        if not user:
+        transaction = Transaction()
+        user = transaction.user
+        context = transaction.context
+        if not user or context.get('_skip_warnings'):
             return False
         warnings = cls.search([
             ('user', '=', user),
@@ -1054,10 +1144,10 @@ class EmailResetPassword(Report):
     __name__ = 'res.user.email_reset_password'
 
     @classmethod
-    def get_context(cls, records, data):
+    def get_context(cls, records, header, data):
         pool = Pool()
         Lang = pool.get('ir.lang')
-        context = super(EmailResetPassword, cls).get_context(records, data)
+        context = super().get_context(records, header, data)
         lang = Lang.get()
         context['host'] = host()
         context['http_host'] = http_host()

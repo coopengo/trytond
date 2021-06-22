@@ -1,6 +1,6 @@
 # This file is part of Tryton.  The COPYRIGHT file at the toplevel of this
 # repository contains the full copyright notices and license terms.
-from sql import Union, Column, Literal, Cast
+from sql import Union, Column, Literal
 
 from trytond.model import fields
 from trytond.pool import Pool
@@ -56,7 +56,7 @@ class UnionMixin:
             if name == 'id' or hasattr(field, 'set'):
                 continue
             column = cls.union_column(name, field, table, Model)
-            columns.append(Cast(column, field.sql_type().base).as_(name))
+            columns.append(field.sql_cast(column).as_(name))
         return table, columns
 
     @classmethod

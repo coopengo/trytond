@@ -4,6 +4,7 @@ import base64
 import http.client
 import logging
 import os
+import posixpath
 import sys
 import traceback
 import urllib.parse
@@ -25,6 +26,10 @@ try:
 except ImportError:
     from werkzeug.contrib.fixers import ProxyFix as NumProxyFix
 try:
+    from werkzeug.security import safe_join
+except ImportError:
+    safe_join = posixpath.join
+try:
     from werkzeug.middleware.shared_data import SharedDataMiddleware
 except ImportError:
     from werkzeug.wsgi import SharedDataMiddleware
@@ -35,6 +40,7 @@ from trytond.config import config
 from trytond.protocols.wrappers import Request
 from trytond.protocols.jsonrpc import JSONProtocol
 from trytond.protocols.xmlrpc import XMLProtocol
+from trytond.status import processing
 from trytond.tools import resolve
 
 __all__ = ['TrytondWSGI', 'app']
@@ -48,7 +54,7 @@ class Base64Converter(BaseConverter):
         return base64.urlsafe_b64decode(value).decode('utf-8')
 
     def to_url(self, value):
-        return base64.urlsafe_b64encode(value.encode('utf-8'))
+        return base64.urlsafe_b64encode(value.encode('utf-8')).decode('ascii')
 
 
 class TrytondWSGI(object):
@@ -60,9 +66,10 @@ class TrytondWSGI(object):
         self.protocols = [JSONProtocol, XMLProtocol]
         self.error_handlers = []
 
-    def route(self, string, methods=None):
+    def route(self, string, methods=None, defaults=None):
         def decorator(func):
-            self.url_map.add(Rule(string, endpoint=func, methods=methods))
+            self.url_map.add(Rule(
+                    string, endpoint=func, methods=methods, defaults=defaults))
             return func
         return decorator
 
@@ -76,9 +83,10 @@ class TrytondWSGI(object):
         if request.user_id:
             return wrapped(*args, **kwargs)
         else:
-            response = Response(
-                None, http.client.UNAUTHORIZED,
-                {'WWW-Authenticate': 'Basic realm="Tryton"'})
+            headers = {}
+            if request.headers.get('X-Requested-With') != 'XMLHttpRequest':
+                headers['WWW-Authenticate'] = 'Basic realm="Tryton"'
+            response = Response(None, http.client.UNAUTHORIZED, headers)
             abort(http.client.UNAUTHORIZED, response=response)
 
     def check_request_size(self, request, size=None):
@@ -108,8 +116,12 @@ class TrytondWSGI(object):
             self.check_request_size(request, max_request_size)
             return endpoint(request, **request.view_args)
         except HTTPException as e:
+            logger.debug(
+                "Exception when processing %s", request, exc_info=True)
             return e
         except Exception as e:
+            logger.debug(
+                "Exception when processing %s", request, exc_info=True)
             tb_s = ''.join(traceback.format_exception(*sys.exc_info()))
             for path in sys.path:
                 tb_s = tb_s.replace(path, '')
@@ -137,7 +149,10 @@ class TrytondWSGI(object):
                     break
             else:
                 if isinstance(data, Exception):
-                    response = InternalServerError(data)
+                    try:
+                        response = InternalServerError(original_exception=data)
+                    except TypeError:
+                        response = InternalServerError(data)
                 else:
                     response = Response(data)
         return response
@@ -149,21 +164,28 @@ class TrytondWSGI(object):
                 break
         else:
             request = Request(environ)
+        logger.info('%s', request)
 
         origin = request.headers.get('Origin')
         origin_host = urllib.parse.urlparse(origin).netloc if origin else ''
         host = request.headers.get('Host')
-        if origin and origin_host != host:
+        if origin and origin != 'null' and origin_host != host:
             cors = filter(
                 None, config.get('web', 'cors', default='').splitlines())
             if origin not in cors:
                 abort(HTTPStatus.FORBIDDEN)
+        if origin == 'null':
+            adapter = self.url_map.bind_to_environ(request.environ)
+            endpoint = adapter.match()[0]
+            if not getattr(endpoint, 'allow_null_origin', False):
+                abort(HTTPStatus.FORBIDDEN)
 
-        data = self.dispatch_request(request)
-        if not isinstance(data, (Response, HTTPException)):
-            response = self.make_response(request, data)
-        else:
-            response = data
+        with processing(request):
+            data = self.dispatch_request(request)
+            if not isinstance(data, (Response, HTTPException)):
+                response = self.make_response(request, data)
+            else:
+                response = data
 
         if origin and isinstance(response, Response):
             response.headers['Access-Control-Allow-Origin'] = origin
@@ -192,13 +214,14 @@ class SharedDataMiddlewareIndex(SharedDataMiddleware):
     def get_directory_loader(self, directory):
         def loader(path):
             if path is not None:
-                path = os.path.join(directory, path)
+                path = safe_join(directory, path)
             else:
                 path = directory
-            if os.path.isdir(path):
-                path = os.path.join(path, 'index.html')
-            if os.path.isfile(path):
-                return os.path.basename(path), self._opener(path)
+            if path is not None:
+                if os.path.isdir(path):
+                    path = posixpath.join(path, 'index.html')
+                if os.path.isfile(path):
+                    return os.path.basename(path), self._opener(path)
             return None, None
         return loader
 

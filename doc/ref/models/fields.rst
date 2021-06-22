@@ -171,10 +171,10 @@ Instance methods:
 .. method:: Field.sql_type()
 
     Return the namedtuple('SQLType', 'base type') which defines the SQL type to
-    use for creation and casting. Or `None` if the field is not stored in the
+    use for creation and casting. Or ``None`` if the field is not stored in the
     database.
 
-    sql_type is using the `_sql_type` attribute to compute its return value.
+    sql_type is using the ``_sql_type`` attribute to compute its return value.
     The backend is responsible for the computation.
 
     For the list of supported types by Tryton see 
@@ -190,7 +190,7 @@ Instance methods:
 
 .. method:: Field.set_rpc(model)
 
-    Adds to `model` the default RPC instances required by the field.
+    Adds to ``model`` the default RPC instances required by the field.
 
 .. method:: Field.definition(model, language)
 
@@ -234,7 +234,7 @@ Depends
 .. method:: depends([\*fields[, methods]])
 
 A decorator to define the field names on which the decorated method depends.
-The `methods` argument can be used to duplicate the field names from other
+The ``methods`` argument can be used to duplicate the field names from other
 decorated methods. This is useful if the decorated method calls another method.
 
 Field types
@@ -268,7 +268,15 @@ Char
 
 A single line string field.
 
-:class:`Char` has two extra optional arguments:
+Search by similarity is used for the ``ilike`` operator and
+:meth:`~trytond.tools.is_full_text` value if the backend supports it.
+The similarity threshold is defined for the context key ``<model name>.<field
+name>.search_similarity`` (default value is ``0.3``).
+
+The field is ordered using the similarity with the context value from the key
+``<model name>.<field name>.order`` if it is set.
+
+:class:`Char` has some extra optional arguments:
 
 .. attribute:: Char.size
 
@@ -301,6 +309,26 @@ A single line string field.
 
     The database backend must supports unaccented search.
 
+.. attribute:: Char.search_full_text
+
+   If this attribute is set to True, ``ilike`` searches with an
+   :meth:`~trytond.tools.is_full_text` value use the full text search of the
+   backend.
+   The default value is False.
+
+   The context can be used to force the full text search behaviour.
+   This is done using the key ``<model name>.<field name>.search_full_text``.
+   If True, the full text search is used no matter what the value.
+   If False, no full text search is peformed.
+
+   The full text ranking value is added to the similarity if the
+   ``search_full_text`` is True.
+
+.. note::
+
+   The database backend must support full text search otherwise ``ilike`` is
+   always used.
+
 Text
 ----
 
@@ -308,7 +336,7 @@ Text
 
 A multi line string field.
 
-:class:`Text` has two extra optional arguments:
+:class:`Text` has four extra optional arguments:
 
 .. attribute:: Text.size
 
@@ -317,6 +345,25 @@ A multi line string field.
 .. attribute:: Text.translate
 
     Same as :attr:`Char.translate`
+
+.. attribute:: Text.search_unaccented
+
+   Same as :attr:`Char.search_unaccented`
+
+.. attribute:: Text.search_full_text
+
+   Same as :attr:`Char.search_full_text`
+   The default value is True.
+
+FullText
+--------
+
+.. class:: FullText(\**options)
+
+An internal field to store a list of parsed strings ordered by weights.
+The field is ordered using the full text ranking with the context value from
+the key `<model name>.<field name>.order`` if it is set.
+
 
 Float
 -----
@@ -334,7 +381,7 @@ instance.
     the integer part. The second integer defines the total of numbers in the
     decimal part.
     Integers can be replaced by a :class:`~trytond.pyson.PYSON` statement.
-    If digits is None or any values of the tuple is `None`, no validation on
+    If digits is None or any values of the tuple is ``None``, no validation on
     the numbers will be done.
 
 Numeric
@@ -371,7 +418,7 @@ It is stored in `UTC`_ while displayed in the user timezone.
 .. attribute:: DateTime.format
 
     A string format as used by strftime. This format will be used to display
-    the time part of the field. The default value is `%H:%M:%S`.
+    the time part of the field. The default value is ``%H:%M:%S``.
     The value can be replaced by a :class:`~trytond.pyson.PYSON` statement.
 
 Timestamp
@@ -415,7 +462,7 @@ A binary field. It will be represented in Python by a ``bytes`` instance.
 
 .. warning::
     If the context contains a key composed of the model name and field name
-    separated by a dot and its value is the string `size` then the read value
+    separated by a dot and its value is the string ``size`` then the read value
     is the size instead of the content.
 
 :class:`Binary` has three extra optional arguments:
@@ -429,9 +476,9 @@ A binary field. It will be represented in Python by a ``bytes`` instance.
 
 .. attribute:: Binary.file_id
 
-    Name of the field that holds the `FileStore` identifier. Default value is
-    `None` which means the data is stored in the database. The field must be on
-    the same table and accept `char` values.
+    Name of the field that holds the ``FileStore`` identifier. Default value is
+    ``None`` which means the data is stored in the database. The field must be
+    on the same table and accept ``char`` values.
 
 .. warning::
     Switching from database to file-store is supported transparently. But
@@ -440,13 +487,13 @@ A binary field. It will be represented in Python by a ``bytes`` instance.
 
 .. attribute:: Binary.store_prefix
 
-    The prefix to use with the `FileStore`. Default value is `None` which means
-    the database name is used.
+    The prefix to use with the ``FileStore``. Default value is ``None`` which
+    means the database name is used.
 
 Selection
 ---------
 
-.. class:: Selection(selection, string[, sort[, selection_change_with[, translate[, \**options]]]])
+.. class:: Selection(selection, string[, sort[, selection_change_with[, translate[, help_selection[, \**options]]]]])
 
 A string field with limited values to choose from.
 
@@ -494,6 +541,10 @@ A string field with limited values to choose from.
     If true, the human-readable values will be translated. Default value is
     ``True``.
 
+.. attribute:: Selection.help_selection
+
+    A dictionary mapping the selection value with its help string.
+
 Instance methods:
 
 .. method:: Selection.translated([name])
@@ -506,7 +557,7 @@ Instance methods:
 MultiSelection
 --------------
 
-.. class:: MultiSelection(selection, string[, sort[, translate[, \**options]]])
+.. class:: MultiSelection(selection, string[, sort[, translate[, help_selection[, \**options]]]])
 
 A list field with limited values to choose from.
 
@@ -526,6 +577,10 @@ A list field with limited values to choose from.
 
     Same as :attr:`Selection.translate_selection`
 
+.. attribute:: MultiSelection.help_selection
+
+    Same as :attr:`Selection.help_selection`
+
 Instance methods:
 
 .. method:: MultiSelection.translated([name])
@@ -536,7 +591,7 @@ Instance methods:
 Reference
 ---------
 
-.. class:: Reference(string[, selection[, sort[, selection_change_with[, translated[,search_order[, search_context[, \**options]]]]]]])
+.. class:: Reference(string[, selection[, sort[, selection_change_with[, translate[, help_selection[,search_order[, search_context[, \**options]]]]]]]])
 
 A field that refers to a record of a model. It will be represented in Python by
 a ``str`` instance like this::
@@ -562,6 +617,10 @@ But a ``tuple`` can be used to search or set value.
 .. attribute:: Reference.translate_selection
 
     Same as :attr:`Selection.translate_selection`.
+
+.. attribute:: Reference.help_selection
+
+    Same as :attr:`Selection.help_selection`.
 
 .. attribute:: Reference.datetime_field
 
@@ -769,7 +828,7 @@ Many2Many
 .. class:: Many2Many(relation_name, origin, target, string[, order[, datetime_field[, size[, search_order[, search_context[, \**options]]]]]])
 
 A many-to-many relation field. It requires to have the opposite origin
-:class:`Many2One` field or a:class:`Reference` field defined on the relation
+:class:`Many2One` field or a :class:`Reference` field defined on the relation
 model and a :class:`Many2One` field pointing to the target.
 
 This field accepts as written value a list of tuples like the :class:`One2Many`.
@@ -795,7 +854,7 @@ This field accepts as written value a list of tuples like the :class:`One2Many`.
     :class:`~trytond.model.ModelView`, like in a
     :class:`~trytond.wizard.Wizard`. For this, :attr:`~Many2Many.relation_name`
     is set to the target model and :attr:`~Many2Many.origin` and
-    :attr:`~Many2Many.target` are set to `None`.
+    :attr:`~Many2Many.target` are set to ``None``.
 ..
 
 :class:`Many2Many` has some extra optional arguments:
@@ -866,9 +925,9 @@ A one-to-one relation field.
 
 Instance methods:
 
-.. method:: Many2Many.get_target()
+.. method:: One2One.get_relation()
 
-    Return the target :class:`~trytond.model.Model`.
+    Return the relation :class:`~trytond.model.Model`.
 
 .. method:: One2One.get_target()
 
@@ -879,7 +938,7 @@ Function
 
 .. class:: Function(field, getter[, setter[, searcher]])
 
-A function field can emulate any other given `field`.
+A function field can emulate any other given ``field``.
 
 :class:`Function` has a required argument:
 
@@ -891,21 +950,21 @@ A function field can emulate any other given `field`.
 
         getter(instances, name)
 
-    where `name` is the name of the field, and it must return a dictionary with
-    a value for each instance.
+    where ``name`` is the name of the field, and it must return a dictionary
+    with a value for each instance.
 
     Or the signature of the classmethod is::
 
         getter(instances, names)
 
-    where `names` is a list of name fields, and it must return a dictionary
+    where ``names`` is a list of name fields, and it must return a dictionary
     containing for each names a dictionary with a value for each instance.
 
     The signature of the instancemethod is::
 
         getter(name)
 
-    where `name` is the name of the field, and it must return the value.
+    where ``name`` is the name of the field, and it must return the value.
 
 :class:`Function` has some extra optional arguments:
 
@@ -917,7 +976,7 @@ A function field can emulate any other given `field`.
 
         setter(instances, name, value)
 
-    where `name` is the name of the field and `value` the value to set.
+    where ``name`` is the name of the field and ``value`` the value to set.
 
 .. warning::
     The modifications made to instances will not be saved automatically.
@@ -930,7 +989,7 @@ A function field can emulate any other given `field`.
 
         searcher(name, clause)
 
-    where `name` is the name of the field and `clause` is a
+    where ``name`` is the name of the field and ``clause`` is a
     :ref:`domain clause <topics-domain>`.
     It must return a list of :ref:`domain <topics-domain>` clauses but the
     ``operand`` can be a SQL query.
@@ -939,21 +998,21 @@ Instance methods:
 
 .. method:: Function.get(ids, model, name[, values])
 
-    Call the :attr:`~Function.getter` classmethod where `model` is the
-    :class:`~trytond.model.Model` instance of the field, `name` is the name of
+    Call the :attr:`~Function.getter` classmethod where ``model`` is the
+    :class:`~trytond.model.Model` instance of the field, ``name`` is the name of
     the field.
 
 .. method:: Function.set(ids, model, name, value)
 
-    Call the :attr:`~Function.setter` classmethod where `model` is the
-    :class:`~trytond.model.Model` instance of the field, `name` is the name of
-    the field, `value` is the value to set.
+    Call the :attr:`~Function.setter` classmethod where ``model`` is the
+    :class:`~trytond.model.Model` instance of the field, ``name`` is the name of
+    the field, ``value`` is the value to set.
 
 .. method:: Function.search(model, name, clause)
 
-    Call the :attr:`~Function.searcher` classmethod where `model` is the
-    :class:`~trytond.model.Model` instance of the field, `name` is the name of
-    the field, `clause` is a clause of :ref:`domain <topics-domain>`.
+    Call the :attr:`~Function.searcher` classmethod where ``model`` is the
+    :class:`~trytond.model.Model` instance of the field, ``name`` is the name of
+    the field, ``clause`` is a clause of :ref:`domain <topics-domain>`.
 
 MultiValue
 ----------
@@ -1001,6 +1060,6 @@ Instance methods:
 
 .. method:: Dict.translated([name[, type_]])
 
-    Returns a descriptor for the translated `values` or `keys` of the field
-    following `type_`. The descriptor must be used on the same class as the
-    field. Default `type_` is `values`.
+    Returns a descriptor for the translated ``values`` or ``keys`` of the field
+    following ``type_``. The descriptor must be used on the same class as the
+    field. Default ``type_`` is ``values``.
