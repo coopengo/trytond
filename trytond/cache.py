@@ -125,7 +125,7 @@ class MemoryCache(BaseCache):
         transaction = Transaction()
         dbname = transaction.database.name
         lower = self._transaction_lower.get(dbname, self._default_lower)
-        if (transaction in self._reset
+        if (self._name in self._reset.get(transaction, {})
                 or transaction.started_at < lower):
             try:
                 return self._transaction_cache[transaction]
