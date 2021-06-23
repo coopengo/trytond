@@ -209,7 +209,7 @@ class MemoryCache(BaseCache):
     @classmethod
     def commit(cls, transaction):
         table = Table(cls._table)
-        reset = cls._reset.setdefault(transaction, set())
+        reset = cls._reset.pop(transaction, None)
         if not reset:
             return
         database = transaction.database
@@ -262,10 +262,7 @@ class MemoryCache(BaseCache):
 
     @classmethod
     def rollback(cls, transaction):
-        try:
-            cls._reset[transaction].clear()
-        except KeyError:
-            pass
+        cls._reset.pop(transaction, None)
 
     @classmethod
     def drop(cls, dbname):
