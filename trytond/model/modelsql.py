@@ -739,7 +739,7 @@ class ModelSQL(ModelStorage):
             history_order = (column.desc, Column(table, '__id').desc)
             history_limit = 1
 
-        columns = {}
+        columns = []
         for f in all_fields:
             field = cls._fields.get(f)
             if field and field.sql_type():
@@ -768,15 +768,13 @@ class ModelSQL(ModelStorage):
                         columns.append(Literal(True).as_(f))
             elif f == '_timestamp' and not callable(cls.table_query):
                 sql_type = fields.Char('timestamp').sql_type().base
-                columns[f] = Extract(
-                    'EPOCH', Coalesce(table.write_date, table.create_date)
-                    ).cast(sql_type).as_('_timestamp')
+                columns.append(Extract('EPOCH',
+                        Coalesce(table.write_date, table.create_date)
+                        ).cast(sql_type).as_('_timestamp'))
 
-        if 'write_date' not in fields_names and len(columns) == 1:
-            columns.pop('write_date')
-        if columns:
+        if len(columns):
             if 'id' not in fields_names:
-                columns['id'] = table.id.as_('id')
+                columns.append(table.id.as_('id'))
 
             tables = {None: (table, None)}
             if domain:
@@ -791,7 +789,7 @@ class ModelSQL(ModelStorage):
                     where &= history_clause
                 if domain:
                     where &= dom_exp
-                cursor.execute(*from_.select(*columns.values(), where=where,
+                cursor.execute(*from_.select(*columns, where=where,
                         order_by=history_order, limit=history_limit))
                 fetchall = list(cursor_dict(cursor))
                 if not len(fetchall) == len({}.fromkeys(sub_ids)):
@@ -930,9 +928,7 @@ class ModelSQL(ModelStorage):
 
         to_del = set()
         for fname in set(fields_related.keys()) | extra_fields:
-            # 'write_date' has been added to extra_fields but not read
-            if ((fname != 'write_date' or 'write_date' in columns)
-                    and fname not in fields_names):
+            if fname not in fields_names:
                 to_del.add(fname)
             if fname not in cls._fields:
                 continue
