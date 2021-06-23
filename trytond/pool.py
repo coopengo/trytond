@@ -171,6 +171,7 @@ class Pool(object):
             # Clean the _pool before loading modules
             for type in self.classes.keys():
                 self._pool[self.database_name][type] = {}
+            self._post_init_calls[self.database_name] = []
             try:
                 with ServerContext().set_context(disable_auto_cache=True):
                     restart = not load_modules(

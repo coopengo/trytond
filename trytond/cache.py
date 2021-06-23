@@ -395,8 +395,7 @@ class MemoryCache(BaseCache):
 if config.get('cache', 'class'):
     Cache = resolve(config.get('cache', 'class'))
 else:
-    # JCA : Use serializable memory cache by default to avoid cache corruption
-    Cache = SerializableMemoryCache
+    Cache = MemoryCache
 
 
 class LRUDict(OrderedDict):
