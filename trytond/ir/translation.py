@@ -32,6 +32,7 @@ from trytond.wizard import (
     Wizard, StateView, StateTransition, StateAction, Button)
 
 from .lang import get_parent_language as get_parent
+logger = logging.getLogger(name='trytond.translator')
 
 TRANSLATION_TYPE = [
     ('field', 'Field'),
