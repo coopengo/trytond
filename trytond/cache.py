@@ -23,6 +23,7 @@ from trytond.transaction import Transaction
 __all__ = ['BaseCache', 'Cache', 'LRUDict', 'LRUDictTransaction']
 _clear_timeout = config.getint('cache', 'clean_timeout', default=5 * 60)
 logger = logging.getLogger(__name__)
+show_debug_logs = logger.isEnabledFor(logging.DEBUG)
 
 
 def _cast(column):
@@ -193,6 +194,12 @@ class MemoryCache(BaseCache):
             expire = dt.datetime.now() + self.duration
         else:
             expire = None
+
+        # JCA: Log cases where the cache size is exceeded
+        if show_debug_logs:
+            if len(cache) >= cache.size_limit:
+                logger.debug('Cache limit exceeded for %s' % self._name)
+
         # JCA : Do not silently fail when trying to use a non hashable key
         cache[key] = (expire, value)
         return value
