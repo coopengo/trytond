@@ -1293,11 +1293,12 @@ class ModelStorage(Model):
                 if hasattr(field, 'forbidden_chars'):
                     for record in records:
                         value = getattr(record, field_name)
-                        if value and any(
-                                c in str(value)
-                                for c in field.forbidden_chars):
+                        if value and type(value) != str:
                             # JMO table.cell overloads read: a char can become
                             # Decimal
+                            value = str(value)
+                        if value and any(
+                                c in value for c in field.forbidden_chars):
                             error_args = cls.__names__(field_name)
                             error_args['value'] = value
                             error_args['chars'] = ','.join(
