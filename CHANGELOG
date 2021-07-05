@@ -1,4 +1,5 @@
 * Add option to strip leading and trailing whitespace from fields.Char
+* Allow column sql types to be tested from the table handler
 * Combine search and get_keys in DictSchemaMixin
 * Reset less often the user sessions
 * Protect trusted devices against brute force attack
