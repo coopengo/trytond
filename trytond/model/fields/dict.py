@@ -69,6 +69,9 @@ class Dict(Field):
             d = {}
             for k, v in value.items():
                 # JMO : some Coog tests rely on data with all values at None
+                # JCA : Actually, without this, extra data without a value will
+                # never be stored, which is definitively not what we want,
+                # since the presence of the key is an information in itself
                 # if v is None:
                 #     continue
                 if isinstance(v, list):
@@ -217,7 +220,7 @@ class TranslatedDict(object):
             domain = [('type_', '=', 'selection')]
 
         records = []
-        for key_names in grouped_slice(list(value.keys())):
+        for key_names in grouped_slice(value.keys()):
             records += SchemaModel.search([
                     ('name', 'in', key_names),
                     ] + domain)

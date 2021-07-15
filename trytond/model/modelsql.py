@@ -1399,8 +1399,7 @@ class ModelSQL(ModelStorage):
                         where=where
                         & (history.write_date != Null)
                         & (history.create_date == Null)
-                        & (history.write_date
-                            <= transaction.context['_datetime'])))
+                        & history_clause))
                 for deleted_id, delete_date in cursor:
                     history_date, _ = ids_history[deleted_id]
                     if isinstance(history_date, str):
