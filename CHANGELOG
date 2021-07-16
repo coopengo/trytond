@@ -1,3 +1,4 @@
+* Use global cache for functions in readonly transactions
 * Combine search and get_keys in DictSchemaMixin
 * Reset less often the user sessions
 * Protect trusted devices against brute force attack

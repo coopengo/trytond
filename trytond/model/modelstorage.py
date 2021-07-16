@@ -1440,7 +1440,8 @@ class ModelStorage(Model):
         except KeyError:
             pass
         try:
-            if field._type not in ('many2one', 'reference'):
+            if field._type not in ('many2one', 'reference', 'one2many',
+                    'many2many', 'one2one'):
                 return self._cache[self.id][name]
             else:
                 skip_eager = name in self._cache[self.id]
