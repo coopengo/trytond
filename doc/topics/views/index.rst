@@ -362,6 +362,7 @@ Display a button.
         * ``reload``: to reload the current tab
         * ``reload context``: to reload user context
         * ``reload menu``: to reload menu
+        * ``clear_cache <prefix>``: to clear the cache of the named prefix
 
     * ``icon``
 

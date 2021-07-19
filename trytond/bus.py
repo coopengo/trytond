@@ -240,8 +240,10 @@ def subscribe(request, database_name):
     if user is None:
         raise BadRequest
 
-    channels = set(filter(lambda c: not c.startswith('user:'), channels))
+    channels = set(
+        filter(lambda c: not c.startswith(('user:', 'tryton:')), channels))
     channels.add('user:%s' % user)
+    channels.add('tryton:cache')
 
     last_message = request.parsed_data.get('last_message')
 
@@ -275,4 +277,11 @@ def notify(title, body=None, priority=1, user=None, client=None):
             'title': title,
             'body': body,
             'priority': priority,
+            })
+
+
+def clear_client_cache(prefix):
+    return Bus.publish('tryton:cache', {
+            'type': 'system:clear_cache',
+            'prefix': prefix
             })
