@@ -592,7 +592,7 @@ class TrytondXmlHandler(sax.handler.ContentHandler):
                 self.to_delete.remove(fs_id)
 
             # Noupdate flag, we need to register it in the db
-            if self.noupdate:
+            if self.noupdate and self.module_state != 'to_activate':
                 db_id, mdata_id = [
                     self.fs2db.get(module, fs_id)[x]
                     for x in ['db_id', 'id']]
