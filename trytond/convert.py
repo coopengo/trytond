@@ -599,11 +599,9 @@ class TrytondXmlHandler(sax.handler.ContentHandler):
                     for x in ['db_id', 'id']]
                 if db_id is None:
                     return
-                current_record = self.ModelData.search([
-                        ('id', '=', mdata_id)
-                ], limit=1)
-                if not current_record[0].noupdate:
-                    self.ModelData.write(current_record, {
+                current_record = self.ModelData(mdata_id)
+                if not current_record.noupdate:
+                    self.ModelData.write([current_record], {
                         'noupdate': True,
                     })
                 return
@@ -620,11 +618,9 @@ class TrytondXmlHandler(sax.handler.ContentHandler):
 
             # VGA: See bug #20636
             if not self.noupdate:
-                current_record = self.ModelData.search([
-                    ('id', '=', mdata_id)
-                ], limit=1)
-                if current_record[0].noupdate:
-                    self.ModelData.write(current_record, {
+                current_record = self.ModelData(mdata_id)
+                if current_record.noupdate:
+                    self.ModelData.write([current_record], {
                         'noupdate': False,
                     })
 
