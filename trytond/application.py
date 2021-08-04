@@ -31,19 +31,31 @@ if os.environ.get('TRYTOND_COROUTINE'):
 
 from trytond.pool import Pool  # noqa: E402
 from trytond.wsgi import app  # noqa: E402
+from trytond.cache import MemoryCache  # noqa: E402
 
 Pool.start()
+
 # TRYTOND_CONFIG it's managed by importing config
 db_names = os.environ.get('TRYTOND_DATABASE_NAMES')
 if db_names:
     # Read with csv so database name can include special chars
     reader = csv.reader(StringIO(db_names))
-    threads = []
+    threads = {}
     for name in next(reader):
         thread = threading.Thread(target=Pool(name).init)
         thread.start()
-        threads.append(thread)
-    for thread in threads:
+        threads[name] = thread
+    for thread in threads.values():
         thread.join()
+    # JCA: After the pool is initialized by the threads, cache invalidations
+    # are triggered. If there are many caches (such that multiple calls to the
+    # notify API are required), uwsgi may fork the process while the thread is
+    # busy invalidating the caches, which can lead to a broken state and the
+    # server unresponsive.
+    # So here we clear all cache listeners, waiting until they no longer exist
+    # before proceeding
+    listeners = {x.ident for x in MemoryCache._listener.values()}
+    for name in threads:
+        MemoryCache.purge_listeners(name)
 
 application = app

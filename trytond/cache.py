@@ -1,6 +1,7 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
 import datetime as dt
+import time
 import json
 import logging
 import os
@@ -369,9 +370,10 @@ class MemoryCache(BaseCache):
                         reset = json.loads(notification.payload)
                         for name in reset:
                             # XUNG
-                            # Name not in instances when control_vesion_upgrade table is locked
-                            # because another process is currently upgrading
-                            # We must ignore cache reset notifications (Not yet loaded anyway)
+                            # Name not in instances when control_vesion_upgrade
+                            # table is locked because another process is
+                            # currently upgrading We must ignore cache reset
+                            # notifications (Not yet loaded anyway)
                             if name in cls._instances:
                                 inst = cls._instances[name]
                                 inst._clear(dbname)
@@ -382,9 +384,6 @@ class MemoryCache(BaseCache):
             raise
         finally:
             database.put_connection(conn)
-            with cls._listener_lock[pid]:
-                if cls._listener.get((pid, dbname)) == current_thread:
-                    del cls._listener[pid, dbname]
 
     @classmethod
     def purge_listeners(cls, dbname):
@@ -392,9 +391,18 @@ class MemoryCache(BaseCache):
         Purges all listeners for a given database
         '''
         pid = os.getpid()
+        thread_id = None
         with cls._listener_lock[pid]:
             if (pid, dbname) in cls._listener:
+                thread_id = cls._listener[pid, dbname].ident
                 del cls._listener[pid, dbname]
+
+        # We removed the thread from the list, but it can still be alive if it
+        # is busy clearing some cache
+        if thread_id is not None:
+            while {thread_id} & {x.ident for x in threading.enumerate()}:
+                time.sleep(0.01)
+
 
 if config.get('cache', 'class'):
     Cache = resolve(config.get('cache', 'class'))
