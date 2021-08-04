@@ -39,7 +39,8 @@ class Request(_Request):
                 url = self.url.decode(self.url_charset)
             auth = self.authorization
             args.append("%s@%s" % (
-                    auth.get('userid', auth.username), self.remote_addr))
+                    auth.get('userid', auth.username) if auth else 'anonymous',
+                    self.remote_addr))
             args.append("'%s'" % url)
             args.append("[%s]" % self.method)
             args.append("%s" % (self.rpc_method or ''))
