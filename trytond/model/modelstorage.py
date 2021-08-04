@@ -1053,7 +1053,9 @@ class ModelStorage(Model):
     @without_check_access
     def _validate(cls, records, field_names=None):
         pool = Pool()
-        records = list(records)  # convert iterator to list
+        # Ensure to read only the records to validate
+        # and convert iterator to list
+        records = cls.browse(records)
 
         ctx_pref = {}
         if Transaction().user:
