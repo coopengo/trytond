@@ -591,7 +591,19 @@ class TrytondXmlHandler(sax.handler.ContentHandler):
             if module == self.module and fs_id in self.to_delete:
                 self.to_delete.remove(fs_id)
 
+            # VGA: See bug #20636
+            # Noupdate flag, we need to register it in the db
             if self.noupdate and self.module_state != 'to activate':
+                db_id, mdata_id = [
+                    self.fs2db.get(module, fs_id)[x]
+                    for x in ['db_id', 'id']]
+                if db_id is None:
+                    return
+                current_record = self.ModelData(mdata_id)
+                if not current_record.noupdate:
+                    self.ModelData.write([current_record], {
+                        'noupdate': True,
+                    })
                 return
 
             # this record is already in the db:
@@ -603,6 +615,14 @@ class TrytondXmlHandler(sax.handler.ContentHandler):
             # Check if record has not been deleted
             if db_id is None:
                 return
+
+            # VGA: See bug #20636
+            if not self.noupdate:
+                current_record = self.ModelData(mdata_id)
+                if current_record.noupdate:
+                    self.ModelData.write([current_record], {
+                        'noupdate': False,
+                    })
 
             if not old_values:
                 old_values = {}
