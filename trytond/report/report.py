@@ -295,6 +295,10 @@ class Report(URLMixin, PoolBase):
 
     @classmethod
     def _callback_loader(cls, report, template):
+        # JCA: We do not use tranlsation in reports, and this does not work for
+        # now with complex directives. See
+        # https://support.coopengo.com/issues/20664
+        return
         if report.translatable:
             pool = Pool()
             Translation = pool.get('ir.translation')
