@@ -16,7 +16,6 @@ from trytond.protocols.wrappers import Request
 from trytond.exceptions import (
     TrytonException, UserWarning, LoginException, ConcurrencyException,
     RateLimitException, MissingDependenciesException)
-from trytond.model import fields
 from trytond.tools import cached_property
 
 logger = logging.getLogger(__name__)
@@ -68,10 +67,7 @@ def dump_struct(self, value, write, escape=client.escape):
             k = str(k)
         elif isinstance(k, float):
             k = repr(k)
-        if isinstance(v, fields.dict.ImmutableDict):
-            converted_value[k] = dict(v)
-        else:
-            converted_value[k] = v
+        converted_value[k] = v
     return self.dump_struct(converted_value, write, escape=escape)
 
 
