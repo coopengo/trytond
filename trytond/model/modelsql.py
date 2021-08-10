@@ -806,7 +806,7 @@ class ModelSQL(ModelStorage):
 
         cache = transaction.get_cache().setdefault(
             cls.__name__, LRUDict(cache_size()))
-        if getter_fields and cachable_fields:
+        if getter_fields and (transaction.readonly or cachable_fields):
             for row in result:
                 if row['id'] not in cache:
                     cache[row['id']] = {}
@@ -860,15 +860,16 @@ class ModelSQL(ModelStorage):
                         else:
                             for fname in field_list:
                                 row[fname] = cache[row['id']][fname]
-                    getter_results = field.get(
-                        sub_ids, cls, field_list, values=sub_results)
-                    for fname in field_list:
-                        getter_result = getter_results[fname]
-                        for row in sub_results:
-                            if row['id'] in sub_ids:
-                                row[fname] = getter_result[row['id']]
-                                if transaction.readonly:
-                                    cache[row['id']][fname] = row[fname]
+                    if sub_ids:
+                        getter_results = field.get(
+                            sub_ids, cls, field_list, values=sub_results)
+                        for fname in field_list:
+                            getter_result = getter_results[fname]
+                            for row in sub_results:
+                                if row['id'] in sub_ids:
+                                    row[fname] = getter_result[row['id']]
+                                    if transaction.readonly:
+                                        cache[row['id']][fname] = row[fname]
 
         def read_related(field, Target, rows, fields):
             name = field.name
