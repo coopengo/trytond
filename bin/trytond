@@ -31,8 +31,8 @@ from trytond.pool import Pool
 from trytond.modules import get_module_list, get_module_info
 
 with commandline.pidfile(options):
-    # If we are in "dev" mode and WERKZEUG_RUN_MAIN != 'true', the server will
-    # be restarted anyway in "reloader" mode, son no need to init the pool
+    # JCA: If we are in "dev" mode and WERKZEUG_RUN_MAIN != 'true', the server
+    # will be restarted anyway in "reloader" mode, son no need to init the pool
     if os.environ.get('WERKZEUG_RUN_MAIN') == 'true' \
             or not options.dev or options.coroutine:
         Pool.start()
