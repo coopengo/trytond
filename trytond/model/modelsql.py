@@ -770,6 +770,7 @@ class ModelSQL(ModelStorage):
                         Coalesce(table.write_date, table.create_date)
                         ).cast(sql_type).as_('_timestamp'))
 
+        # JCA: prefix for https://support.coopengo.com/issues/20678
         if 'write_date' not in all_fields and len(columns) > 0:
             f = 'write_date'
             field = cls._fields.get(f)
