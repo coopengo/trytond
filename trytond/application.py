@@ -31,7 +31,6 @@ if os.environ.get('TRYTOND_COROUTINE'):
 
 from trytond.pool import Pool  # noqa: E402
 from trytond.wsgi import app  # noqa: E402
-from trytond.cache import MemoryCache  # noqa: E402
 
 Pool.start()
 
@@ -40,22 +39,26 @@ db_names = os.environ.get('TRYTOND_DATABASE_NAMES')
 if db_names:
     # Read with csv so database name can include special chars
     reader = csv.reader(StringIO(db_names))
-    threads = {}
+    threads = []
     for name in next(reader):
         thread = threading.Thread(target=Pool(name).init)
         thread.start()
-        threads[name] = thread
-    for thread in threads.values():
+        threads.append(thread)
+    for thread in threads:
         thread.join()
-    # JCA: After the pool is initialized by the threads, cache invalidations
-    # are triggered. If there are many caches (such that multiple calls to the
-    # notify API are required), uwsgi may fork the process while the thread is
-    # busy invalidating the caches, which can lead to a broken state and the
-    # server unresponsive.
-    # So here we clear all cache listeners, waiting until they no longer exist
-    # before proceeding
-    listeners = {x.ident for x in MemoryCache._listener.values()}
-    for name in threads:
-        MemoryCache.purge_listeners(name)
 
+
+# JCA: if for some reason the server works properly when starting with
+# "trytond" but not with "uwsgi", you may be in the right place.
+#
+# When the pool initialization is completed (above), there should be no
+# busy threads in the main process (psycopg2 threads can probably be ignored
+# since they have no reason to be running if the server is doing nothing).
+#
+# If there are, uwsgi may fork the "wrong" one at the wrong time, and become
+# unresponsive. Typical cause (what led me here the first time) would be a
+# cache invalidation triggered in the side MemoryCache listeners. There should
+# be NO CACHE INVALIDATION when the pool is initialized.
+#
+# If this is not the cause, good luck
 application = app
