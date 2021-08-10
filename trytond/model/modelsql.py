@@ -865,7 +865,6 @@ class ModelSQL(ModelStorage):
                     for fname in field_list:
                         getter_result = getter_results[fname]
                         for row in sub_results:
-                            row[fname] = getter_result[row['id']]
                             if row['id'] in sub_ids:
                                 row[fname] = getter_result[row['id']]
                                 if transaction.readonly:
