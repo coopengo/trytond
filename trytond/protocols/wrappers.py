@@ -127,10 +127,10 @@ def parse_authorization_header(value):
                 'session': bytes_to_wsgi(session),
                 })
     # JMO: the initial implementation used 'token',
-    # but the IETF specify 'Bearer'
-    # (cf https://datatracker.ietf.org/doc/html/rfc6750#section-2.1 )
+    # but the IETF specifies 'Bearer'
+    # (cf https://datatracker.ietf.org/doc/html/rfc6750#section-2.1 ).
     # So, we allow both to maintain compatibility with previous uses,
-    # and be compatible with standard HTTP clients
+    # and be compatible with standard HTTP clients.
     elif auth_type in (b'token', b'bearer'):
         return Authorization('token', {'token': bytes_to_wsgi(auth_info)})
 
