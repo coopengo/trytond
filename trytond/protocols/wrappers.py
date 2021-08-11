@@ -126,7 +126,12 @@ def parse_authorization_header(value):
                 'userid': userid,
                 'session': bytes_to_wsgi(session),
                 })
-    elif auth_type == b'token':
+    # JMO: the initial implementation used 'token',
+    # but the IETF specify 'Bearer'
+    # (cf https://datatracker.ietf.org/doc/html/rfc6750#section-2.1 )
+    # So, we allow both to maintain compatibility with previous uses,
+    # and be compatible with standard HTTP clients
+    elif auth_type in (b'token', b'bearer'):
         return Authorization('token', {'token': bytes_to_wsgi(auth_info)})
 
 
