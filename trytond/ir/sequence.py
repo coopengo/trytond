@@ -51,8 +51,8 @@ class Sequence(DeactivableMixin, ModelSQL, ModelView):
         states={
             'readonly': Eval('context', {}).contains('code'),
             })
-    prefix = fields.Char('Prefix')
-    suffix = fields.Char('Suffix')
+    prefix = fields.Char('Prefix', strip=False)
+    suffix = fields.Char('Suffix', strip=False)
     type = fields.Selection([
         ('incremental', 'Incremental'),
         ('decimal timestamp', 'Decimal Timestamp'),

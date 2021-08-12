@@ -120,3 +120,6 @@ class LazyString():
 
     def __radd__(self, other):
         return other + str(self)
+
+    def format(self, data):
+        return str(self).format(data)

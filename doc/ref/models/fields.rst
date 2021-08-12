@@ -264,7 +264,7 @@ A long integer field.
 Char
 ----
 
-.. class:: Char(string[, size[, translate[, \**options]]])
+.. class:: Char(string[, size[, translate[, strip[, \**options]]]])
 
 A single line string field.
 
@@ -274,6 +274,11 @@ A single line string field.
 
     The maximum length (in characters) of the field. The size is enforced at
     the storage level and in the client input.
+
+.. attribute:: Char.strip
+
+    If false, the leading and trailing whitespace characters of the value are
+    kept. Defaults to true.
 
 .. attribute:: Char.translate
 

@@ -24,6 +24,7 @@ from trytond.cache_serializer import pack, unpack
 __all__ = ['BaseCache', 'Cache', 'LRUDict']
 _clear_timeout = config.getint('cache', 'clean_timeout', default=5 * 60)
 logger = logging.getLogger(__name__)
+show_debug_logs = logger.isEnabledFor(logging.DEBUG)
 
 
 def _cast(column):
@@ -65,7 +66,12 @@ class BaseCache(object):
 
     def _key(self, key):
         if self.context:
-            return (key, Transaction().user, freeze(Transaction().context))
+            # Remove client key from cache's context.
+            # See redmine issue #19794
+            context = Transaction().context.copy()
+            for to_pop in {'client', '_request', 'session', 'token'}:
+                context.pop(to_pop, None)
+            return (key, Transaction().user, freeze(context))
         return key
 
     def get(self, key, default=None):
@@ -151,6 +157,12 @@ class MemoryCache(BaseCache):
             expire = dt.datetime.now() + self.duration
         else:
             expire = None
+
+        # JCA: Log cases where the cache size is exceeded
+        if show_debug_logs:
+            if len(cache) >= cache.size_limit:
+                logger.debug('Cache limit exceeded for %s' % self._name)
+
         cache[key] = (expire, value)
         # JCA: Properly crash on type error
         return value
@@ -209,7 +221,7 @@ class MemoryCache(BaseCache):
     @classmethod
     def commit(cls, transaction):
         table = Table(cls._table)
-        reset = cls._reset.setdefault(transaction, set())
+        reset = cls._reset.pop(transaction, None)
         if not reset:
             return
         database = transaction.database
@@ -262,10 +274,7 @@ class MemoryCache(BaseCache):
 
     @classmethod
     def rollback(cls, transaction):
-        try:
-            cls._reset[transaction].clear()
-        except KeyError:
-            pass
+        cls._reset.pop(transaction, None)
 
     @classmethod
     def drop(cls, dbname):
