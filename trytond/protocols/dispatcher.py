@@ -31,6 +31,11 @@ from trytond.sentry import sentry_wrap
 from trytond.worker import run_task
 from .wrappers import with_pool
 
+from trytond.config import config
+from trytond.modules.perf_analysis import perf_analysis
+
+import datetime
+
 logger = logging.getLogger(__name__)
 
 # JCA: log slow RPC (> log_time_threshold)
@@ -198,12 +203,14 @@ def help_method(request, pool):
 @app.auth_required
 @with_pool
 def _dispatch(request, pool, *args, **kwargs):
-
+    # perf_analysis.Surcharge.start_timer()
     # AKE: perf analyzer hooks
-    try:
-        PerfLog().on_enter()
-    except Exception:
-        perf_logger.exception('on_enter failed')
+    # try:
+    #     PerfLog().on_enter()
+    # except Exception:
+    #     perf_logger.exception('on_enter failed')
+    #time
+    perf_analysis.Surcharge.start_timer()
 
     obj, method = get_object_method(request, pool)
     if method in obj.__rpc__:
@@ -257,10 +264,11 @@ def _dispatch(request, pool, *args, **kwargs):
             }
 
     # AKE: perf analyzer hooks
-    try:
-        PerfLog().on_execute(user, session, request.rpc_method, args, kwargs)
-    except Exception:
-        perf_logger.exception('on_execute failed')
+    # try:
+    #     PerfLog().on_execute(user, session, request.rpc_method, args, kwargs)
+    # except Exception:
+    #     perf_logger.exception('on_execute failed')
+    # perf_analysis.Call.store_call(user, session, request.rpc_method)
 
     retry = config.getint('database', 'retry')
     for count in range(retry, -1, -1):
@@ -278,17 +286,26 @@ def _dispatch(request, pool, *args, **kwargs):
                         })
                 transaction.context['_request'] = request.context
                 meth = getattr(obj, method)
-
+                print(meth)
+                print(request)
+                #perf_analysis.Call.store_call(user, session, request.rpc_method, datetime.date.today())
                 # AKE: perf analyzer hooks
-                try:
-                    wrapped_meth = profile(meth)
-                except Exception:
-                    perf_logger.exception('profile failed')
-                else:
-                    meth = wrapped_meth
+                # try:
+                #     # if config.getboolean('perf', 'activate'):
+                #     #     perf_analysis.init_perflog()
+                #     # else:
+                #     #     print("PAS DANALYSE")
+                #     # wrapped_meth = perf_analysis.Analysis.decorator(meth)
+                #     # perf_analysis.Analysis.run_analysis()
+                #     # wrapped_meth = profile(meth)
+                # except Exception:
+                #     perf_logger.exception('profile failed')
+                # else:
+                #     meth = wrapped_meth
 
                 if (rpc.instantiate is None
                         or not is_instance_method(obj, method)):
+                    #appel methode
                     result = rpc.result(meth(*c_args, **c_kwargs))
                 else:
                     assert rpc.instantiate == 0
@@ -359,11 +376,16 @@ def _dispatch(request, pool, *args, **kwargs):
             else:
                 slow_logger.debug(slow_msg, *slow_args)
 
+        tm = perf_analysis.Surcharge.end_timer()
+        with Transaction().new_transaction() as transaction:
+            print("STORE1")
+            perf_analysis.Call.store_call(user, user, request.rpc_method, datetime.date.today(), tm)
+
         # AKE: perf analyzer hooks
-        try:
-            PerfLog().on_leave(result)
-        except Exception:
-            perf_logger.exception('on_leave failed')
+        # try:
+        #     PerfLog().on_leave(result)
+        # except Exception:
+        #     perf_logger.exception('on_leave failed')
 
         response = app.make_response(request, result)
         if rpc.readonly and rpc.cache:

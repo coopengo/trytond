@@ -94,6 +94,7 @@ def register():
         calendar_.Month,
         calendar_.Day,
         message.Message,
+        performance.Timer,
         module='ir', type_='model')
     Pool.register(
         translation.TranslationSet,
