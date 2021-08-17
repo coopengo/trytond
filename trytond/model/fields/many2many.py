@@ -7,12 +7,12 @@ from sql import Cast, Literal, Null
 from sql.functions import Substring, Position
 from sql.conditionals import Coalesce
 
+from trytond.pool import Pool
 from trytond.pyson import PYSONEncoder
+from trytond.tools import grouped_slice
+from trytond.transaction import Transaction
 from .field import (Field, size_validate, instanciate_values, domain_validate,
     search_order_validate, context_validate, instantiate_context)
-from ...pool import Pool
-from ...tools import grouped_slice
-from ...transaction import Transaction
 
 
 class Many2Many(Field):
@@ -453,7 +453,10 @@ class Many2Many(Field):
             relation_domain, tables=relation_tables)
         query_table = convert_from(None, relation_tables)
         query = query_table.select(origin, where=expression)
-        return table.id.in_(query)
+        expression = table.id.in_(query)
+        if operator.startswith('!') or operator.startswith('not '):
+            expression |= ~table.id.in_(relation.select(origin))
+        return expression
 
     def definition(self, model, language):
         encoder = PYSONEncoder()
@@ -468,8 +471,8 @@ class Many2Many(Field):
         definition['search_context'] = encoder.encode(self.search_context)
         definition['search_order'] = encoder.encode(self.search_order)
         definition['sortable'] &= hasattr(model, 'order_' + self.name)
-        definition['order'] = encoder.encode(
-            getattr(model, '_order', None)
+        definition['order'] = (
+            getattr(self.get_target(), '_order', None)
             if self.order is None else self.order)
         if self.size is not None:
             definition['size'] = encoder.encode(self.size)

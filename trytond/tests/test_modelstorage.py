@@ -120,9 +120,6 @@ class ModelStorageTestCase(unittest.TestCase):
         with self.assertRaises(RequiredValidationError):
             ModelStorage.save([foo, bar])
 
-        self.assertIsNone(foo.name)
-        self.assertEqual(bar.name, 'bar')
-
     @with_transaction()
     def test_fail_saving_mixed_context2(self):
         'Test fail saving with mixed context '
@@ -138,8 +135,6 @@ class ModelStorageTestCase(unittest.TestCase):
         foo.name = 'foo'
         with self.assertRaises(RequiredValidationError):
             ModelStorage.save([foo, bar])
-        self.assertEqual(foo.name, 'foo')
-        self.assertIsNone(bar.name)
 
     @with_transaction()
     def test_save_one2many_create(self):
@@ -365,6 +360,33 @@ class ModelStorageTestCase(unittest.TestCase):
             Model.create([{'relation': target.id}])
         self.assertEqual(cm.exception.domain[0], [('value', '=', 'valid')])
         self.assertTrue(cm.exception.domain[1]['value'])
+
+    @with_transaction()
+    def test_relation_pyson_domain(self):
+        "Test valid relation with PYSON"
+        pool = Pool()
+        Model = pool.get('test.modelstorage.relation_domain')
+        Target = pool.get('test.modelstorage.relation_domain.target')
+
+        target, = Target.create([{'value': 'valid'}])
+
+        record, = Model.create(
+            [{'relation_pyson': target.id, 'relation_valid': True}])
+
+    @with_transaction()
+    def test_relation_pyson_domain_invalid(self):
+        "Test valid relation with PYSON"
+        pool = Pool()
+        Model = pool.get('test.modelstorage.relation_domain')
+        Target = pool.get('test.modelstorage.relation_domain.target')
+
+        target, = Target.create([{'value': 'valid'}])
+
+        with self.assertRaises(DomainValidationError) as cm:
+            Model.create(
+                [{'relation_pyson': target.id, 'relation_valid': False}])
+        self.assertEqual(cm.exception.domain[0], [['value', '!=', 'valid']])
+        self.assertTrue(cm.exception.domain[1], 'value')
 
     @with_transaction()
     def test_relation2_domain_invalid(self):
@@ -616,7 +638,7 @@ class EvalEnvironmentTestCase(unittest.TestCase):
         record = Model(multiselection=['value1', 'value2'])
         env = EvalEnvironment(record, Model)
 
-        self.assertEqual(env.get('multiselection'), ['value1', 'value2'])
+        self.assertEqual(env.get('multiselection'), ('value1', 'value2'))
 
     @with_transaction()
     def test_parent_field(self):
@@ -628,6 +650,49 @@ class EvalEnvironmentTestCase(unittest.TestCase):
         env = EvalEnvironment(record, Model)
 
         self.assertEqual(env.get('_parent_many2one').get('char'), "Test")
+
+    @with_transaction()
+    def test_model_save_skip_check_access(self):
+        "Test model save skips check access"
+        pool = Pool()
+        Model = pool.get('test.modelstorage')
+        IrModel = pool.get('ir.model')
+        IrModelAccess = pool.get('ir.model.access')
+
+        model, = IrModel.search([('model', '=', Model.__name__)])
+        IrModelAccess.create([{
+                    'model': model.id,
+                    'perm_read': False,
+                    'perm_create': False,
+                    'perm_write': False,
+                    'perm_delete': False,
+                    }])
+        with Transaction().set_context(_check_access=True):
+            record = Model(name="Test")
+            record.save()
+
+    @with_transaction()
+    def test_model_getattr_skip_check_access(self):
+        "Test model getattr skips check access"
+        pool = Pool()
+        Model = pool.get('test.modelstorage')
+        IrModel = pool.get('ir.model')
+        IrModelAccess = pool.get('ir.model.access')
+
+        model, = IrModel.search([('model', '=', Model.__name__)])
+        IrModelAccess.create([{
+                    'model': model.id,
+                    'perm_read': False,
+                    'perm_create': False,
+                    'perm_write': False,
+                    'perm_delete': False,
+                    }])
+        record, = Model.create([{'name': "Test"}])
+
+        with Transaction().set_context(_check_access=True):
+            record = Model(record.id)
+
+            self.assertEqual(record.name, "Test")
 
 
 def suite():

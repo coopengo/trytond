@@ -8,15 +8,16 @@ import logging
 from decimal import Decimal
 
 from werkzeug.wrappers import Response
-from werkzeug.utils import cached_property
 from werkzeug.exceptions import (
     BadRequest, InternalServerError, Conflict, Forbidden, Locked,
     TooManyRequests)
 
+from trytond.model.fields.dict import ImmutableDict
 from trytond.protocols.wrappers import Request
 from trytond.exceptions import (
     TrytonException, UserWarning, LoginException, ConcurrencyException,
     RateLimitException, MissingDependenciesException)
+from trytond.tools import cached_property
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +73,7 @@ def dump_struct(self, value, write, escape=client.escape):
 
 
 client.Marshaller.dispatch[dict] = dump_struct
+client.Marshaller.dispatch[ImmutableDict] = dump_struct
 
 
 class XMLRPCDecoder(object):

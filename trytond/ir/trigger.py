@@ -7,20 +7,16 @@ from sql.aggregate import Count, Max
 from sql.functions import CurrentTimestamp
 from sql.operators import Concat
 
-from trytond.model.exceptions import ValidationError
+from trytond.cache import Cache
 from trytond.i18n import gettext
-from ..model import (
+from trytond.model import (
     ModelView, ModelSQL, DeactivableMixin, fields, EvalEnvironment, Check)
-from ..pyson import Eval, PYSONDecoder
-from ..tools import grouped_slice
-from ..tools import reduce_ids
-from ..transaction import Transaction
-from ..cache import Cache
-from ..pool import Pool
-
-__all__ = [
-    'Trigger', 'TriggerLog',
-    ]
+from trytond.model.exceptions import ValidationError
+from trytond.pool import Pool
+from trytond.pyson import Eval, PYSONDecoder
+from trytond.tools import grouped_slice
+from trytond.tools import reduce_ids
+from trytond.transaction import Transaction
 
 
 class ConditionError(ValidationError):
@@ -89,7 +85,7 @@ class Trigger(DeactivableMixin, ModelSQL, ModelView):
             cursor.execute(*sql_table.select(
                     sql_table.id, sql_table.minimum_delay,
                     where=sql_table.minimum_delay != Null))
-            for id_, delay in cursor.fetchall():
+            for id_, delay in cursor:
                 delay = datetime.timedelta(hours=delay)
                 cursor.execute(*sql_table.update(
                         [sql_table.minimum_time_delay],
@@ -194,8 +190,9 @@ class Trigger(DeactivableMixin, ModelSQL, ModelView):
     def queue_trigger_action(self, records):
         trigger_records = Transaction().trigger_records[self.id]
         ids = set(map(int, records)) - trigger_records
-        self.__class__.__queue__.trigger_action(self, list(ids))
-        trigger_records.update(ids)
+        if ids:
+            self.__class__.__queue__.trigger_action(self, list(ids))
+            trigger_records.update(ids)
 
     def trigger_action(self, ids):
         """
@@ -221,7 +218,7 @@ class Trigger(DeactivableMixin, ModelSQL, ModelView):
                         trigger_log.record_id, Count(Literal(1)),
                         where=red_sql & (trigger_log.trigger == self.id),
                         group_by=trigger_log.record_id))
-                number = dict(cursor.fetchall())
+                number = dict(cursor)
                 for record_id in sub_ids:
                     if record_id not in number:
                         new_ids.append(record_id)
@@ -259,7 +256,7 @@ class Trigger(DeactivableMixin, ModelSQL, ModelView):
                         trigger_log.record_id, Max(trigger_log.create_date),
                         where=(red_sql & (trigger_log.trigger == self.id)),
                         group_by=trigger_log.record_id))
-                delay = dict(cursor.fetchall())
+                delay = dict(cursor)
                 for record_id in sub_ids:
                     if record_id not in delay:
                         new_ids.append(record_id)

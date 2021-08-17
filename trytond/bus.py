@@ -149,12 +149,11 @@ class LongPollingBus:
             raise NotImplementedException
 
         logger.info("listening on channel '%s'", cls._channel)
-        conn = db.get_connection()
+        conn = db.get_connection(autocommit=True)
         pid = os.getpid()
         try:
             cursor = conn.cursor()
             cursor.execute('LISTEN "%s"' % cls._channel)
-            conn.commit()
 
             cls._messages[database] = messages = _MessageQueue(_cache_timeout)
 
@@ -246,7 +245,7 @@ def subscribe(request, database_name):
     last_message = request.parsed_data.get('last_message')
 
     logger.debug(
-        "getting bus messages from %s@%s/%s for %s since %s",
+        "getting bus messages from %s@%s%s for %s since %s",
         request.authorization.username, request.remote_addr, request.path,
         channels, last_message)
     bus_response = Bus.subscribe(database_name, channels, last_message)

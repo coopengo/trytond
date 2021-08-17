@@ -8,13 +8,13 @@ The views are used to display records of an :class:`ModelView
 <trytond.model.ModelView>` to the user.
 
 In Tryton, :class:`ModelView <trytond.model.ModelView>` can have several views.
-An `action` opens a window and defines which view to show.
+An ``action`` opens a window and defines which view to show.
 
-The views are built from XML that is stored in the `view` directory of the
+The views are built from XML that is stored in the ``view`` directory of the
 module or in the databases thanks to the model ir.ui.view.
 
 So generally, they are defined in xml files with this kind of xml where name is
-the name of the XML file in the `view` directory:
+the name of the XML file in the ``view`` directory:
 
 .. highlight:: xml
 
@@ -162,6 +162,15 @@ List of attributes shared by many form elements:
       :class:`trytond.model.fields.Numeric` to display on the widget. The
       default value is 1.
 
+    .. _common-attributes-symbol:
+
+    * ``symbol``: Only on numerical fields, the name of field which provides
+      the symbol to display.
+
+    .. _common-attributes-help_field:
+
+    * ``help_field``: The name of Dict field mapping the Selection value with
+      its help string.
 
 form
 ^^^^
@@ -283,13 +292,25 @@ Display a field of the object with the value of the current record.
       that will be evaluated to the language code for which spell checking must
       be done.
 
+    * ``symbol``: see in common-attributes-symbol_.
+
+    * ``help_field``: see in common-attributes-help_field_.
+
+.. _form-image:
+
 image
 ^^^^^
 
 Display an image.
 
-    * ``name``: the image name or the field name which contains the image name.
-      The image name must be the name of a record of `ir.ui.icon`.
+    * ``type``: the type of image source. Available values are ``icon`` or
+      ``url``. The default value is ``icon``.
+
+    * ``name``: The image name or the field name which contains the image name.
+      For the ``icon`` type it must be the name of a record of ``ir.ui.icon``.
+      For the ``url`` type it must be the URL. It can be relative to the server.
+
+    * ``url_size``: the name of the size parameter to add to the URL.
 
     * ``yexpand``: see in common-attributes-yexpand_.
 
@@ -346,7 +367,7 @@ Display a button.
 
         ``button(cls, records)``
 
-      The function may return an `ir.action` id or one of those client side
+      The function may return an ``ir.action`` id or one of those client side
       action keywords:
 
 .. _topics-views-client-actions:
@@ -375,8 +396,8 @@ Display a button.
     * ``help``: see in common-attributes-help_.
 
     * ``keyword``: specify where will the button be displayed in the client
-      toolbar. The valid values are the keywords starting with `form_` from
-      :ref:`Actions <topics-actions>` without the `form_` part.
+      toolbar. The valid values are the keywords starting with ``form_`` from
+      :ref:`Actions <topics-actions>` without the ``form_`` part.
 
 
 .. warning::
@@ -389,10 +410,10 @@ Display a button.
 link
 ^^^^
 
-Display an `ir.action.act_window` as a button with a counter or one counter per
-tab. When clicked it opens the window.
+Display an ``ir.action.act_window`` as a button with a counter or one counter
+per tab. When clicked it opens the window.
 
-    * ``name``: The XML id of `ir.action.act_window`.
+    * ``name``: The XML id of ``ir.action.act_window``.
 
     * ``colspan``: see in common-attributes-colspan_.
 
@@ -400,8 +421,8 @@ tab. When clicked it opens the window.
 
     * ``icon``: The name of the icon to display.
 
-    * ``empty``: If set to `hide` the button is not displayed if the counter is
-      zero. The default is ``show``.
+    * ``empty``: If set to ``hide`` the button is not displayed if the counter
+      is zero. The default is ``show``.
 
 notebook
 ^^^^^^^^
@@ -532,9 +553,9 @@ trytond/ir/ui/tree.rng. There is also a RNC in trytond/ir/ui/tree.rnc.
 
 Tree view is used to display records inside a list or a tree.
 
-It is a tree if there is a `field_childs` defined and this tree will
-have drag and drop activated if the `field_childs` and the `parent
-field` are defined in the view.
+It is a tree if there is a ``field_childs`` defined and this tree will
+have drag and drop activated if the ``field_childs`` and the ``parent
+field`` are defined in the view.
 
 The columns of the view are put on the screen from left to right.
 
@@ -604,6 +625,10 @@ field
 
     * ``factor``: see in common-attributes-factor_.
 
+    * ``symbol``: see in common-attributes-symbol_.
+
+    * ``help_field``: see in common-attributes-help_field_.
+
 prefix or suffix
 ^^^^^^^^^^^^^^^^
 
@@ -614,8 +639,14 @@ diplayed in the same column.
 
     * ``name``: The name of the field whose value will be displayed.
 
-    * ``icon``: The name of the field that contains the name of the icon to
-      display or the name of the icon.
+    * ``icon``: The image name or the field name which contains the image name.
+      For the ``icon`` type it must be the name of a record of ``ir.ui.icon``.
+      For the ``url`` type it must be the URL. It can be relative to the server.
+
+    * ``icon_type``: the type of icon source. Available values are ``icon`` or
+      ``url``. The default value is ``icon``.
+
+    * ``url_size``: the name of the size parameter to add to the URL.
 
 button
 ^^^^^^
@@ -837,7 +868,7 @@ The RNG that describes the xml for a calendar view is stored in
 trytond/ir/ui/calendar.rng. There is also a RNC in trytond/ir/ui/calendar.rnc.
 
 Calendar view is use to display records as events on a calendar based on a
-`dtstart` and optionally a `dtend`.
+``dtstart`` and optionally a ``dtend``.
 
 XML description
 ---------------
@@ -852,21 +883,22 @@ Each calendar view must start with this tag.
     * ``dtend``: The name of the field that contains the end date.
 
     * ``mode``: An optional name for the view that will be used first.
-      Available views are: `day`, `week` and `month`. The default value is 
-      `month`.
+      Available views are: ``day``, ``week`` and ``month``. The default value
+      is ``month``.
 
     * ``editable``: A boolean to specify if the calendar is editable. The
-      default value is `True`.
+      default value is ``True``.
 
     * ``color``: An optional field name that contains the text color for the
-      event. The default value is `black`.
+      event. The default value is ``black``.
 
     * ``background_color``: An optional field name that contains the background
-      color for the event. The default value is `lightblue`.
+      color for the event. The default value is ``lightblue``.
 
     * ``width``: The minimum width the calendar should request, use -1 to unset.
 
-    * ``height``: The minimum height the calendar should request, use -1 to unset.
+    * ``height``: The minimum height the calendar should request, use -1 to
+      unset.
 
 field
 ^^^^^

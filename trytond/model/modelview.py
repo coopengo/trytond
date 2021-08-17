@@ -136,6 +136,10 @@ class ModelView(Model):
             if isinstance(attr, fields.Field):
                 fields_[name] = attr
 
+    @classmethod
+    def __post_setup__(cls):
+        super(ModelView, cls).__post_setup__()
+
         methods = {
             '_done': set(),
             'depends': collections.defaultdict(set),
@@ -153,7 +157,11 @@ class ModelView(Model):
                 if not parent_meth:
                     continue
                 for attr in ['depends', 'depend_methods', 'change']:
-                    parent_value = getattr(parent_meth, attr, None)
+                    if isinstance(parent_meth, property):
+                        parent_value = getattr(parent_meth.fget, attr, set())
+                        parent_value |= getattr(parent_meth.fset, attr, set())
+                    else:
+                        parent_value = getattr(parent_meth, attr, set())
                     if parent_value:
                         methods[attr][name] |= parent_value
 
@@ -177,8 +185,9 @@ class ModelView(Model):
             meth_done = set()
             while meth_names:
                 meth_name = meth_names.pop()
-                assert callable(getattr(cls, meth_name)), \
-                    "%s.%s not callable" % (cls, meth_name)
+                method = getattr(cls, meth_name)
+                assert callable(method) or isinstance(method, property), \
+                    "%s.%s not callable or property" % (cls, meth_name)
                 set_methods(meth_name)
                 setattr(field, attribute,
                     getattr(field, attribute) | methods['depends'][meth_name])
@@ -191,7 +200,7 @@ class ModelView(Model):
                 # Decorate on_change to always return self
                 setattr(cls, function_name, on_change(function))
 
-        for name, field in fields_.items():
+        for name, field in cls._fields.items():
             for attribute in [
                     'on_change',
                     'on_change_with',
@@ -199,10 +208,6 @@ class ModelView(Model):
                     'selection_change_with',
                     ]:
                 setup_field(name, field, attribute)
-
-    @classmethod
-    def __post_setup__(cls):
-        super(ModelView, cls).__post_setup__()
 
         # Update __rpc__
         for field_name, field in cls._fields.items():
@@ -216,12 +221,25 @@ class ModelView(Model):
                 cls.__rpc__.setdefault(button,
                     RPC(instantiate=0, result=on_change_result))
 
+            meth_names = set()
+            meth_done = set()
             for parent_cls in cls.__mro__:
                 parent_meth = getattr(parent_cls, button, None)
                 if not parent_meth:
                     continue
                 cls.__change_buttons[button] |= getattr(
                     parent_meth, 'change', set())
+                meth_names |= getattr(parent_meth, 'change_methods', set())
+            while meth_names:
+                meth_name = meth_names.pop()
+                method = getattr(cls, meth_name)
+                assert callable(method) or isinstance(method, property), \
+                    "%s.%s not callable or property" % (cls, meth_name)
+                set_methods(meth_name)
+                cls.__change_buttons[button] |= methods['depends'][meth_name]
+                meth_names |= (
+                    methods['depend_methods'][meth_name] - meth_done)
+                meth_done.add(meth_name)
 
         for method_name, rpc in cls.__rpc__.items():
             if not rpc.cache:
@@ -310,6 +328,9 @@ class ModelView(Model):
                     # There is perhaps a new module in the directory
                     ModelView._reset_modules_list()
                     raise_p = True
+            if not result['arch']:
+                raise ValueError("Missing view architecture for %s" % ((
+                            cls.__name__, view_id, view_type),))
             parser = etree.XMLParser(remove_comments=True)
             try:
                 encoded_arch = result['arch'].encode('utf-8')
@@ -345,6 +366,11 @@ class ModelView(Model):
                             xml += "<newline/>"
                     else:
                         xml += '<field name="%s" colspan="4"/>' % (i,)
+                if cls._buttons:
+                    xml += '<group id="buttons" col="-1" colspan="4">'
+                    for button in cls._buttons:
+                        xml += '<button name="%s"/>' % button
+                    xml += '</group>'
                 xml += "</form>"
             elif view_type == 'tree':
                 field = 'id'
@@ -365,15 +391,9 @@ class ModelView(Model):
 
         # Update arch and compute fields from arch
         parser = etree.XMLParser(remove_blank_text=True)
-        try:
-            encoded_arch = result['arch'].encode('utf-8')
-        except UnicodeEncodeError:
-            encoded_arch = result['arch']
-        tree = etree.fromstring(encoded_arch, parser)
-        xarch, xfields = cls._view_look_dom_arch(
+        tree = etree.fromstring(result['arch'], parser)
+        result['arch'], result['fields'] = cls.parse_view(
             tree, result['type'], result['field_childs'], level=level)
-        result['arch'] = xarch
-        result['fields'] = xfields
 
         if result['field_childs']:
             child_field = result['field_childs']
@@ -412,6 +432,7 @@ class ModelView(Model):
         pool = Pool()
         Action = pool.get('ir.action.keyword')
         Export = pool.get('ir.export')
+        Email = pool.get('ir.email.template')
         key = cls.__name__
         result = cls._view_toolbar_get_cache.get(key)
         if result:
@@ -423,12 +444,16 @@ class ModelView(Model):
         exports = Export.search_read(
             [('resource', '=', cls.__name__)],
             fields_names=['name', 'export_fields.name'])
+        emails = Email.search_read(
+            [('model.model', '=', cls.__name__)],
+            fields_names=['name'])
         result = {
             'print': prints,
             'action': actions,
             'relate': relates,
             'quick_actions': quick_actions,
             'exports': exports,
+            'emails': emails,
             }
         cls._view_toolbar_get_cache.set(key, result)
         return result
@@ -439,13 +464,20 @@ class ModelView(Model):
         return []
 
     @classmethod
-    def _view_look_dom_arch(cls, tree, type, field_children=None, level=0):
+    def parse_view(
+            cls, tree, type, field_children=None, level=0, view_depends=None):
+        """
+        Return sanitized XML and the corresponding fields definition
+        """
         pool = Pool()
         ModelAccess = pool.get('ir.model.access')
         FieldAccess = pool.get('ir.model.field.access')
 
         encoder = PYSONEncoder()
-        view_depends = []
+        if view_depends is None:
+            view_depends = []
+        else:
+            view_depends = view_depends.copy()
         for xpath, attribute, value, *extra in cls.view_attributes():
             depends = []
             if extra:
@@ -522,8 +554,8 @@ class ModelView(Model):
                 if viewtreewidth.width > 0:
                     fields_width[viewtreewidth.field] = viewtreewidth.width
 
-        fields_def = cls.__view_look_dom(tree_root, type,
-                fields_width=fields_width)
+        fields_def = cls.__parse_fields(
+            tree_root, type, fields_width=fields_width)
 
         if hasattr(cls, 'active'):
             fields_def.setdefault('active', {'name': 'active'})
@@ -535,17 +567,21 @@ class ModelView(Model):
                 if hasattr(field, 'field'):
                     fields_def.setdefault(field.field, {'name': field.field})
 
-        for field_name in list(fields_def.keys()):
+        for depend in view_depends:
+            if depend not in fields_to_remove:
+                fields_def.setdefault(depend, {'name': depend})
+
+        field_names = list(fields_def.keys())
+        while field_names:
+            field_name = field_names.pop()
             if field_name in cls._fields:
                 field = cls._fields[field_name]
             else:
                 continue
             for depend in field.depends:
-                fields_def.setdefault(depend, {'name': depend})
-
-        for depend in view_depends:
-            if depend not in fields_to_remove:
-                fields_def.setdefault(depend, {'name': depend})
+                if depend not in fields_def:
+                    fields_def[depend] = {'name': depend}
+                    field_names.append(depend)
 
         arch = etree.tostring(
             tree, encoding='utf-8', pretty_print=False).decode('utf-8')
@@ -560,8 +596,8 @@ class ModelView(Model):
         return arch, fields2
 
     @classmethod
-    def __view_look_dom(cls, element, type, fields_width=None,
-            _fields_attrs=None):
+    def __parse_fields(
+            cls, element, type, fields_width=None, _fields_attrs=None):
         pool = Pool()
         Translation = pool.get('ir.translation')
         ModelData = pool.get('ir.model.data')
@@ -611,7 +647,7 @@ class ModelView(Model):
                         break
             return views
 
-        for attr in ('name', 'icon'):
+        for attr in ('name', 'icon', 'symbol'):
             if not element.get(attr):
                 continue
             fields_attrs.setdefault(element.get(attr), {})
@@ -691,7 +727,8 @@ class ModelView(Model):
             link_name = element.attrib['name']
             action_id = ModelData.get_id(*link_name.split('.'))
             try:
-                action, = ActionWindow.search([('id', '=', action_id)])
+                with Transaction().set_context(_check_access=True):
+                    action, = ActionWindow.search([('id', '=', action_id)])
             except ValueError:
                 action = None
             if (not action
@@ -700,7 +737,9 @@ class ModelView(Model):
                         action.res_model, 'read', raise_exception=False)):
                 element.tag = 'label'
                 colspan = element.attrib.get('colspan')
+                link_name = element.attrib['name']
                 element.attrib.clear()
+                element.attrib['id'] = link_name
                 if colspan is not None:
                     element.attrib['colspan'] = colspan
             else:
@@ -724,14 +763,16 @@ class ModelView(Model):
                     fields_attrs.setdefault(element.get(attr), {})
 
         for field in element:
-            fields_attrs = cls.__view_look_dom(field, type,
-                fields_width=fields_width, _fields_attrs=fields_attrs)
+            fields_attrs = cls.__parse_fields(
+                field, type, fields_width=fields_width,
+                _fields_attrs=fields_attrs)
         return fields_attrs
 
     @staticmethod
     def button(func):
         @wraps(func)
         def wrapper(cls, records, *args, **kwargs):
+            from .modelstorage import ModelStorage
             pool = Pool()
             ModelAccess = pool.get('ir.model.access')
             Button = pool.get('ir.model.button')
@@ -745,6 +786,11 @@ class ModelView(Model):
 
             if (transaction.user != 0) and check_access:
                 ModelAccess.check(cls.__name__, 'read')
+                if issubclass(cls, ModelStorage):
+                    # Check record rule access
+                    cls.read([r.id for r in records
+                            if r.id is not None and r.id >= 0],
+                        ['id'])
                 groups = set(User.get_groups())
                 button_groups = Button.get_groups(cls.__name__,
                     func.__name__)
@@ -800,10 +846,15 @@ class ModelView(Model):
         return decorator
 
     @staticmethod
-    def button_change(*fields):
+    def button_change(*fields, **kwargs):
+        methods = kwargs.pop('methods', None)
+        assert not kwargs
+
         def decorator(func):
             func = on_change(func)
             func.change = set(fields)
+            if methods:
+                func.change_methods = set(methods)
             return func
         return decorator
 
@@ -839,11 +890,11 @@ class ModelView(Model):
         """
         from .modelstorage import ModelStorage
         changed = {}
-        init_values = self._init_values or {}
+        init_values = self._init_values or self._record()
         if not self._values:
             return changed
         init_record = self.__class__(self.id)
-        for fname, value in self._values.items():
+        for fname, value in self._values._items():
             field = self._fields[fname]
             # Always test key presence in case value is None
             if (fname in init_values
@@ -869,7 +920,7 @@ class ModelView(Model):
             elif field._type in ['one2many', 'many2many']:
                 targets = value
                 if fname in init_values:
-                    init_targets = init_values.get(fname)
+                    init_targets = init_values._get(fname)
                 else:
                     init_targets = getattr(init_record, fname, [])
                 value = collections.defaultdict(list)
@@ -878,9 +929,9 @@ class ModelView(Model):
                     if (field._type == 'one2many'
                             and field.field
                             and target._values):
-                        t_values = target._values.copy()
+                        t_values = target._values._copy()
                         # Don't look at reverse field
-                        target._values.pop(field.field, None)
+                        target._values._pop(field.field, None)
                     else:
                         t_values = None
                     try:

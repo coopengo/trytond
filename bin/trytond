@@ -2,7 +2,6 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
 import glob
-import threading
 import logging
 import os
 import sys
@@ -32,13 +31,18 @@ from trytond.pool import Pool
 from trytond.modules import get_module_list, get_module_info
 
 with commandline.pidfile(options):
-    # Pool.{start,init} are async to avoid slowness on server start
-    # fix #4287
-    def init_pool_db():
+    # JCA: If we are in "dev" mode and WERKZEUG_RUN_MAIN != 'true', the server
+    # will be restarted anyway in "reloader" mode, son no need to init the pool
+    if os.environ.get('WERKZEUG_RUN_MAIN') == 'true' \
+            or not options.dev or options.coroutine:
         Pool.start()
+        threads = []
         for name in options.database_names:
-            Pool(name).init()
-    threading.Thread(target=init_pool_db).start()
+            thread = threading.Thread(target=Pool(name).init)
+            thread.start()
+            threads.append(thread)
+        for thread in threads:
+            thread.join()
     hostname, port = split_netloc(config.get('web', 'listen'))
     static_files = {
         '/': config.get('web', 'root'),
@@ -48,17 +52,31 @@ with commandline.pidfile(options):
     if bench:
         static_files['/bench/'] = bench
     certificate = config.get('ssl', 'certificate')
+    try:
+        if config.getboolean('ssl', 'certificate'):
+            certificate = None
+    except ValueError:
+        pass
     privatekey = config.get('ssl', 'privatekey')
+    try:
+        if config.getboolean('ssl', 'privatekey'):
+            privatekey = None
+    except ValueError:
+        pass
     if certificate or privatekey:
         from werkzeug.serving import load_ssl_context
         ssl_args = dict(
             ssl_context=load_ssl_context(certificate, privatekey))
     else:
         ssl_args = {}
-    for module in get_module_list():
-        info = get_module_info(module)
-        path = os.path.join(info['directory'], 'view', '*.xml')
-        extra_files.extend(glob.glob(path))
+    if options.dev and not options.coroutine:
+        for module in get_module_list():
+            info = get_module_info(module)
+            for ext in ['xml',
+                    'fodt', 'odt', 'fodp', 'odp', 'fods', 'ods', 'fodg', 'odg',
+                    'txt', 'html', 'xhtml']:
+                path = os.path.join(info['directory'], '**', '*.' + ext)
+                extra_files.extend(glob.glob(path, recursive=True))
 
     # AKE: handle term signals
     handler = commandline.generate_signal_handler(options.pidfile)

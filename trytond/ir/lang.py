@@ -7,15 +7,15 @@ from ast import literal_eval
 
 from sql import Table
 
-from ..model import ModelView, ModelSQL, DeactivableMixin, fields, Check
-from ..modules import create_graph, load_translations
-from ..cache import Cache
-from ..transaction import Transaction
-from ..pool import Pool
-from ..pyson import Eval
-from ..exceptions import UserError
-from ..i18n import gettext
-from ..wizard import Wizard, StateView, Button, StateTransition
+from trytond.cache import Cache
+from trytond.exceptions import UserError
+from trytond.i18n import gettext
+from trytond.model import ModelView, ModelSQL, DeactivableMixin, fields, Check
+from trytond.modules import create_graph, load_translations
+from trytond.pool import Pool
+from trytond.pyson import Eval
+from trytond.transaction import Transaction
+from trytond.wizard import Wizard, StateView, Button, StateTransition
 
 Transaction.cache_keys.add('translate_name')
 
@@ -72,6 +72,9 @@ class Lang(DeactivableMixin, ModelSQL, ModelView):
     n_cs_precedes = fields.Boolean('Negative Currency Symbol Precedes')
     p_sep_by_space = fields.Boolean('Positive Separate by Space')
     n_sep_by_space = fields.Boolean('Negative Separate by Space')
+
+    pg_text_search = fields.Char(
+        "PostgreSQL Text Search Configuration", readonly=True)
 
     _lang_cache = Cache('ir.lang')
     _code_cache = Cache('ir.lang.code', context=False)
@@ -290,7 +293,8 @@ class Lang(DeactivableMixin, ModelSQL, ModelView):
             if (lang.code == Config.get_language()
                     and not lang.translatable):
                 raise TranslatableError(
-                    gettext('ir.msg_language_default_translatable'))
+                    gettext('ir.msg_language_default_translatable',
+                        language=lang.rec_name))
 
     @staticmethod
     def check_xml_record(langs, values):
@@ -337,7 +341,8 @@ class Lang(DeactivableMixin, ModelSQL, ModelView):
         for lang in langs:
             if lang.code == Config.get_language():
                 raise DeleteDefaultError(
-                    gettext('ir.msg_language_delete_default'))
+                    gettext('ir.msg_language_delete_default',
+                        language=lang.rec_name))
         # Clear cache
         cls._lang_cache.clear()
         cls._code_cache.clear()
@@ -452,20 +457,23 @@ class Lang(DeactivableMixin, ModelSQL, ModelView):
             if seps:
                 formatted = _strip_padding(formatted, seps)
         elif percent[-1] in 'diu':
+            seps = 0
             if grouping:
                 formatted, seps = self._group(formatted, monetary=monetary)
             if seps:
                 formatted = _strip_padding(formatted, seps)
         return formatted
 
-    def currency(self, val, currency, symbol=True, grouping=False):
+    def currency(
+            self, val, currency, symbol=True, grouping=False, digits=None):
         """
         Formats val according to the currency settings in lang.
         """
         # Code from currency in locale.py
 
         # check for illegal values
-        digits = currency.digits
+        if digits is None:
+            digits = currency.digits
         if digits == 127:
             raise ValueError("Currency formatting is not possible using "
                              "the 'C' locale.")
@@ -517,7 +525,10 @@ class Lang(DeactivableMixin, ModelSQL, ModelView):
         Day = pool.get('ir.calendar.day')
         if format is None:
             format = self.date
+            if isinstance(value, datetime.datetime):
+                format += ' %H:%M:%S'
         format = format.replace('%x', self.date)
+        format = format.replace('%X', '%H:%M:%S')
         if isinstance(value, datetime.date):
             for f, i, klass in (('%A', 6, Day), ('%B', 1, Month)):
                 for field, f in [('name', f), ('abbreviation', f.lower())]:
@@ -581,7 +592,7 @@ def get_parent_language(code):
         cursor = Transaction().connection.cursor()
         lang = Table('ir_lang')
         cursor.execute(*lang.select(lang.code, lang.parent))
-        _parents.update(cursor.fetchall())
+        _parents.update(cursor)
     if _parents.get(code):
         return _parents[code]
     for sep in ['@', '_']:

@@ -5,12 +5,14 @@ import time
 from dateutil.relativedelta import relativedelta
 import logging
 
-from ..model import ModelView, ModelSQL, DeactivableMixin, fields, dualmethod
-from ..transaction import Transaction
-from ..pool import Pool
 from trytond import backend
 from trytond.config import config
+from trytond.model import (
+    ModelView, ModelSQL, DeactivableMixin, fields, dualmethod)
+from trytond.pool import Pool
 from trytond.pyson import Eval
+from trytond.status import processing
+from trytond.transaction import Transaction
 from trytond.worker import run_task
 
 logger = logging.getLogger(__name__)
@@ -28,11 +30,19 @@ class Cron(DeactivableMixin, ModelSQL, ModelView):
             ('months', 'Months'),
             ], "Interval Type", sort=False, required=True)
     minute = fields.Integer("Minute",
+        domain=['OR',
+            ('minute', '=', None),
+            [('minute', '>=', 0), ('minute', '<=', 59)],
+            ],
         states={
             'invisible': Eval('interval_type').in_(['minutes']),
             },
         depends=['interval_type'])
     hour = fields.Integer("Hour",
+        domain=['OR',
+            ('hour', '=', None),
+            [('hour', '>=', 0), ('hour', '<=', 23)],
+            ],
         states={
             'invisible': Eval('interval_type').in_(['minutes', 'hours']),
             },
@@ -45,6 +55,10 @@ class Cron(DeactivableMixin, ModelSQL, ModelView):
             },
         depends=['interval_type'])
     day = fields.Integer("Day",
+        domain=['OR',
+            ('day', '=', None),
+            ('day', '>=', 0),
+            ],
         states={
             'invisible': Eval('interval_type').in_(
                 ['minutes', 'hours', 'days', 'weeks']),
@@ -54,6 +68,7 @@ class Cron(DeactivableMixin, ModelSQL, ModelView):
     next_call = fields.DateTime("Next Call", select=True)
     method = fields.Selection([
             ('ir.trigger|trigger_time', "Run On Time Triggers"),
+            ('ir.queue|clean', "Clean Task Queue"),
             ], "Method", required=True)
 
     @classmethod
@@ -97,10 +112,24 @@ class Cron(DeactivableMixin, ModelSQL, ModelView):
             + relativedelta(
                 microsecond=0,
                 second=0,
-                minute=self.minute,
-                hour=self.hour,
-                day=self.day,
-                weekday=int(self.weekday.index) if self.weekday else None))
+                minute=(
+                    self.minute
+                    if self.interval_type != 'minutes'
+                    else None),
+                hour=(
+                    self.hour
+                    if self.interval_type not in {'minutes', 'hours'}
+                    else None),
+                day=(
+                    self.day
+                    if self.interval_type not in {
+                        'minutes', 'hours', 'days', 'weeks'}
+                    else None),
+                weekday=(
+                    int(self.weekday.index)
+                    if self.weekday
+                    and self.interval_type not in {'minutes', 'hours', 'days'}
+                    else None)))
 
     @dualmethod
     @ModelView.button
@@ -113,10 +142,11 @@ class Cron(DeactivableMixin, ModelSQL, ModelView):
 
     @classmethod
     def run(cls, db_name):
+        transaction = Transaction()
         logger.info('cron started for "%s"', db_name)
         now = datetime.datetime.now()
         retry = config.getint('database', 'retry')
-        with Transaction().start(db_name, 0) as transaction:
+        with transaction.start(db_name, 0, context={'_skip_warnings': True}):
             transaction.database.lock(transaction.connection, cls._table)
             crons = cls.search(['OR',
                     ('next_call', '<=', now),
@@ -124,21 +154,23 @@ class Cron(DeactivableMixin, ModelSQL, ModelView):
                     ])
 
             for cron in crons:
-                logger.info("Run cron %s", cron.id)
+                name = '<Cron %s@%s %s>' % (cron.id, db_name, cron.method)
+                logger.info("%s started", name)
                 for count in range(retry, -1, -1):
                     if count != retry:
                         time.sleep(0.02 * (retry - count))
                     try:
-                        cron.run_once()
-                        cron.next_call = cron.compute_next_call(now)
-                        cron.save()
-                        transaction.commit()
+                        with processing(name):
+                            cron.run_once()
+                            cron.next_call = cron.compute_next_call(now)
+                            cron.save()
+                            transaction.commit()
                     except Exception as e:
                         transaction.rollback()
                         if (isinstance(e, backend.DatabaseOperationalError)
                                 and count):
                             continue
-                        logger.error('Running cron %s', cron.id, exc_info=True)
+                        logger.error('%s failed', name, exc_info=True)
                     break
         while transaction.tasks:
             task_id = transaction.tasks.pop()

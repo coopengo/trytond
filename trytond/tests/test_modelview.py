@@ -9,7 +9,7 @@ from lxml import etree
 from trytond.model.exceptions import AccessError, AccessButtonError
 from trytond.tests.test_tryton import activate_module, with_transaction
 from trytond.pool import Pool
-from trytond.pyson import PYSONEncoder, Eval
+from trytond.pyson import PYSONEncoder, PYSONDecoder, Eval
 
 
 class ModelView(unittest.TestCase):
@@ -34,6 +34,8 @@ class ModelView(unittest.TestCase):
         record.target = Target(1)
         record.ref_target = Target(2)
         record.targets = [Target(name='bar')]
+        record.multiselection = ['a']
+        record.dictionary = {'key': 'value'}
         self.assertEqual(record._changed_values, {
                 'name': 'foo',
                 'target': 1,
@@ -43,12 +45,18 @@ class ModelView(unittest.TestCase):
                         (0, {'id': None, 'name': 'bar'}),
                         ],
                     },
+                'multiselection': ('a',),
+                'dictionary': {'key': 'value'},
                 })
 
         record = Model(name='test', target=1, targets=[
                 {'id': 1, 'name': 'foo'},
                 {'id': 2},
-                ], m2m_targets=[5, 6, 7])
+                ],
+            m2m_targets=[5, 6, 7],
+            multiselection=['a'],
+            dictionary={'key': 'value'},
+            )
 
         self.assertEqual(record._changed_values, {})
 
@@ -56,6 +64,12 @@ class ModelView(unittest.TestCase):
         target.name = 'bar'
         record.targets = [target]
         record.m2m_targets = [Target(9), Target(10)]
+        ms = list(record.multiselection)
+        ms.append('b')
+        record.multiselection = ms
+        dico = record.dictionary.copy()
+        dico['key'] = 'another value'
+        record.dictionary = dico
         self.assertEqual(record._changed_values, {
                 'targets': {
                     'update': [{'id': 1, 'name': 'bar'}],
@@ -65,6 +79,8 @@ class ModelView(unittest.TestCase):
                     'remove': [5, 6, 7],
                     'add': [(0, {'id': 9}), (1, {'id': 10})],
                     },
+                'multiselection': ('a', 'b'),
+                'dictionary': {'key': 'another value'},
                 })
 
         # change only one2many record
@@ -82,13 +98,37 @@ class ModelView(unittest.TestCase):
 
         # no initial value
         record = Model()
-        record._values = {}
+        record._values = record._record()
         target = Target(id=1)
         record._values['targets'] = [target]
         target.name = 'foo'
         self.assertEqual(record._changed_values, {
                 'targets': {
-                    'update': [{'id': 1, 'name': 'foo'}],
+                    'add': [(0, {'id': 1, 'name': 'foo'})],
+                    },
+                })
+
+    @with_transaction()
+    def test_changed_values_stored(self):
+        "Test stored changed values"
+        pool = Pool()
+        Model = pool.get('test.modelview.stored.changed_values')
+        Target = pool.get('test.modelview.stored.changed_values.target')
+
+        record = Model()
+        record.targets = [Target(name="foo"), Target(name="bar")]
+        record.save()
+        target1, target2 = record.targets
+
+        record = Model(record.id)
+        target1.name = "test"
+        record.targets = [target1, Target(name="baz")]
+
+        self.assertEqual(record._changed_values, {
+                'targets': {
+                    'delete': [target2.id],
+                    'update': [{'id': target1.id, 'name': "test"}],
+                    'add': [(1, {'id': None, 'name': "baz"})],
                     },
                 })
 
@@ -385,6 +425,21 @@ class ModelView(unittest.TestCase):
         self.assertEqual(action['url'], 'http://www.tryton.org/')
 
     @with_transaction()
+    def test_button_change(self):
+        "Test button change"
+        pool = Pool()
+        Model = pool.get('test.modelview.button_change')
+
+        decoder = PYSONDecoder()
+        view = Model.fields_view_get()
+        tree = etree.fromstring(view['arch'])
+        button = tree.xpath('//button[@name="test"]')[0]
+
+        self.assertEqual(
+            set(decoder.decode(button.attrib['change'])),
+            {'name', 'extra'})
+
+    @with_transaction()
     def test_link(self):
         "Test link in view"
         pool = Pool()
@@ -409,6 +464,53 @@ class ModelView(unittest.TestCase):
         model, = Model.search([('model', '=', 'test.modelview.link.target')])
         access = ModelAccess(model=model, group=None, perm_read=False)
         access.save()
+
+        arch = TestModel.fields_view_get()['arch']
+        parser = etree.XMLParser()
+        tree = etree.fromstring(arch, parser=parser)
+        links = tree.xpath('//link')
+        labels = tree.xpath('//label')
+
+        self.assertFalse(links)
+        self.assertTrue(labels)
+
+    @unittest.skipUnless(hasattr(etree, 'RelaxNG'), "etree is missing RelaxNG")
+    @with_transaction()
+    def test_link_label_valid_view(self):
+        "Test that replacing link by label results in a valid view"
+        pool = Pool()
+        TestModel = pool.get('test.modelview.link')
+        Model = pool.get('ir.model')
+        ModelAccess = pool.get('ir.model.access')
+        UIView = pool.get('ir.ui.view')
+
+        model, = Model.search([('model', '=', 'test.modelview.link.target')])
+        access = ModelAccess(model=model, group=None, perm_read=False)
+        access.save()
+
+        arch = TestModel.fields_view_get()['arch']
+        parser = etree.XMLParser()
+        tree = etree.fromstring(arch, parser=parser)
+        validator = etree.RelaxNG(etree=UIView.get_rng('form'))
+
+        self.assertTrue(validator.validate(tree))
+
+    @with_transaction()
+    def test_link_without_action_access(self):
+        "Test link in view without action access"
+        pool = Pool()
+        TestModel = pool.get('test.modelview.link')
+        ActionWindow = pool.get('ir.action.act_window')
+        Group = pool.get('res.group')
+        ActionGroup = pool.get('ir.action-res.group')
+
+        group = Group(name="Group")
+        group.save()
+        action_window, = ActionWindow.search(
+            [('res_model', '=', 'test.modelview.link.target')])
+        ActionGroup(
+            action=action_window.action,
+            group=group).save()
 
         arch = TestModel.fields_view_get()['arch']
         parser = etree.XMLParser()
@@ -520,6 +622,16 @@ class ModelView(unittest.TestCase):
         fields = CircularDepends.fields_view_get(view_type='form')['fields']
 
         self.assertEqual(fields, {})
+
+    @with_transaction()
+    def test_depends_depends(self):
+        "Test depends of depends are included"
+        pool = Pool()
+        DependsDepends = pool.get('test.modelview.depends_depends')
+
+        fields = DependsDepends.fields_view_get(view_type='form')['fields']
+
+        self.assertEqual(fields.keys(), {'foo', 'bar', 'baz'})
 
     @with_transaction(context={'_check_access': True})
     def test_button_depends_access(self):

@@ -71,9 +71,9 @@ class TableHandler(TableHandlerInterface):
             cursor.execute(
                 SQL(
                     "ALTER TABLE {} ADD COLUMN __id INTEGER "
-                    "DEFAULT nextval('{}') NOT NULL").format(
-                        Identifier(self.table_name),
-                        Identifier(self.sequence_name)))
+                    "DEFAULT nextval(%s) NOT NULL").format(
+                        Identifier(self.table_name)),
+                (self.sequence_name,))
             cursor.execute(
                 SQL('ALTER TABLE {} ADD PRIMARY KEY(__id)')
                 .format(Identifier(self.table_name)))
@@ -155,7 +155,7 @@ class TableHandler(TableHandlerInterface):
                 'FROM information_schema.columns '
                 'WHERE table_name = %s AND table_schema = %s',
                 (self.table_name, self.table_schema))
-            for column, typname, nullable, size, default in cursor.fetchall():
+            for column, typname, nullable, size, default in cursor:
                 self._columns[column] = {
                     'typname': typname,
                     'notnull': True if nullable == 'NO' else False,
@@ -169,7 +169,7 @@ class TableHandler(TableHandlerInterface):
                 'FROM information_schema.table_constraints '
                 'WHERE table_name = %s AND table_schema = %s',
                 (self.table_name, self.table_schema))
-            self._constraints = [c for c, in cursor.fetchall()]
+            self._constraints = [c for c, in cursor]
 
             # add nonstandard exclude constraint
             cursor.execute('SELECT c.conname '
@@ -183,7 +183,7 @@ class TableHandler(TableHandlerInterface):
                     "AND r.relkind IN ('r', 'p') "
                     'AND r.relname = %s AND nr.nspname = %s',
                     (self.table_name, self.table_schema))
-            self._constraints.extend((c for c, in cursor.fetchall()))
+            self._constraints.extend((c for c, in cursor))
 
             cursor.execute('SELECT k.column_name, r.delete_rule '
                 'FROM information_schema.key_column_usage AS k '
@@ -192,7 +192,7 @@ class TableHandler(TableHandlerInterface):
                 'AND r.constraint_name = k.constraint_name '
                 'WHERE k.table_name = %s AND k.table_schema = %s',
                 (self.table_name, self.table_schema))
-            self._fk_deltypes = dict(cursor.fetchall())
+            self._fk_deltypes = dict(cursor)
 
         if indexes:
             # Fetch indexes defined for the table
@@ -203,7 +203,7 @@ class TableHandler(TableHandlerInterface):
                     "JOIN pg_class cl2 on (cl2.oid = ind.indexrelid) "
                 "WHERE cl.relname = %s AND n.nspname = %s",
                 (self.table_name, self.table_schema))
-            self._indexes = [l[0] for l in cursor.fetchall()]
+            self._indexes = [l[0] for l in cursor]
 
     @property
     def _field2module(self):
@@ -218,22 +218,10 @@ class TableHandler(TableHandlerInterface):
     def alter_size(self, column_name, column_type):
         cursor = Transaction().connection.cursor()
         cursor.execute(
-            SQL(
-                "ALTER TABLE {} RENAME COLUMN {} TO _temp_change_size").format(
-                Identifier(self.table_name),
-                Identifier(column_name)))
-        cursor.execute(SQL("ALTER TABLE {} ADD COLUMN {} {}").format(
+            SQL("ALTER TABLE {} ALTER COLUMN {} TYPE {}").format(
                 Identifier(self.table_name),
                 Identifier(column_name),
                 SQL(column_type)))
-        cursor.execute(
-            SQL("UPDATE {} SET {} = _temp_change_size::%s").format(
-                Identifier(self.table_name),
-                Identifier(column_name),
-                SQL(column_type)))
-        cursor.execute(
-            SQL("ALTER TABLE {} " "DROP COLUMN _temp_change_size")
-            .format(Identifier(self.table_name)))
         self._update_definitions(columns=True)
 
     def alter_type(self, column_name, column_type):
@@ -414,12 +402,6 @@ class TableHandler(TableHandlerInterface):
             if action == 'add':
                 if index_name in self._indexes:
                     return
-                columns_quoted = []
-                for column in columns:
-                    if isinstance(column, str):
-                        columns_quoted.append(Identifier(column))
-                    else:
-                        columns_quoted.append(SQL(str(column)))
                 params = sum(
                     (c.params for c in columns if hasattr(c, 'params')), ())
                 if where:
@@ -430,7 +412,11 @@ class TableHandler(TableHandlerInterface):
                             .format(
                                 name=Identifier(index_name),
                                 table=Identifier(self.table_name),
-                                columns=SQL(',').join(columns_quoted)),
+                                columns=SQL(',').join(
+                                    (Identifier(c) if isinstance(c, str)
+                                        else SQL(str(c)))
+                                    for c in columns
+                                    )),
                             SQL(where)
                             ]),
                     params)
@@ -470,15 +456,11 @@ class TableHandler(TableHandlerInterface):
                     self._update_definitions(columns=True)
                 else:
                     logger.warning(
-                        'Unable to set column %s '
-                        'of table %s not null !\n'
-                        'Try to re-run: '
-                        'trytond.py --update=module\n'
-                        'If it doesn\'t work, update records '
-                        'and execute manually:\n'
-                        'ALTER TABLE "%s" ALTER COLUMN "%s" SET NOT NULL',
-                        column_name, self.table_name, self.table_name,
-                        column_name)
+                        "Unable to set not null on column %s of table %s.\n"
+                        "Try restarting one more time.\n"
+                        "If that doesn't work update the records and restart "
+                        "again.",
+                        column_name, self.table_name)
             elif action == 'remove':
                 if not self._columns[column_name]['notnull']:
                     return

@@ -13,9 +13,11 @@ import types
 import unicodedata
 import warnings
 from array import array
+from functools import wraps
 from itertools import islice
 
 from sql import Literal
+from sql.conditionals import Case
 from sql.operators import Or
 
 from trytond.const import OPERATORS
@@ -83,7 +85,7 @@ def get_smtp_server():
     :return: A SMTP instance. The quit() method must be call when all
     the calls to sendmail() have been made.
     """
-    from ..sendmail import get_smtp_server
+    from trytond.sendmail import get_smtp_server
     warnings.warn(
         'get_smtp_server is deprecated use trytond.sendmail',
         DeprecationWarning)
@@ -213,6 +215,26 @@ def rstrip_wildcard(string, wildcard='%', escape='\\'):
     return new_string
 
 
+def escape_wildcard(string, wildcards='%_', escape='\\'):
+    for wildcard in escape + wildcards:
+        string = string.replace(wildcard, escape + wildcard)
+    return string
+
+
+def unescape_wildcard(string, wildcards='%_', escape='\\'):
+    for wildcard in wildcards + escape:
+        string = string.replace(escape + wildcard, wildcard)
+    return string
+
+
+def is_full_text(value, escape='\\'):
+    escaped = value.strip('%')
+    escaped = escaped.replace(escape + '%', '').replace(escape + '_', '')
+    if '%' in escaped or '_' in escaped:
+        return False
+    return value.startswith('%') == value.endswith('%')
+
+
 _slugify_strip_re = re.compile(r'[^\w\s-]')
 _slugify_hyphenate_re = re.compile(r'[-\s]+')
 
@@ -223,3 +245,30 @@ def slugify(value, hyphenate='-'):
     value = unicodedata.normalize('NFKD', value)
     value = str(_slugify_strip_re.sub('', value).strip())
     return _slugify_hyphenate_re.sub(hyphenate, value)
+
+
+def sortable_values(func):
+    "Decorator that makes list of couple values sortable"
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        result = list(func(*args, **kwargs))
+        for i, (name, value) in enumerate(list(result)):
+            result[i] = (name, value is None, value)
+        return result
+    return wrapper
+
+
+def sql_pairing(x, y):
+    """Return SQL expression to pair x and y
+    Pairing function from http://szudzik.com/ElegantPairing.pdf"""
+    return Case(
+        (x < y, (y * y) + x),
+        else_=(x * x) + x + y)
+
+
+def firstline(text):
+    "Returns first non-empty line"
+    try:
+        return next((x for x in text.splitlines() if x.strip()))
+    except StopIteration:
+        return ''

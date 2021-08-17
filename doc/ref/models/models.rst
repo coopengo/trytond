@@ -17,6 +17,11 @@ Class attributes are:
     It contains the a unique name to reference the model throughout the
     platform.
 
+.. attribute:: Model.__access__
+
+   A set that contains the names of relation field for which the access rights
+   are also checked for this model.
+
 .. attribute:: Model.__rpc__
 
     It contains a dictionary with method name as key and an instance of
@@ -35,6 +40,17 @@ Class attributes are:
 
     It returns a queue caller for the model. The called method will be pushed
     into the queue.
+
+.. attribute:: Model._fields
+    It contains a dictionary with the field name as key and its
+    :class:`~trytond.model.field` instance as value.
+
+.. attribute:: Model._record
+    It stores the record class to store internaly the values of the instances.
+
+.. attribute:: Model._defaults
+    It contains a dictionary with the field name as key and its default method
+    as value.
 
 Class methods:
 
@@ -55,8 +71,8 @@ Class methods:
     Returns a dictionary with the default values for each field in
     ``fields_names``. Default values are defined by the returned value of each
     instance method with the pattern ``default_`field_name`()``.
-    ``with_rec_name`` allow to add `rec_name` value for each many2one field.
-    The `default_rec_name` key in the context can be used to define the value
+    ``with_rec_name`` allow to add ``rec_name`` value for each many2one field.
+    The ``default_rec_name`` key in the context can be used to define the value
     of the :attr:`Model._rec_name` field.
 
 .. classmethod:: Model.fields_get([fields_names[, level]])
@@ -67,7 +83,7 @@ Class methods:
 
 .. classmethod:: Model.__names__([field])
 
-    Returns a dictionary with the name of the `model` and the `field`.
+    Returns a dictionary with the name of the ``model`` and the ``field``.
     It is a convenience-method used to format messages which should include
     those names.
 
@@ -75,11 +91,11 @@ Instance methods:
 
 .. method:: Model.on_change(fieldnames)
 
-    Returns the list of changes by calling `on_change` method of each field.
+    Returns the list of changes by calling ``on_change`` method of each field.
 
 .. method:: Model.on_change_with(fieldnames)
 
-    Returns the new values of all fields by calling `on_change_with` method of
+    Returns the new values of all fields by calling ``on_change_with`` method of
     each field.
 
 .. method:: Model.pre_validate()
@@ -99,8 +115,12 @@ Class attributes:
 .. attribute:: ModelView._buttons
 
     It contains a dictionary with button name as key and the states dictionary
-    for the button. This states dictionary will be used to generate the views
-    containing the button.
+    for the button.
+    The states possible keys are ``invisible``, ``readonly`` and ``icon`` which
+    have a :class:`~trytond.pyson.PYSON` statement as value and ``depends``
+    which has a list of field names on which the button states depend.
+    The keys will be set as default attributes on the buttons for the views
+    that show them.
 
 Static methods:
 
@@ -110,14 +130,17 @@ Static methods:
 
 .. staticmethod:: ModelView.button_action(action)
 
-    Same as :meth:`ModelView.button` but return the action id of the XML `id`
+    Same as :meth:`ModelView.button` but return the action id of the XML ``id``
     action or the action value updated by the returned value of the method.
 
-.. staticmethod:: ModelView.button_change([\*fields])
+.. staticmethod:: ModelView.button_change([\*fields[, methods]])
 
     Same as :meth:`ModelView.button` but for button that change values of the
     fields on client side (similar to :ref:`on_change
     <ref-models-fields-on_change>`).
+    The `methods` argument can be used to duplicate the field names from other
+    decorated methods. This is useful if the decorated method calls another
+    method.
 
     .. warning::
         Only on instance methods.
@@ -144,10 +167,10 @@ Class methods:
 .. classmethod:: ModelView.view_toolbar_get()
 
     Returns the model specific actions and exports in a dictionary with keys:
-        - `print`: a list of available reports
-        - `action`: a list of available actions
-        - `relate`: a list of available relations
-        - `exports`: a list of available exports
+        - ``print``: a list of available reports
+        - ``action``: a list of available actions
+        - ``relate``: a list of available relations
+        - ``exports``: a list of available exports
 
 .. classmethod:: ModelView.view_attributes()
 
@@ -155,6 +178,17 @@ Class methods:
     Each element from the XPath will get the attribute set with the JSON
     encoded value. If the depends list is set its fields are added to the
     view if the xpath matches at least one element.
+
+
+.. classmethod:: ModelView.parse_view(tree, type[, field_children[, level[, view_depends]]])
+
+    Return the sanitized XML and the corresponding fields definition.
+
+
+.. note::
+
+    This method is public mainly to allow modification the existing XML of the
+    view by code.
 
 ============
 ModelStorage
@@ -224,7 +258,7 @@ Class methods:
     of the fields as key and their values.
     ``fields_names`` can contain dereferenced fields from related models.
     Their values will be returned under the referencing field suffixed by a
-    `.`. The number of *dots* in the name is not limited.
+    ``.``. The number of *dots* in the name is not limited.
     The order of the returned list is not guaranteed.
 
 .. classmethod:: ModelStorage.write(records, values, [[records, values], ...])
@@ -266,7 +300,7 @@ Class methods:
     value.
 
     The keys of ``default`` may use the dotted notation for the
-    :class:`fields.One2Many` to define the default to pass to its `copy`
+    :class:`fields.One2Many` to define the default to pass to its ``copy``
     operation.
 
     New records are returned following the input order.
@@ -275,16 +309,16 @@ Class methods:
 
     Return a list of records that match the :ref:`domain <topics-domain>`.
 
-    If `offset` or `limit` are set, the result starts at the offset and has the
-    length of the limit.
+    If ``offset`` or ``limit`` are set, the result starts at the offset and
+    has the length of the limit.
 
-    The `order` is a list of tuples defining the order of the result:
+    The ``order`` is a list of tuples defining the order of the result:
 
             [ ('field name', 'ASC'), ('other field name', 'DESC'), ... ]
 
     The first element of the tuple is a field name of the model and the second
-    is the sort ordering as `ASC` for ascending, `DESC` for descending or empty
-    for a default order. This second element may contain 'NULLS FIRST' or
+    is the sort ordering as ``ASC`` for ascending, ``DESC`` for descending or
+    empty for a default order. This second element may contain 'NULLS FIRST' or
     'NULLS LAST' to sort null values before or after non-null values. If
     neither is specified the default behavior of the backend is used.
 
@@ -293,7 +327,7 @@ Class methods:
     record. Or for a :class:`fields.Dict` field, the dotted notation is used to
     sort on the key's value.
 
-    If `count` is set to `True`, then the result is the number of records.
+    If ``count`` is set to ``True``, then the result is the number of records.
 
 .. classmethod:: ModelStorage.search_count(domain)
 
@@ -359,8 +393,8 @@ Instance methods:
 
 .. method:: ModelStorage.resources()
 
-    Return a dictionary with the number of attachments (`attachment_count`),
-    notes (`note_count`) and unread note (`note_unread`).
+    Return a dictionary with the number of attachments (``attachment_count``),
+    notes (``note_count``) and unread note (``note_unread``).
 
 .. method:: ModelStorage.get_rec_name(name)
 
@@ -385,7 +419,7 @@ Class attributes are:
 
 .. attribute:: ModelSQL._order
 
-    The default `order` parameter of :meth:`ModelStorage.search` method.
+    The default ``order`` parameter of :meth:`ModelStorage.search` method.
 
 .. attribute:: ModelSQL._order_name
 
@@ -403,7 +437,7 @@ Class attributes are:
 
         [ ('constraint name', constraint, 'xml id'), ... ]
 
-    - `constraint name` is the name of the SQL constraint in the database
+    - ``constraint name`` is the name of the SQL constraint in the database
 
     - constraint is an instance of :class:`Constraint`
 
@@ -460,8 +494,8 @@ Class methods:
 
 .. classmethod:: ModelSQL.search(domain[, offset[, limit[, order[, count[, query]]]]])
 
-    Same as :meth:`ModelStorage.search` with the additional `query` argument.
-    If `query` is set to `True`, the the result is the SQL query.
+    Same as :meth:`ModelStorage.search` with the additional ``query`` argument.
+    If ``query`` is set to ``True``, the the result is the SQL query.
 
 .. classmethod:: ModelSQL.search_domain(domain[, active_test[, tables]])
 
@@ -532,7 +566,7 @@ Instance attributes:
 
 .. attribute:: Unique.operators
 
-    The tuple of `Equal` operators.
+    The tuple of ``Equal`` operators.
 
 Exclude
 -------
@@ -541,7 +575,7 @@ Exclude
 
 It represents an exclude :class:`Constraint` which guarantees that if any two
 rows are compared on the specified expression using the specified operator not
-all of these comparisons will return `TRUE`.
+all of these comparisons will return ``TRUE``.
 
 Instance attributes:
 
@@ -646,7 +680,7 @@ Class attributes are:
 .. attribute:: DictSchemaMixin.digits
 
     The definition of the :class:`trytond.model.fields.Integer` field for the
-    digits number when the type is `float` or `numeric`.
+    digits number when the type is ``float`` or ``numeric``.
 
 .. attribute:: DictSchemaMixin.domain
 
@@ -661,7 +695,7 @@ Class attributes are:
 .. attribute:: DictSchemaMixin.selection
 
     The definition of the :class:`trytond.model.fields.Text` field to store the
-    couple of key and label when the type is `selection`.
+    couple of key and label when the type is ``selection``.
     The format is a key/label separated by ":" per line.
 
 .. attribute:: DictSchemaMixin.selection_sorted
@@ -691,7 +725,7 @@ Class methods:
    result of :meth:`Model.fields_get`.
 
    It is possible to disable this method (returns an empty dictionary) by
-   setting in the `dict` section of the configuration, the
+   setting in the ``dict`` section of the configuration, the
    :attr:`Model.__name__` to ``False``.
 
 Instance methods:
@@ -715,7 +749,7 @@ Instance methods:
 
 .. method:: MatchMixin.match(pattern[, match_none])
 
-    Return if the instance match the pattern. If `match_none` is set `None`
+    Return if the instance match the pattern. If ``match_none`` is set ``None``
     value of the instance will be compared.
 
 ==========
@@ -752,6 +786,23 @@ Class methods:
 
     Return the SQL table and columns to use for the UNION for the model name.
 
+===========
+SymbolMixin
+===========
+
+.. class:: SymbolMixin
+
+A mixin_ to manage the display of symbols on the client side.
+
+Instance methods:
+
+.. method:: SymbolMixin.get_symbol(sign, [symbol])
+
+    Return a symbol and its position.
+    The position indicates whether the symbol should appear before (0) or after
+    (1) the value. If no symbol parameter is supplied then the mixin uses the
+    value of attribute named ``symbol``.
+
 ================
 sequence_ordered
 ================
@@ -760,9 +811,9 @@ sequence_ordered
 
 Retuns a mixin_ class which defines the order of a :class:`ModelSQL` with an
 :class:`trytond.model.fields.Integer` field. field_name indicates the name of
-the field to be created and its default values is `sequence`. field_label
-defines the label which will be used by the field and defaults to `Sequence`.
-Order specifies the order direction and defaults to `ASC NULLS FIRST`.
+the field to be created and its default values is ``sequence``. field_label
+defines the label which will be used by the field and defaults to ``Sequence``.
+Order specifies the order direction and defaults to ``ASC NULLS FIRST``.
 
 ===============
 MultiValueMixin
@@ -801,13 +852,13 @@ Instance methods:
 
 .. method:: MultiValueMixin.get_multivalue(name, \*\*pattern)
 
-    Return the value of the field `name` for the pattern.
+    Return the value of the field ``name`` for the pattern.
 
 .. method:: MultiValueMixin.set_multivalue(name, value[, save], \*\*pattern)
 
-    Store the value of the field `name` for the pattern.
-    If `save` is true, it will be stored in the database, otherwise the
-    modified :class:`ValueMixin` records are returned unsaved. `save` is true
+    Store the value of the field ``name`` for the pattern.
+    If ``save`` is true, it will be stored in the database, otherwise the
+    modified :class:`ValueMixin` records are returned unsaved. ``save`` is true
     by default.
 
 .. warning::
@@ -849,10 +900,10 @@ tree
 
 .. method:: tree([parent[, name[, separator]]])
 
-Returns a mixin_ class :class:`TreeMixin`. `parent` indicates the name of the
-field that defines the parent of the tree and its default value is `parent`.
-`name` indicates the name of the field that defines the name of the record and
-its default value is `name`. If `separator` is set, the
+Returns a mixin_ class :class:`TreeMixin`. ``parent`` indicates the name of the
+field that defines the parent of the tree and its default value is ``parent``.
+``name`` indicates the name of the field that defines the name of the record and
+its default value is ``name``. If ``separator`` is set, the
 :meth:`ModelStorage.get_rec_name` constructs the name by concatenating each
 parent names using it as separator and :meth:`ModelStorage.search_rec_name` is
 adapted to search across the tree.
@@ -864,3 +915,38 @@ adapted to search across the tree.
 
     Helper method that checks if there is no recursion in the tree defined by
     :meth:`tree`.
+
+============
+avatar_mixin
+============
+
+.. method:: avatar_mixin([size[, default]])
+
+Returns a mixin_ :class:`AvatarMixin`. ``size`` defines the size of the avatar
+image and its default value is ``64``. ``default`` indicates the name of the
+field to use for generating a default avatar, if it's not set then no default
+avatar is generated.
+
+.. class:: AvatarMixin
+
+.. attribute::  AvatarMixin.avatars
+
+   The :class:`trytond.model.fields.One2Many` field used to store the
+   ``ir.avatar`` records.
+
+.. attribute:: AvatarMixin.avatar
+
+   The :class:`trytond.model.fields.Binary` field that contains the avatar.
+
+.. attribute:: AvatarMixin.avatar_url
+
+   The :class:`trytond.model.fields.Char` field that containts the URL for the
+   avatar.
+
+.. attribute:: AvatarMixin.has_avatar
+
+   Indicates whether the record has an avatar.
+
+.. classmethod:: AvatarMixin.generate_avatar(records, field)
+
+   Generate a default avatar for each record using the field.

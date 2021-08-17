@@ -21,9 +21,9 @@ class MultiSelection(SelectionMixin, Field):
     _py_type = list
 
     def __init__(self, selection, string='', sort=True, translate=True,
-            help='', required=False, readonly=False, domain=None, states=None,
-            select=False, on_change=None, on_change_with=None, depends=None,
-            context=None, loading='eager'):
+            help='', help_selection=None, required=False, readonly=False,
+            domain=None, states=None, select=False, on_change=None,
+            on_change_with=None, depends=None, context=None, loading='eager'):
         """
         :param selection: A list or a function name that returns a list.
             The list must be a list of tuples. First member is the value
@@ -41,6 +41,7 @@ class MultiSelection(SelectionMixin, Field):
         self.selection_change_with = set()
         self.sort = sort
         self.translate_selection = translate
+        self.help_selection = help_selection
     __init__.__doc__ += Field.__init__.__doc__
 
     def set_rpc(self, model):
@@ -60,7 +61,7 @@ class MultiSelection(SelectionMixin, Field):
                 # If stored as JSON conversion is done on backend
                 if isinstance(data, str):
                     data = json.loads(data)
-                lists[value['id']] = data
+                lists[value['id']] = tuple(data)
         return lists
 
     def sql_format(self, value):
@@ -68,6 +69,11 @@ class MultiSelection(SelectionMixin, Field):
         if isinstance(value, list):
             value = dumps(sorted(set(value)))
         return value
+
+    def __set__(self, inst, value):
+        if value:
+            value = tuple(value)
+        super().__set__(inst, value)
 
     def _domain_column(self, operator, column):
         database = Transaction().database

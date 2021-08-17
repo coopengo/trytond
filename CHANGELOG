@@ -1,4 +1,6 @@
 * Add option to strip leading and trailing whitespace from fields.Char
+
+Version 6.0.2 - 2021-05-15
 * Allow column sql types to be tested from the table handler
 * Combine search and get_keys in DictSchemaMixin
 * Reset less often the user sessions
@@ -8,11 +10,86 @@
 Version 5.6.3 - 2020-07-01
 * Bug fixes (see mercurial logs for details)
 
-Version 5.6.2 - 2020-06-16
+Version 6.0.1 - 2021-05-07
 * Bug fixes (see mercurial logs for details)
 
-Version 5.6.1 - 2020-06-03
+Version 6.0.0 - 2021-05-03
 * Bug fixes (see mercurial logs for details)
+* Allow column sql types to be tested from the table handler
+* Add support for database connection parameters to configuration URI
+* Use immutable datastructures for Dict and MultiSelection fields
+* Skip warnings for non-interactive operations
+* Check rule only if _check_access is set
+* Add statistics to Cache
+* Add support for avatars
+* Add status command
+* Add document widget on form view
+* Add full text and similarity search and FullText field
+* Add URL type to icon
+* Use instance method to get next sequence value
+* Store the sequence type directly on sequence
+* Allow sending email with record's attachments
+* Add which records to use for actions
+* Add parent to group to inherit accesses
+* Add __access__ to Model
+* Add route wrapper to allow null origin
+* Add header grouping on report
+* Protect trusted devices against brute force attack
+* Make ModelView.parse_view public
+* Add help for each value to selection and multiselection
+* Use safe_join in SharedDataMiddlewareIndex (issue10068)
+* Use menu name for window opened from menu
+* Add trigonometric functions to sqlite backend
+* Allow skipping user warnings globally
+* Add validate option to trytond-admin
+* Refresh pool of other processes
+* Add clear_all method to Cache
+* Support Genshi element directives in HTML editor
+* Add firstline tool
+* Add support for Python 3.9
+* Skip access check on ModelStorage instances
+* Eager load Function field with same multiple getter
+* Support other methods for button_change decorator
+* Allow copying Python instances of Model
+* Add all buttons to default form view
+* Unify PYSON string format
+* Forbid all white spaces except space in Char field
+
+Version 5.8.0 - 2020-11-02
+* Bug fixes (see mercurial logs for details)
+* Remove support for Python 3.5
+* Support import of timedelta data
+* Add symbol widget
+* Add sql_pairing tool
+* Add format_datetime to Report
+* Allow sharing view searches
+* Allow overriding digits in Lang.currency and Report.format_currency
+* Add record name in report filename
+* Add deletable and writable state from ir.rule to read
+* Add language attribute to data tag
+* Add e-mail template
+* Send e-mail on behalf of user
+* Register mixins to generic Report class
+* Cache in memory the report template instances
+* Support Genshi's MsgDirective in report
+* Support PYSON comparison of date and datetime
+* Add cron task to clean old queue tasks
+* Add option to run cron once
+* Add defaults option to route
+* Add escape_wildcard in tools
+* Add option to ensure emails are sent
+* Allow keyword action for all models
+* Add sortable_values in tools
+* Remove default colors on graph and calendar
+* Add model, record and records attributes on Wizard
+* Check read access of wizard records
+* Add cached_property in tools
+* Use custom class to store record data
+* Do not write to existing targets on xxx2Many add
+* Add configuration check
+* Add support for properties to fields.depends
+* Allow combining authentication methods together
+* Add context to export CSV route
 
 Version 5.6.0 - 2020-05-04
 * Bug fixes (see mercurial logs for details)

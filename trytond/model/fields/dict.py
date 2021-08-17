@@ -6,15 +6,34 @@ import json
 from sql import operators, Literal, Select, CombiningQuery, Cast, Null
 
 from trytond import backend
+from trytond.pool import Pool
+from trytond.protocols.jsonrpc import JSONDecoder, JSONEncoder
+from trytond.tools import grouped_slice
 from trytond.transaction import Transaction
 from .field import Field, SQL_OPERATORS
-from ...protocols.jsonrpc import JSONDecoder, JSONEncoder
-from ...pool import Pool
-from ...tools import grouped_slice
 
 # Use canonical form
 dumps = partial(
     json.dumps, cls=JSONEncoder, separators=(',', ':'), sort_keys=True)
+
+
+class ImmutableDict(dict):
+
+    __slots__ = ()
+
+    def _not_allowed(cls, *args, **kwargs):
+        raise TypeError("Operation not allowed on ImmutableDict")
+
+    __setitem__ = _not_allowed
+    __delitem__ = _not_allowed
+    __ior__ = _not_allowed
+    clear = _not_allowed
+    pop = _not_allowed
+    popitem = _not_allowed
+    setdefault = _not_allowed
+    update = _not_allowed
+
+    del _not_allowed
 
 
 class Dict(Field):
@@ -41,7 +60,7 @@ class Dict(Field):
                 # If stored as JSON conversion is done on backend
                 if isinstance(data, str):
                     data = json.loads(data, object_hook=JSONDecoder())
-                dicts[value['id']] = data
+                dicts[value['id']] = ImmutableDict(data)
         return dicts
 
     def sql_format(self, value):
@@ -50,6 +69,9 @@ class Dict(Field):
             d = {}
             for k, v in value.items():
                 # JMO : some Coog tests rely on data with all values at None
+                # JCA : Actually, without this, extra data without a value will
+                # never be stored, which is definitively not what we want,
+                # since the presence of the key is an information in itself
                 # if v is None:
                 #     continue
                 if isinstance(v, list):
@@ -57,6 +79,11 @@ class Dict(Field):
                 d[k] = v
             value = dumps(d)
         return value
+
+    def __set__(self, inst, value):
+        if value:
+            value = ImmutableDict(value)
+        super().__set__(inst, value)
 
     def translated(self, name=None, type_='values'):
         "Return a descriptor for the translated value of the field"
@@ -193,7 +220,7 @@ class TranslatedDict(object):
             domain = [('type_', '=', 'selection')]
 
         records = []
-        for key_names in grouped_slice(list(value.keys())):
+        for key_names in grouped_slice(value.keys()):
             records += SchemaModel.search([
                     ('name', 'in', key_names),
                     ] + domain)
