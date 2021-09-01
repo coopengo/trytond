@@ -9,10 +9,10 @@ import re
 from collections import defaultdict
 from decimal import Decimal
 
-from . import __version__
-from .tools import grouped_slice
-from .transaction import Transaction
-from .pyson import PYSONEncoder, CONTEXT
+from trytond import __version__
+from trytond.pyson import PYSONEncoder, CONTEXT
+from trytond.tools import grouped_slice
+from trytond.transaction import Transaction
 
 logger = logging.getLogger(__name__)
 
@@ -221,25 +221,26 @@ class RecordTagHandler:
             eval_attr = attributes.get('eval', '')
             pyson_attr = bool(int(attributes.get('pyson', '0')))
 
+            context = {}
+            context['time'] = time
+            context['version'] = __version__.rsplit('.', 1)[0]
+            context['ref'] = self.mh.get_id
+            context['Decimal'] = Decimal
+            context['datetime'] = datetime
+            if pyson_attr:
+                context.update(CONTEXT)
+
             if search_attr:
                 search_model = self.model._fields[field_name].model_name
                 SearchModel = self.mh.pool.get(search_model)
                 with Transaction().set_context(active_test=False):
-                    found, = SearchModel.search(eval(search_attr))
+                    found, = SearchModel.search(eval(search_attr, context))
                     self.values[field_name] = found.id
 
             elif ref_attr:
                 self.values[field_name] = self.mh.get_id(ref_attr)
 
             elif eval_attr:
-                context = {}
-                context['time'] = time
-                context['version'] = __version__.rsplit('.', 1)[0]
-                context['ref'] = self.mh.get_id
-                context['Decimal'] = Decimal
-                context['datetime'] = datetime
-                if pyson_attr:
-                    context.update(CONTEXT)
                 value = eval(eval_attr, context)
                 if pyson_attr:
                     value = PYSONEncoder(sort_keys=True).encode(value)
@@ -371,7 +372,7 @@ class Fs2bdAccessor:
                             cache, cache.get('_language_cache', {}).values()):
                         if (model_name in cache
                                 and model.id in cache[model_name]):
-                            cache[model_name][model.id] = {}
+                            del cache[model_name][model.id]
             self.browserecord[module][model_name][model.id] = model
 
     def fetch_new_module(self, module):
@@ -410,7 +411,7 @@ class Fs2bdAccessor:
 
 class TrytondXmlHandler(sax.handler.ContentHandler):
 
-    def __init__(self, pool, module, module_state, modules):
+    def __init__(self, pool, module, module_state, modules, languages):
         "Register known taghandlers, and managed tags."
         sax.handler.ContentHandler.__init__(self)
 
@@ -427,6 +428,7 @@ class TrytondXmlHandler(sax.handler.ContentHandler):
         self.grouped_model_data = []
         self.skip_data = False
         self.modules = modules
+        self.languages = languages
 
         # Tag handlders are used to delegate the processing
         self.taghandlerlist = {
@@ -454,11 +456,8 @@ class TrytondXmlHandler(sax.handler.ContentHandler):
 
         try:
             self.sax_parser.parse(source)
-        except Exception:
-            logger.error(
-                "Error while parsing xml file:\n" + self.current_state(),
-                exc_info=True)
-            raise
+        except Exception as e:
+            raise Exception("Error " + self.current_state()) from e
         return self.to_delete
 
     def startElement(self, name, attributes):
@@ -476,6 +475,9 @@ class TrytondXmlHandler(sax.handler.ContentHandler):
                 depends = attributes.get('depends', '').split(',')
                 depends = {m.strip() for m in depends if m}
                 if not depends.issubset(self.modules):
+                    self.skip_data = True
+                if (attributes.get('language')
+                        and attributes.get('language') not in self.languages):
                     self.skip_data = True
 
             elif name == "tryton":
@@ -591,7 +593,19 @@ class TrytondXmlHandler(sax.handler.ContentHandler):
             if module == self.module and fs_id in self.to_delete:
                 self.to_delete.remove(fs_id)
 
+            # VGA: See bug #20636
+            # Noupdate flag, we need to register it in the db
             if self.noupdate and self.module_state != 'to activate':
+                db_id, mdata_id = [
+                    self.fs2db.get(module, fs_id)[x]
+                    for x in ['db_id', 'id']]
+                if db_id is None:
+                    return
+                current_record = self.ModelData(mdata_id)
+                if not current_record.noupdate:
+                    self.ModelData.write([current_record], {
+                        'noupdate': True,
+                    })
                 return
 
             # this record is already in the db:
@@ -603,6 +617,14 @@ class TrytondXmlHandler(sax.handler.ContentHandler):
             # Check if record has not been deleted
             if db_id is None:
                 return
+
+            # VGA: See bug #20636
+            if not self.noupdate:
+                current_record = self.ModelData(mdata_id)
+                if current_record.noupdate:
+                    self.ModelData.write([current_record], {
+                        'noupdate': False,
+                    })
 
             if not old_values:
                 old_values = {}
@@ -774,6 +796,7 @@ class TrytondXmlHandler(sax.handler.ContentHandler):
                             'db_id': record.id,
                             'values': self.ModelData.dump_values(values),
                             'fs_values': self.ModelData.dump_values(fs_values),
+                            'noupdate': self.noupdate,
                             }))
 
         # reset_browsercord to keep cache memory low
@@ -814,11 +837,9 @@ def post_import(pool, module, to_delete):
         except Exception:
             transaction.rollback()
             logger.error(
-                'Could not delete id: %d of model %s\n'
-                'There should be some relation '
-                'that points to this resource\n'
-                'You should manually fix this '
-                'and restart --update=module\n',
+                "Could not delete id %d from model %s.\n"
+                "There may be a relation that points to this resource "
+                "that must be manually fixed before restarting the update.",
                 db_id, model, exc_info=True)
             if 'active' in Model._fields:
                 try:

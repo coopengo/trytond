@@ -2,6 +2,10 @@
 msgid ""
 msgstr "Content-Type: text/plain; charset=utf-8\n"
 
+msgctxt "field:ir.action,groups:"
+msgid "Groups"
+msgstr "Csoportok"
+
 msgctxt "field:ir.action-res.group,action:"
 msgid "Action"
 msgstr "Művelet"
@@ -10,7 +14,26 @@ msgctxt "field:ir.action-res.group,group:"
 msgid "Group"
 msgstr "Csoport"
 
-#, fuzzy
+msgctxt "field:ir.action.act_window,groups:"
+msgid "Groups"
+msgstr "Csoportok"
+
+msgctxt "field:ir.action.keyword,groups:"
+msgid "Groups"
+msgstr "Csoportok"
+
+msgctxt "field:ir.action.report,groups:"
+msgid "Groups"
+msgstr "Csoportok"
+
+msgctxt "field:ir.action.url,groups:"
+msgid "Groups"
+msgstr "Csoportok"
+
+msgctxt "field:ir.action.wizard,groups:"
+msgid "Groups"
+msgstr "Csoportok"
+
 msgctxt "field:ir.export,groups:"
 msgid "Groups"
 msgstr "Csoportok"
@@ -22,18 +45,16 @@ msgstr "Műveletcsoport"
 
 msgctxt "field:ir.export-res.group,export:"
 msgid "Export"
-msgstr ""
+msgstr "Exportálás"
 
-#, fuzzy
 msgctxt "field:ir.export-res.group,group:"
 msgid "Group"
 msgstr "Csoport"
 
 msgctxt "field:ir.export-write-res.group,export:"
 msgid "Export"
-msgstr ""
+msgstr "Exportálás"
 
-#, fuzzy
 msgctxt "field:ir.export-write-res.group,group:"
 msgid "Group"
 msgstr "Csoport"
@@ -46,12 +67,10 @@ msgctxt "field:ir.model.button-res.group,group:"
 msgid "Group"
 msgstr "Csoport"
 
-#, fuzzy
 msgctxt "field:ir.model.button.click,user:"
 msgid "User"
 msgstr "Felhasználó"
 
-#, fuzzy
 msgctxt "field:ir.model.button.rule,group:"
 msgid "Group"
 msgstr "Csoport"
@@ -64,14 +83,6 @@ msgctxt "field:ir.rule.group-res.group,rule_group:"
 msgid "Rule Group"
 msgstr "Szabályos csoport"
 
-msgctxt "field:ir.sequence,groups:"
-msgid "User Groups"
-msgstr "Felhasználócsoport"
-
-msgctxt "field:ir.sequence.strict,groups:"
-msgid "User Groups"
-msgstr "Felhasználócsoport"
-
 msgctxt "field:ir.sequence.type,groups:"
 msgid "User Groups"
 msgstr "Felhasználócsoport"
@@ -82,7 +93,7 @@ msgstr "Felhasználócsoport"
 
 msgctxt "field:ir.sequence.type-res.group,sequence_type:"
 msgid "Sequence Type"
-msgstr "Típus pontos számcsoportja"
+msgstr "Sorszámozás típusa"
 
 msgctxt "field:ir.ui.menu-res.group,group:"
 msgid "Group"
@@ -113,9 +124,13 @@ msgctxt "field:res.group,name:"
 msgid "Name"
 msgstr "Név"
 
+msgctxt "field:res.group,parent:"
+msgid "Parent"
+msgstr ""
+
 msgctxt "field:res.group,rule_groups:"
 msgid "Rules"
-msgstr "Adatszabályok"
+msgstr "Szabályok"
 
 msgctxt "field:res.group,users:"
 msgid "Users"
@@ -127,6 +142,10 @@ msgstr "Műveletek"
 
 msgctxt "field:res.user,applications:"
 msgid "Applications"
+msgstr "Külső alkalmazások"
+
+msgctxt "field:res.user,avatar_badge_url:"
+msgid "Avatar Badge URL"
 msgstr ""
 
 msgctxt "field:res.user,email:"
@@ -147,11 +166,11 @@ msgstr "Nyelv irányzat"
 
 msgctxt "field:res.user,login:"
 msgid "Login"
-msgstr "Bejelentkezés"
+msgstr "Felhasználónév"
 
 msgctxt "field:res.user,menu:"
 msgid "Menu Action"
-msgstr "Menü műveletek"
+msgstr "Menü művelet"
 
 msgctxt "field:res.user,name:"
 msgid "Name"
@@ -163,12 +182,11 @@ msgstr "Jelszó"
 
 msgctxt "field:res.user,password_hash:"
 msgid "Password Hash"
-msgstr "Jelszó Hash"
+msgstr "Jelszó hash"
 
-#, fuzzy
 msgctxt "field:res.user,password_reset:"
 msgid "Reset Password"
-msgstr "Reset Password"
+msgstr "Jelszó visszaállítása"
 
 msgctxt "field:res.user,password_reset_expire:"
 msgid "Reset Password Expire"
@@ -216,16 +234,27 @@ msgstr ""
 
 msgctxt "field:res.user.application,key:"
 msgid "Key"
-msgstr ""
+msgstr "Kulcs"
 
 msgctxt "field:res.user.application,state:"
 msgid "State"
-msgstr ""
+msgstr "Állapot"
 
-#, fuzzy
 msgctxt "field:res.user.application,user:"
 msgid "User"
 msgstr "Felhasználó"
+
+msgctxt "field:res.user.device,cookie:"
+msgid "Cookie"
+msgstr ""
+
+msgctxt "field:res.user.device,login:"
+msgid "Login"
+msgstr "Bejelentkezés"
+
+msgctxt "field:res.user.login.attempt,device_cookie:"
+msgid "Device Cookie"
+msgstr ""
 
 msgctxt "field:res.user.login.attempt,ip_address:"
 msgid "IP Address"
@@ -264,29 +293,30 @@ msgctxt "help:ir.sequence.type,groups:"
 msgid "Groups allowed to edit the sequences of this type."
 msgstr "A típus számkörének feldolgozásához jogosult csoport"
 
-#, fuzzy
+msgctxt "help:res.group,parent:"
+msgid "The group to inherit accesses from."
+msgstr ""
+
 msgctxt "help:res.user,actions:"
 msgid "Actions that will be run at login."
-msgstr "A művelet a bejelentkezés után hajtható végre"
+msgstr "Ezek a műveletek bejelentkezés után le fognak futni."
 
-#, fuzzy
 msgctxt "model:ir.action,name:act_group_form"
 msgid "Groups"
-msgstr "Groups"
+msgstr "Csoportok"
 
 #, fuzzy
 msgctxt "model:ir.action,name:act_user_config"
 msgid "Configure Users"
 msgstr "Configure Users"
 
-#, fuzzy
 msgctxt "model:ir.action,name:act_user_form"
 msgid "Users"
-msgstr "Users"
+msgstr "Felhasználók"
 
 msgctxt "model:ir.action,name:report_email_reset_password"
 msgid "Reset Password"
-msgstr "Reset Password"
+msgstr "Jelszó visszaállítása"
 
 msgctxt "model:ir.action-res.group,name:"
 msgid "Action - Group"
@@ -311,19 +341,19 @@ msgstr ""
 
 msgctxt "model:ir.message,text:msg_password_forbidden"
 msgid "The password is forbidden."
-msgstr ""
+msgstr "Ilyen jelszó nem engedélyezett."
 
 msgctxt "model:ir.message,text:msg_password_length"
 msgid "The password is too short."
-msgstr ""
+msgstr "A jelszó túl rövid."
 
 msgctxt "model:ir.message,text:msg_password_login"
 msgid "The password cannot be the same as user's login."
-msgstr ""
+msgstr "A jelszó nem egyezhet meg a felhasználónévvel."
 
 msgctxt "model:ir.message,text:msg_password_name"
 msgid "The password cannot be the same as user's name."
-msgstr ""
+msgstr "A jelszó nem egyezhet meg a felhasználó nevével."
 
 msgctxt "model:ir.message,text:msg_user_delete_forbidden"
 msgid ""
@@ -333,7 +363,7 @@ msgstr ""
 
 msgctxt "model:ir.message,text:msg_user_password"
 msgid "Password for %(login)s"
-msgstr ""
+msgstr "%(login)s jelszava"
 
 msgctxt "model:ir.model.button,help:user_reset_password_button"
 msgid "Send by email a new temporary password to the user"
@@ -341,15 +371,15 @@ msgstr "Send by email a new temporary password to the user"
 
 msgctxt "model:ir.model.button,string:user_application_cancel_button"
 msgid "Cancel"
-msgstr "Cancel"
+msgstr "Mégse"
 
 msgctxt "model:ir.model.button,string:user_application_validate_button"
 msgid "Validate"
-msgstr "Validate"
+msgstr "Jóváhagyás"
 
 msgctxt "model:ir.model.button,string:user_reset_password_button"
 msgid "Reset Password"
-msgstr "Reset Password"
+msgstr "Jelszó visszaállítása"
 
 msgctxt "model:ir.model.button-res.group,name:"
 msgid "Model Button - Group"
@@ -449,28 +479,29 @@ msgctxt "model:ir.rule.group,name:rule_group_view_search_admin"
 msgid "Any view search"
 msgstr ""
 
+msgctxt "model:ir.rule.group,name:rule_group_view_search_common"
+msgid "Common view search"
+msgstr ""
+
 msgctxt "model:ir.rule.group-res.group,name:"
 msgid "Rule Group - Group"
 msgstr "Csoportszabály- csoport"
 
 msgctxt "model:ir.sequence.type-res.group,name:"
 msgid "Sequence Type - Group"
-msgstr "Számkörtípus- csoport"
+msgstr "Sorszámozás típusa ‒ csoport"
 
-#, fuzzy
 msgctxt "model:ir.ui.menu,name:menu_group_form"
 msgid "Groups"
-msgstr "Groups"
+msgstr "Csoportok"
 
-#, fuzzy
 msgctxt "model:ir.ui.menu,name:menu_res"
 msgid "Users"
-msgstr "Users"
+msgstr "Felhasználók"
 
-#, fuzzy
 msgctxt "model:ir.ui.menu,name:menu_user_form"
 msgid "Users"
-msgstr "Users"
+msgstr "Felhasználók"
 
 msgctxt "model:ir.ui.menu-res.group,name:"
 msgid "UI Menu - Group"
@@ -480,10 +511,9 @@ msgctxt "model:res.group,name:"
 msgid "Group"
 msgstr "Csoport"
 
-#, fuzzy
 msgctxt "model:res.group,name:group_admin"
 msgid "Administration"
-msgstr "Administration"
+msgstr "Adminisztráció"
 
 msgctxt "model:res.user,name:"
 msgid "User"
@@ -505,6 +535,10 @@ msgctxt "model:res.user.config.start,name:"
 msgid "User Config Init"
 msgstr "Felhasználó beállítások Init"
 
+msgctxt "model:res.user.device,name:"
+msgid "User Device"
+msgstr ""
+
 msgctxt "model:res.user.login.attempt,name:"
 msgid "Login Attempt"
 msgstr "Bejelentkezés kísérlet"
@@ -514,54 +548,38 @@ msgid "User Warning"
 msgstr "Felhasználó figyelmeztetés"
 
 msgctxt "report:res.user.email_reset_password:"
-msgid ", has been reset."
-msgstr ""
-
-#, fuzzy
-msgctxt "report:res.user.email_reset_password:"
 msgid "Reset Password"
-msgstr "Reset Password"
+msgstr "Jelszó visszaállítása"
 
 msgctxt "report:res.user.email_reset_password:"
-msgid "The password for your account,"
+msgid ""
+"The password for your account, [1:%(login)s], has been reset.[2:]\n"
+"                You must set a new one from the user's preferences.[3:]\n"
+"                You can connect with this temporary password [4:%(password)s] to[5:]\n"
+"                [6:tryton://%(host)s/%(database)s][7:]\n"
+"                [8:%(host)s/#%(database)s]"
 msgstr ""
+"A [1:%(login)s] nevű felhasználójának a jelszavát visszaállítottuk.[2:]\n"
+"                Adjon meg egy újat a Felhasználói beállítások ablakban.[3:]\n"
+"                Most a [4:%(password)s] ideiglenes jelszóval tud bejelentkezni a következő rendszerbe[5:]\n"
+"                [6:tryton://%(host)s/%(database)s][7:]\n"
+"                [8:%(host)s/#%(database)s]"
 
 msgctxt "report:res.user.email_reset_password:"
-msgid "The password will expire at"
-msgstr ""
-
-msgctxt "report:res.user.email_reset_password:"
-msgid "UTC"
-msgstr ""
-
-msgctxt "report:res.user.email_reset_password:"
-msgid "You can connect with this temporary password"
-msgstr ""
-
-msgctxt "report:res.user.email_reset_password:"
-msgid "You must set a new one from the user's preferences."
-msgstr ""
-
-msgctxt "report:res.user.email_reset_password:"
-msgid "to"
-msgstr ""
-
-msgctxt "report:res.user.email_reset_password:"
-msgid "tryton://"
-msgstr ""
+msgid "The password will expire at [1:%(datetime)s UTC]."
+msgstr "Az ideiglenes jelszó az [1:%(datetime)s UTC] időpontig érvényes."
 
 msgctxt "selection:res.user.application,state:"
 msgid "Cancelled"
-msgstr ""
+msgstr "érvénytelen"
 
 msgctxt "selection:res.user.application,state:"
 msgid "Requested"
 msgstr ""
 
-#, fuzzy
 msgctxt "selection:res.user.application,state:"
 msgid "Validated"
-msgstr "Validate"
+msgstr "jóváhagyott"
 
 msgctxt "view:res.group:"
 msgid "Access Permissions"
@@ -589,11 +607,11 @@ msgstr "Műveletek"
 
 msgctxt "view:res.user:"
 msgid "Group Membership"
-msgstr ""
+msgstr "Saját csoportjaim"
 
 msgctxt "view:res.user:"
 msgid "Preferences"
-msgstr ""
+msgstr "Felhasználói beállítások"
 
 msgctxt "view:res.user:"
 msgid "User"

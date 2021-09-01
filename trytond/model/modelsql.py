@@ -699,10 +699,8 @@ class ModelSQL(ModelStorage):
 
         fields_related = defaultdict(set)
         extra_fields = set()
-        if 'write_date' not in fields_names:
-            extra_fields.add('write_date')
         for field_name in fields_names:
-            if field_name == '_timestamp':
+            if field_name in {'_timestamp', '_write', '_delete'}:
                 continue
             if '.' in field_name:
                 field_name, field_related = field_name.split('.', 1)
@@ -739,22 +737,50 @@ class ModelSQL(ModelStorage):
             history_order = (column.desc, Column(table, '__id').desc)
             history_limit = 1
 
-        columns = {}
+        columns = []
         for f in all_fields:
             field = cls._fields.get(f)
             if field and field.sql_type():
-                columns[f] = field.sql_column(table).as_(f)
+                columns.append(field.sql_column(table).as_(f))
+                if backend.name == 'sqlite':
+                    columns[-1].output_name += ' [%s]' % field.sql_type().base
+            elif f in {'_write', '_delete'}:
+                if not callable(cls.table_query):
+                    rule_domain = Rule.domain_get(
+                        cls.__name__, mode=f.lstrip('_'))
+                    if rule_domain:
+                        rule_tables = {None: (table, None)}
+                        rule_tables, rule_expression = cls.search_domain(
+                            rule_domain, active_test=False, tables=rule_tables)
+                        if len(rule_tables) > 1:
+                            # The expression uses another table
+                            rule_tables, rule_expression = cls.search_domain(
+                                rule_domain, active_test=False)
+                            rule_from = convert_from(None, rule_tables)
+                            rule_table, _ = rule_tables[None]
+                            rule_where = rule_table.id == table.id
+                            rule_expression = rule_from.select(
+                                        rule_expression, where=rule_where)
+                        columns.append(rule_expression.as_(f))
+                    else:
+                        columns.append(Literal(True).as_(f))
             elif f == '_timestamp' and not callable(cls.table_query):
                 sql_type = fields.Char('timestamp').sql_type().base
-                columns[f] = Extract(
-                    'EPOCH', Coalesce(table.write_date, table.create_date)
-                    ).cast(sql_type).as_('_timestamp')
+                columns.append(Extract('EPOCH',
+                        Coalesce(table.write_date, table.create_date)
+                        ).cast(sql_type).as_('_timestamp'))
 
-        if 'write_date' not in fields_names and len(columns) == 1:
-            columns.pop('write_date')
-        if columns:
+        # JCA: prefix for https://support.coopengo.com/issues/20678
+        if 'write_date' not in all_fields and len(columns) > 0:
+            f = 'write_date'
+            field = cls._fields.get(f)
+            if field and field.sql_type():
+                columns.append(field.sql_column(table).as_(f))
+                if backend.name == 'sqlite':
+                    columns[-1].output_name += ' [%s]' % field.sql_type().base
+        if len(columns):
             if 'id' not in fields_names:
-                columns['id'] = table.id.as_('id')
+                columns.append(table.id.as_('id'))
 
             tables = {None: (table, None)}
             if domain:
@@ -769,7 +795,7 @@ class ModelSQL(ModelStorage):
                     where &= history_clause
                 if domain:
                     where &= dom_exp
-                cursor.execute(*from_.select(*columns.values(), where=where,
+                cursor.execute(*from_.select(*columns, where=where,
                         order_by=history_order, limit=history_limit))
                 fetchall = list(cursor_dict(cursor))
                 if not len(fetchall) == len({}.fromkeys(sub_ids)):
@@ -785,8 +811,10 @@ class ModelSQL(ModelStorage):
         max_write_date = max(
             (r['write_date'] for r in result if r.get('write_date')),
             default=None)
-        for fname, column in columns.items():
-            if fname == '_timestamp':
+        for column in columns:
+            # Split the output name to remove SQLite type detection
+            fname = column.output_name.split()[0]
+            if fname.startswith('_'):
                 continue
             field = cls._fields[fname]
             if not hasattr(field, 'get'):
@@ -805,11 +833,9 @@ class ModelSQL(ModelStorage):
             if f in cls._fields and hasattr(cls._fields[f], 'get')]
 
         cache = transaction.get_cache().setdefault(
-            cls.__name__, LRUDict(cache_size()))
+            cls.__name__, LRUDict(cache_size(), cls._record))
         if getter_fields and (transaction.readonly or cachable_fields):
             for row in result:
-                if row['id'] not in cache:
-                    cache[row['id']] = {}
                 for fname in cachable_fields:
                     cache[row['id']][fname] = row[fname]
 
@@ -921,9 +947,7 @@ class ModelSQL(ModelStorage):
 
         to_del = set()
         for fname in set(fields_related.keys()) | extra_fields:
-            # 'write_date' has been added to extra_fields but not read
-            if ((fname != 'write_date' or 'write_date' in columns)
-                    and fname not in fields_names):
+            if fname not in fields_names:
                 to_del.add(fname)
             if fname not in cls._fields:
                 continue
@@ -1097,7 +1121,7 @@ class ModelSQL(ModelStorage):
             for sub_ids in grouped_slice(ids):
                 where = reduce_ids(field.sql_column(table), sub_ids)
                 cursor.execute(*table.select(table.id, where=where))
-                tree_ids[fname] += [x[0] for x in cursor.fetchall()]
+                tree_ids[fname] += [x[0] for x in cursor]
 
         has_translation = any(
             getattr(f, 'translate', False) and not hasattr(f, 'set')
@@ -1134,7 +1158,7 @@ class ModelSQL(ModelStorage):
                     Column(foreign_table, field_name), sub_ids)
                 cursor.execute(*foreign_table.select(foreign_table.id,
                         where=foreign_red_sql))
-                records = Model.browse([x[0] for x in cursor.fetchall()])
+                records = Model.browse([x[0] for x in cursor])
             else:
                 with transaction.set_context(active_test=False):
                     records = Model.search([(field_name, 'in', sub_ids)])
@@ -1249,12 +1273,7 @@ class ModelSQL(ModelStorage):
         if wrong_ids:
             model = cls.__name__
             if Model:
-                models = Model.search([
-                        ('model', '=', cls.__name__),
-                        ], limit=1)
-                if models:
-                    model, = models
-                    model = model.name
+                model = Model.get_name(cls.__name__)
             ids = ', '.join(map(str, ids[:5]))
             if len(wrong_ids) > 5:
                 ids += '...'
@@ -1364,7 +1383,7 @@ class ModelSQL(ModelStorage):
         rows = list(cursor_dict(cursor, transaction.database.IN_MAX))
         cache = transaction.get_cache()
         if cls.__name__ not in cache:
-            cache[cls.__name__] = LRUDict(cache_size())
+            cache[cls.__name__] = LRUDict(cache_size(), cls._record)
         delete_records = transaction.delete_records.setdefault(cls.__name__,
             set())
 
@@ -1400,7 +1419,7 @@ class ModelSQL(ModelStorage):
                         & (history.write_date != Null)
                         & (history.create_date == Null)
                         & history_clause))
-                for deleted_id, delete_date in cursor.fetchall():
+                for deleted_id, delete_date in cursor:
                     history_date, _ = ids_history[deleted_id]
                     if isinstance(history_date, str):
                         strptime = datetime.datetime.strptime
@@ -1425,7 +1444,6 @@ class ModelSQL(ModelStorage):
                     keys = list(data.keys())
                     for k in keys[:]:
                         if k in ('_timestamp', '_datetime', '__id'):
-                            keys.remove(k)
                             continue
                         field = cls._fields[k]
                         if not getattr(field, 'datetime_field', None):
@@ -1433,7 +1451,7 @@ class ModelSQL(ModelStorage):
                             continue
                 for k in keys:
                     del data[k]
-                cache[cls.__name__].setdefault(data['id'], {}).update(data)
+                cache[cls.__name__][data['id']]._update(data)
 
         if len(rows) >= transaction.database.IN_MAX:
             if (cls._history
@@ -1482,7 +1500,8 @@ class ModelSQL(ModelStorage):
                 return And((convert(d) for d in (
                             domain[1:] if domain[0] == 'AND' else domain)))
 
-        expression = convert(domain)
+        with Transaction().set_context(_check_access=False):
+            expression = convert(domain)
 
         if cls._history and transaction.context.get('_datetime'):
             table, _ = tables[None]
@@ -1535,9 +1554,7 @@ class ModelSQL(ModelStorage):
 
         cursor.execute(*table.select(table.id,
                 where=Column(table, parent) == parent_id))
-        childs = cursor.fetchall()
-
-        for child_id, in childs:
+        for child_id, in cursor:
             right = cls._rebuild_tree(parent, child_id, right)
 
         field = cls._fields[parent]
@@ -1636,7 +1653,7 @@ class ModelSQL(ModelStorage):
                     cursor.execute(*table.select(*columns, where=where))
 
                     where = Literal(False)
-                    for row in cursor.fetchall():
+                    for row in cursor:
                         clause = table.id != row[0]
                         for column, operator, value in zip(
                                 sql.columns, sql.operators, row[1:]):

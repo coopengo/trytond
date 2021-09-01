@@ -54,16 +54,29 @@ if minor_version % 2:
     download_url = 'hg+http://hg.tryton.org/%s#egg=%s-%s' % (
         name, name, version)
 local_version = []
-for build in ['CI_BUILD_NUMBER', 'CI_JOB_NUMBER', 'CI_JOB_ID']:
-    if os.environ.get(build):
-        local_version.append(os.environ[build])
+if os.environ.get('CI_JOB_ID'):
+    local_version.append(os.environ['CI_JOB_ID'])
+else:
+    for build in ['CI_BUILD_NUMBER', 'CI_JOB_NUMBER']:
+        if os.environ.get(build):
+            local_version.append(os.environ[build])
+        else:
+            local_version = []
+            break
 if local_version:
     version += '+' + '.'.join(local_version)
+
+dependency_links = []
+if minor_version % 2:
+    dependency_links.append(
+        'https://trydevpi.tryton.org/?local_version='
+        + '.'.join(local_version))
 
 if platform.python_implementation() == 'PyPy':
     pg_require = ['psycopg2cffi >= 2.5.4']
 else:
     pg_require = ['psycopg2 >= 2.5.4']
+tests_require = ['pillow']
 
 setup(name=name,
     version=version,
@@ -83,7 +96,7 @@ setup(name=name,
     packages=find_packages(exclude=['*.modules.*', 'modules.*', 'modules',
             '*.proteus.*', 'proteus.*', 'proteus']),
     package_data={
-        'trytond': ['ir/ui/icons/*.svg', '*.rnc', '*.rng'],
+        'trytond': ['ir/ui/icons/*.svg', '*.rnc', '*.rng', 'ir/fonts/*.ttf'],
         'trytond.backend.postgresql': ['init.sql'],
         'trytond.backend.sqlite': ['init.sql'],
         'trytond.ir': ['tryton.cfg', '*.xml', 'view/*.xml', 'locale/*.po'],
@@ -99,6 +112,7 @@ setup(name=name,
         'bin/trytond-console',
         'bin/trytond-cron',
         'bin/trytond-worker',
+        'bin/trytond-stat',
         ],
     classifiers=[
         'Development Status :: 5 - Production/Stable',
@@ -123,23 +137,24 @@ setup(name=name,
         'Natural Language :: Persian',
         'Natural Language :: Polish',
         'Natural Language :: Portuguese (Brazilian)',
+        'Natural Language :: Romanian',
         'Natural Language :: Russian',
         'Natural Language :: Slovenian',
         'Natural Language :: Spanish',
         'Natural Language :: Turkish',
         'Operating System :: OS Independent',
         'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.9',
         'Programming Language :: Python :: Implementation :: CPython',
         'Programming Language :: Python :: Implementation :: PyPy',
         'Topic :: Software Development :: Libraries :: Application Frameworks',
         ],
     platforms='any',
     license='GPL-3',
-    python_requires='>=3.5',
+    python_requires='>=3.6',
     install_requires=[
         'lxml >= 2.0',
         'relatorio[fodt] >= 0.7.0',
@@ -147,9 +162,9 @@ setup(name=name,
         'python-dateutil',
         'polib',
         'python-sql >= 0.5',
-        'werkzeug',
+        'werkzeug < 2',
         'wrapt',
-        'passlib',
+        'passlib >= 1.7.0',
         ],
     extras_require={
         'PostgreSQL': pg_require,
@@ -159,10 +174,13 @@ setup(name=name,
         'html2text': ['html2text'],
         'weasyprint': ['weasyprint'],
         'coroutine': ['gevent>=1.1'],
+        'image': ['pillow'],
         },
+    dependency_links=dependency_links,
     zip_safe=False,
     test_suite='trytond.tests',
     test_loader='trytond.test_loader:Loader',
+    tests_require=tests_require,
     cmdclass={
         'update_rng': rnc2rng,
         },

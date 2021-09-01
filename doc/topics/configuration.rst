@@ -6,7 +6,7 @@ Configuration file for Tryton
 
 The configuration file controls some aspects of the behavior of Tryton.
 The file uses a simple ini-file format. It consists of sections, led by a
-`[section]` header and followed by `name = value` entries:
+``[section]`` header and followed by ``name = value`` entries:
 
 .. highlight:: ini
 
@@ -21,7 +21,7 @@ For more information see ConfigParser_.
 .. _ConfigParser: http://docs.python.org/2/library/configparser.html
 
 The default value of any option can be changed using environment variables
-with names using this syntax: `TRYTOND_<SECTION>__<NAME>`.
+with names using this syntax: ``TRYTOND_<SECTION>__<NAME>``.
 
 Sections
 ========
@@ -43,7 +43,7 @@ listen
 Defines the couple of host (or IP address) and port number separated by a colon
 to listen on.
 
-Default `localhost:8000`
+Default ``localhost:8000``
 
 hostname
 ~~~~~~~~
@@ -54,14 +54,14 @@ context available, for example during a cron job.
 root
 ~~~~
 
-Defines the root path served by `GET` requests.
+Defines the root path served by ``GET`` requests.
 
-Default: Under the `www` directory of user's home running `trytond`.
+Default: Under the ``www`` directory of user's home running ``trytond``.
 
 num_proxies
 ~~~~~~~~~~~
 
-The number of proxy servers in front of `trytond`.
+The number of proxy servers in front of ``trytond``.
 
 Default: 0
 
@@ -78,6 +78,23 @@ cors
 The list (one per line) of origins allowed for `Cross-Origin Resource sharing
 <https://en.wikipedia.org/wiki/Cross-origin_resource_sharing>`_.
 
+avatar_base
+~~~~~~~~~~~
+
+The base URL without a path for avatar URL.
+
+Default: ``''``
+
+.. note:: It can be used to setup a CDN.
+
+
+avatar_timeout
+~~~~~~~~~~~~~~
+
+The time in seconds that the avatar can be stored in cache.
+
+Default: 7 days
+
 database
 --------
 
@@ -89,47 +106,62 @@ uri
 Contains the URI to connect to the SQL database. The URI follows the RFC-3986_.
 The typical form is:
 
-    database://username:password@host:port/
+    database://username:password@host:port/?param1=value1&param2=value2
 
-Default: The value of the environment variable `TRYTOND_DATABASE_URI` or
-`sqlite://` if not set.
+The parameters are database dependent, check the database documentation for a
+list of valid parameters.
+
+Default: The value of the environment variable ``TRYTOND_DATABASE_URI`` or
+``sqlite://`` if not set.
 
 The available databases are:
 
 PostgreSQL
 **********
 
-`pyscopg2` supports two type of connections:
+``psycopg2`` supports two type of connections:
 
-    - TCP/IP connection: `postgresql://user:password@localhost:5432/`
-    - Unix domain connection: `postgresql://username:password@/`
+    - TCP/IP connection: ``postgresql://user:password@localhost:5432/``
+    - Unix domain connection: ``postgresql://username:password@/``
+
+Please refer to `psycopg2 for the complete specification of the URI
+<https://www.psycopg.org/docs/module.html#psycopg2.connect>`_.
+
+A list of parameters supported by PostgreSQL can be found in the
+`documentation <https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-PARAMKEYWORDS>`_.
 
 SQLite
 ******
 
-The only possible URI is: `sqlite://`
+The URI is defined as ``sqlite://``
+
+If the name of the database is ``:memory:``, the parameter ``mode`` will be set
+to ``memory`` thus using a pure in-memory database.
+
+The recognized query parameters can be found in SQLite's
+`documentation <https://www.sqlite.org/uri.html#recognized_query_parameters>`_.
 
 path
 ~~~~
 
-The directory where Tryton stores files and so the user running `trytond`
+The directory where Tryton stores files and so the user running ``trytond``
 must have write access on this directory.
 
-Default: The `db` folder under the user home directory running `trytond`.
+Default: The ``db`` folder under the user home directory running ``trytond``.
 
 list
 ~~~~
 
 A boolean value to list available databases.
 
-Default: `True`
+Default: ``True``
 
 retry
 ~~~~~
 
 The number of retries when a database operational error occurs during a request.
 
-Default: `5`
+Default: ``5``
 
 language
 ~~~~~~~~
@@ -137,13 +169,28 @@ language
 The main language of the database that will be used for storage in the main
 table for translations.
 
-Default: `en`
+Default: ``en``
+
+avatar_filestore
+~~~~~~~~~~~~~~~~
+
+This configuration value indicates whether the avatars should be stored in the
+:py:mod:`trytond.filestore` (``True``) or the database (``False``).
+
+Default: ``False``
+
+avatar_prefix
+~~~~~~~~~~~~~
+
+The prefix to use with the :ref:`FileStore <ref-filestore>` to store avatars.
+
+Default: ``None``
 
 default_name
 ~~~~~~~~~~~~
 
 The name of the database to use for operations without a database name.
-Default: `template1` for PostgreSQL, `:memory:` for SQLite.
+Default: ``template1`` for PostgreSQL, ``:memory:`` for SQLite.
 
 request
 -------
@@ -173,23 +220,23 @@ model
 
 The number of different model kept in the cache per transaction.
 
-Default: `200`
+Default: ``200``
 
 record
 ~~~~~~
 
 The number of record loaded kept in the cache of the list.
-It can be changed locally using the `_record_cache_size` key in
+It can be changed locally using the ``_record_cache_size`` key in
 :attr:`Transaction.context`.
 
-Default: `2000`
+Default: ``2000``
 
 field
 ~~~~~
 
-The number of field to load with an `eager` :attr:`Field.loading`.
+The number of field to load with an ``eager`` :attr:`Field.loading`.
 
-Default: `100`
+Default: ``100``
 
 clean_timeout
 ~~~~~~~~~~~~~
@@ -198,7 +245,7 @@ The minimum number of seconds between two cleanings of the cache.
 If the value is 0, the notification between processes will be done using
 channels if the back-end supports them.
 
-Default: `300`
+Default: ``300``
 
 rpc.<model>.<method>
 ~~~~~~~~~~~~~~~~~~~~
@@ -215,7 +262,14 @@ worker
 Activate asynchronous processing of the tasks. Otherwise they are performed at
 the end of the requests.
 
-Default: `False`
+Default: ``False``
+
+clean_days
+~~~~~~~~~~
+
+The number of days after which processed tasks are removed.
+
+Default: ``30``
 
 table
 -----
@@ -232,10 +286,9 @@ For example::
 ssl
 ---
 
-Activates SSL_ on all network protocols.
+Activates SSL_ on the web interface.
 
-.. note:: SSL_ is activated by defining privatekey.
-        Please refer to SSL-CERT_ on how to use private keys and certficates.
+.. note:: It is recommended to delegate the SSL support to a proxy.
 
 privatekey
 ~~~~~~~~~~
@@ -247,10 +300,14 @@ certificate
 
 The path to the certificate.
 
+.. tip::
+   Set only one of ``privatekey`` or ``certificate`` to ``true`` if the SSL is
+   delegated.
+
 email
 -----
 
-.. note:: Email settings can be tested with the `trytond-admin` command
+.. note:: Email settings can be tested with the ``trytond-admin`` command
 
 uri
 ~~~
@@ -259,25 +316,25 @@ The SMTP-URL_ to connect to the SMTP server which is extended to support SSL_
 and STARTTLS_.
 The available protocols are:
 
-    - `smtp`: simple SMTP
-    - `smtp+tls`: SMTP with STARTTLS
-    - `smtps`: SMTP with SSL
+    - ``smtp``: simple SMTP
+    - ``smtp+tls``: SMTP with STARTTLS
+    - ``smtps``: SMTP with SSL
 
 The uri accepts the following additional parameters:
 
-* `local_hostname`: used as FQDN of the local host in the HELO/EHLO commands,
-  if omited it will use the value of `socket.getfqdn()`.
-* `timeout`: A number of seconds used as timeout for blocking operations. A
-  `socket.timeout` will be raised when exceeded. If omited the default timeout
+* ``local_hostname``: used as FQDN of the local host in the HELO/EHLO commands,
+  if omited it will use the value of ``socket.getfqdn()``.
+* ``timeout``: A number of seconds used as timeout for blocking operations. A
+  ``socket.timeout`` will be raised when exceeded. If omited the default timeout
   will be used.
 
 
-Default: `smtp://localhost:25`
+Default: ``smtp://localhost:25``
 
 from
 ~~~~
 
-Defines the default `From` address (using RFC-822_) for emails sent by Tryton.
+Defines the default ``From`` address (using RFC-822_) for emails sent by Tryton.
 
 For example::
 
@@ -289,45 +346,53 @@ session
 authentications
 ~~~~~~~~~~~~~~~
 
-A comma separated list of login methods to use to authenticate the user.
-By default, Tryton supports only the `password` method which compare the
-password entered by the user against a stored hash. But other modules can
-define new methods (please refers to their documentation).
-The methods are tested following the order of the list.
+A comma separated list of the authentication methods to try when attempting to
+verify a user's identity. Each method is tried in turn, following the order of
+the list, until one succeeds. In order to allow `multi-factor authentication`_,
+individual methods can be combined together using a plus (``+``) symbol.
 
-Default: `password`
+Example::
+
+    authentications = password+sms,ldap
+
+By default, Tryton only supports the ``password`` method.  This method compares
+the password entered by the user against a stored hash of the user's password.
+Other modules can define additional authentication methods, please refer to
+their documentation for more information.
+
+Default: ``password``
 
 max_age
 ~~~~~~~
 
 The time in seconds that a session stay valid.
 
-Default: `2592000` (30 days)
+Default: ``2592000`` (30 days)
 
 timeout
 ~~~~~~~
 
 The time in seconds without activity before the session is no more fresh.
 
-Default: `300` (5 minutes)
+Default: ``300`` (5 minutes)
 
 max_attempt
 ~~~~~~~~~~~
 
 The maximum authentication attempt before the server answers unconditionally
-`Too Many Requests` for any other attempts. The counting is done on all
-attempts over a period of `timeout`.
+``Too Many Requests`` for any other attempts. The counting is done on all
+attempts over a period of ``timeout``.
 
-Default: `5`
+Default: ``5``
 
 max_attempt_ip_network
 ~~~~~~~~~~~~~~~~~~~~~~
 
 The maximum authentication attempt from the same network before the server
-answers unconditionally `Too Many Requests` for any other attempts. The
-counting is done on all attempts over a period of `timeout`.
+answers unconditionally ``Too Many Requests`` for any other attempts. The
+counting is done on all attempts over a period of ``timeout``.
 
-Default: `300`
+Default: ``300``
 
 ip_network_4
 ~~~~~~~~~~~~
@@ -335,7 +400,7 @@ ip_network_4
 The network prefix to apply on IPv4 address for counting the authentication
 attempts.
 
-Default: `32`
+Default: ``32``
 
 ip_network_6
 ~~~~~~~~~~~~
@@ -343,7 +408,7 @@ ip_network_6
 The network prefix to apply on IPv6 address for counting the authentication
 attempts.
 
-Default: `56`
+Default: ``56``
 
 password
 --------
@@ -353,7 +418,7 @@ length
 
 The minimal length required for the user password.
 
-Default: `8`
+Default: ``8``
 
 forbidden
 ~~~~~~~~~
@@ -365,23 +430,23 @@ entropy
 
 The ratio of non repeated characters for the user password.
 
-Default: `0.75`
+Default: ``0.75``
 
 reset_timeout
 ~~~~~~~~~~~~~
 
 The time in seconds until the reset password expires.
 
-Default: `86400` (24h)
+Default: ``86400`` (24h)
 
 passlib
 ~~~~~~~
 
 The path to the `INI file to load as CryptContext
 <https://passlib.readthedocs.io/en/stable/narr/context-tutorial.html#loading-saving-a-cryptcontext>`_.
-If not path is set, Tryton will use the schemes `bcrypt` or `pbkdf2_sha512`.
+If not path is set, Tryton will use the schemes ``bcrypt`` or ``pbkdf2_sha512``.
 
-Default: `None`
+Default: ``None``
 
 attachment
 ----------
@@ -393,14 +458,14 @@ filestore
 
 A boolean value to store attachment in the :ref:`FileStore <ref-filestore>`.
 
-Default: `True`
+Default: ``True``
 
 store_prefix
 ~~~~~~~~~~~~
 
-The prefix to use with the `FileStore`.
+The prefix to use with the ``FileStore``.
 
-Default: `None`
+Default: ``None``
 
 bus
 ---
@@ -410,7 +475,7 @@ allow_subscribe
 
 A boolean value to allow clients to subscribe to bus channels.
 
-Default: `False`
+Default: ``False``
 
 url_host
 ~~~~~~~~
@@ -423,7 +488,7 @@ long_polling_timeout
 The time in seconds to keep the connection to the client opened when using long
 polling for bus messages
 
-Default: `300`
+Default: ``300``
 
 cache_timeout
 ~~~~~~~~~~~~~
@@ -431,14 +496,14 @@ cache_timeout
 The number of seconds a message should be kept by the queue before being
 discarded.
 
-Default: `300`
+Default: ``300``
 
 select_timeout
 ~~~~~~~~~~~~~~
 
 The timeout duration of the select call when listening on a channel.
 
-Default: `5`
+Default: ``5``
 
 html
 ----
@@ -448,14 +513,14 @@ src
 
 The URL pointing to `TinyMCE <https://www.tiny.cloud/>`_ editor.
 
-Default: `https://cloud.tinymce.com/stable/tinymce.min.js`
+Default: ``https://cloud.tinymce.com/stable/tinymce.min.js``
 
 plugins
 ~~~~~~~
 
 The space separated list of TinyMCE plugins to load.
 It can be overridden for specific models and fields using the names:
-`plugins-<model>-<field>` or `plugins-<model>`.
+``plugins-<model>-<field>`` or ``plugins-<model>``.
 
 Default: ``
 
@@ -464,25 +529,25 @@ css
 
 The JSON list of CSS files to load.
 It can be overridden for specific models and fields using the names:
-`css-<model>-<field>` or `css-<model>`.
+``css-<model>-<field>`` or ``css-<model>``.
 
-Default: `[]`
+Default: ``[]``
 
 class
 ~~~~~
 
 The class to add on the body.
 It can be overridden for specific models and fields using the names:
-`class-<model>-<field>` or `class-<model>`.
+``class-<model>-<field>`` or ``class-<model>``.
 
-Default: `''`
+Default: ``''``
 
 wsgi middleware
 ---------------
 
 The section lists the `WSGI middleware`_ class to load.
-Each middleware can be configured with a section named `wsgi <middleware>`
-containing `args` and `kwargs` options.
+Each middleware can be configured with a section named ``wsgi <middleware>``
+containing ``args`` and ``kwargs`` options.
 
 Example::
 
@@ -499,6 +564,6 @@ Example::
 .. _SMTP-URL: http://tools.ietf.org/html/draft-earhart-url-smtp-00
 .. _RFC-822: https://tools.ietf.org/html/rfc822
 .. _SSL: http://en.wikipedia.org/wiki/Secure_Sockets_Layer
-.. _SSL-CERT: https://docs.python.org/library/ssl.html#ssl.wrap_socket
 .. _STARTTLS: http://en.wikipedia.org/wiki/STARTTLS
 .. _WSGI middleware: https://en.wikipedia.org/wiki/Web_Server_Gateway_Interface#Specification_overview
+.. _`multi-factor authentication`: https://en.wikipedia.org/wiki/Multi-factor_authentication

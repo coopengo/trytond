@@ -2,6 +2,11 @@
 msgid ""
 msgstr "Content-Type: text/plain; charset=utf-8\n"
 
+#, fuzzy
+msgctxt "field:ir.action,groups:"
+msgid "Groups"
+msgstr "Grupid"
+
 msgctxt "field:ir.action-res.group,action:"
 msgid "Action"
 msgstr "Toiming"
@@ -9,6 +14,31 @@ msgstr "Toiming"
 msgctxt "field:ir.action-res.group,group:"
 msgid "Group"
 msgstr "Grupp"
+
+#, fuzzy
+msgctxt "field:ir.action.act_window,groups:"
+msgid "Groups"
+msgstr "Grupid"
+
+#, fuzzy
+msgctxt "field:ir.action.keyword,groups:"
+msgid "Groups"
+msgstr "Grupid"
+
+#, fuzzy
+msgctxt "field:ir.action.report,groups:"
+msgid "Groups"
+msgstr "Grupid"
+
+#, fuzzy
+msgctxt "field:ir.action.url,groups:"
+msgid "Groups"
+msgstr "Grupid"
+
+#, fuzzy
+msgctxt "field:ir.action.wizard,groups:"
+msgid "Groups"
+msgstr "Grupid"
 
 #, fuzzy
 msgctxt "field:ir.export,groups:"
@@ -62,14 +92,6 @@ msgctxt "field:ir.rule.group-res.group,rule_group:"
 msgid "Rule Group"
 msgstr "Reegli grupp"
 
-msgctxt "field:ir.sequence,groups:"
-msgid "User Groups"
-msgstr "Kasutajagrupid"
-
-msgctxt "field:ir.sequence.strict,groups:"
-msgid "User Groups"
-msgstr "Kasutajagrupid"
-
 msgctxt "field:ir.sequence.type,groups:"
 msgid "User Groups"
 msgstr "Kasutajagrupid"
@@ -110,6 +132,10 @@ msgctxt "field:res.group,name:"
 msgid "Name"
 msgstr "Nimi"
 
+msgctxt "field:res.group,parent:"
+msgid "Parent"
+msgstr ""
+
 msgctxt "field:res.group,rule_groups:"
 msgid "Rules"
 msgstr "Reeglid"
@@ -125,6 +151,10 @@ msgstr "Toimingud"
 msgctxt "field:res.user,applications:"
 msgid "Applications"
 msgstr "Rakendused"
+
+msgctxt "field:res.user,avatar_badge_url:"
+msgid "Avatar Badge URL"
+msgstr ""
 
 msgctxt "field:res.user,email:"
 msgid "Email"
@@ -222,6 +252,19 @@ msgctxt "field:res.user.application,user:"
 msgid "User"
 msgstr "Kasutaja"
 
+msgctxt "field:res.user.device,cookie:"
+msgid "Cookie"
+msgstr ""
+
+#, fuzzy
+msgctxt "field:res.user.device,login:"
+msgid "Login"
+msgstr "Logi sisse"
+
+msgctxt "field:res.user.login.attempt,device_cookie:"
+msgid "Device Cookie"
+msgstr ""
+
 msgctxt "field:res.user.login.attempt,ip_address:"
 msgid "IP Address"
 msgstr "IP aadress"
@@ -258,6 +301,10 @@ msgstr ""
 msgctxt "help:ir.sequence.type,groups:"
 msgid "Groups allowed to edit the sequences of this type."
 msgstr "Grupid, kellel on lubatud seda tüüpi järjestusi redigeerida"
+
+msgctxt "help:res.group,parent:"
+msgid "The group to inherit accesses from."
+msgstr ""
 
 #, fuzzy
 msgctxt "help:res.user,actions:"
@@ -443,6 +490,11 @@ msgctxt "model:ir.rule.group,name:rule_group_view_search_admin"
 msgid "Any view search"
 msgstr "Kõigi vaate otsing"
 
+#, fuzzy
+msgctxt "model:ir.rule.group,name:rule_group_view_search_common"
+msgid "Common view search"
+msgstr "Oma vaate otsing"
+
 msgctxt "model:ir.rule.group-res.group,name:"
 msgid "Rule Group - Group"
 msgstr "Reegli grupp - Grupp"
@@ -495,6 +547,10 @@ msgctxt "model:res.user.config.start,name:"
 msgid "User Config Init"
 msgstr "Kasutaja seadistuste laadimine"
 
+msgctxt "model:res.user.device,name:"
+msgid "User Device"
+msgstr ""
+
 msgctxt "model:res.user.login.attempt,name:"
 msgid "Login Attempt"
 msgstr "Sisselogimiskatse"
@@ -504,40 +560,22 @@ msgid "User Warning"
 msgstr "Kasutaja hoiatus"
 
 msgctxt "report:res.user.email_reset_password:"
-msgid ", has been reset."
-msgstr ", on lähtestatud."
-
-msgctxt "report:res.user.email_reset_password:"
 msgid "Reset Password"
 msgstr "Salasõna lähtestamine"
 
 msgctxt "report:res.user.email_reset_password:"
-msgid "The password for your account,"
-msgstr "Konto salasõna on,"
+msgid ""
+"The password for your account, [1:%(login)s], has been reset.[2:]\n"
+"                You must set a new one from the user's preferences.[3:]\n"
+"                You can connect with this temporary password [4:%(password)s] to[5:]\n"
+"                [6:tryton://%(host)s/%(database)s][7:]\n"
+"                [8:%(host)s/#%(database)s]"
+msgstr ""
 
+#, fuzzy
 msgctxt "report:res.user.email_reset_password:"
-msgid "The password will expire at"
+msgid "The password will expire at [1:%(datetime)s UTC]."
 msgstr "Salasõna aegub"
-
-msgctxt "report:res.user.email_reset_password:"
-msgid "UTC"
-msgstr "UTC"
-
-msgctxt "report:res.user.email_reset_password:"
-msgid "You can connect with this temporary password"
-msgstr "Saate kasutada ajutist salasõna"
-
-msgctxt "report:res.user.email_reset_password:"
-msgid "You must set a new one from the user's preferences."
-msgstr "Seadistage uus kasutaja eelistuste alt."
-
-msgctxt "report:res.user.email_reset_password:"
-msgid "to"
-msgstr "kuni"
-
-msgctxt "report:res.user.email_reset_password:"
-msgid "tryton://"
-msgstr "tryton://"
 
 msgctxt "selection:res.user.application,state:"
 msgid "Cancelled"

@@ -27,6 +27,24 @@ class FieldDependsTestCase(unittest.TestCase):
 
         self.assertIsNone(record.name)
 
+    def test_empty_depends_default(self):
+        "Test depends are set with default value if empty"
+
+        class Model(object):
+            @fields.depends('name')
+            def dependant(self):
+                pass
+
+            @classmethod
+            def default_name(cls):
+                return "foo"
+        Model._defaults = {'name': Model.default_name}
+        record = Model()
+
+        record.dependant()
+
+        self.assertEqual(record.name, "foo")
+
     def test_set_depends(self):
         'Test depends are not modified if set'
 
@@ -102,6 +120,7 @@ class FieldDependsTestCase(unittest.TestCase):
                 super(Model, self).on_change_name()
 
         Model.__setup__()
+        Model.__post_setup__()
 
         self.assertEqual(Model.name.on_change, {'foo', 'bar'})
 
@@ -122,6 +141,7 @@ class FieldDependsTestCase(unittest.TestCase):
                 pass
 
         Model.__setup__()
+        Model.__post_setup__()
 
         self.assertEqual(Model.name.on_change, {'foo', 'bar'})
 
@@ -146,6 +166,7 @@ class FieldDependsTestCase(unittest.TestCase):
                 pass
 
         Model.__setup__()
+        Model.__post_setup__()
 
         self.assertEqual(Model.name.on_change, {'foo', 'bar'})
 
@@ -169,6 +190,63 @@ class FieldDependsTestCase(unittest.TestCase):
         self.assertEqual(
             set(Model.name.definition(Model, 'en')['on_change']),
             {'foo', 'bar', 'id'})
+
+    @with_transaction()
+    def test_field_context_parent(self):
+        "Tests depends on parent field with context"
+
+        class Target(ModelView):
+            name = fields.Char(
+                "Name", context={'bar': Eval('bar')}, depends=['bar'])
+            bar = fields.Char("Bar")
+
+        class Model(ModelView):
+            name = fields.Char("Name")
+            foo = fields.Many2One(None, "Foo")
+
+            @fields.depends('_parent_foo.name')
+            def on_change_name(self):
+                return
+
+        Model.foo.get_target = lambda: Target
+
+        Target.__setup__()
+        Target.__post_setup__()
+        Model.__setup__()
+        Model.__post_setup__()
+
+        self.assertEqual(
+            set(Model.name.definition(Model, 'en')['on_change']),
+            {'_parent_foo.name', '_parent_foo.bar', 'id'})
+
+    def test_property_depends(self):
+        "Tests depends on a property"
+
+        class Model(ModelView):
+            "ModelView Property Depends"
+            __name__ = 'test.modelview.property_depends'
+
+            foo = fields.Char("Foo")
+            bar = fields.Char("Bar")
+
+            @property
+            @fields.depends('foo')
+            def len_foo(self):
+                return len(self.foo)
+
+            @len_foo.setter
+            @fields.depends('bar')
+            def len_foo(self, value):
+                pass
+
+            @fields.depends(methods=['len_foo'])
+            def on_change_bar(self):
+                pass
+
+        Model.__setup__()
+        Model.__post_setup__()
+
+        self.assertEqual(Model.bar.on_change, {'foo', 'bar'})
 
 
 def suite():

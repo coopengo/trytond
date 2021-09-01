@@ -262,7 +262,23 @@
   <define name="attlist.field" combine="interleave">
     <optional>
       <attribute>
+        <name ns="">help_field</name>
+        <text/>
+      </attribute>
+    </optional>
+  </define>
+  <define name="attlist.field" combine="interleave">
+    <optional>
+      <attribute>
         <name ns="">view_ids</name>
+        <text/>
+      </attribute>
+    </optional>
+  </define>
+  <define name="attlist.field" combine="interleave">
+    <optional>
+      <attribute>
+        <name ns="">symbol</name>
         <text/>
       </attribute>
     </optional>
@@ -305,6 +321,25 @@
     <optional>
       <attribute>
         <name ns="">icon</name>
+        <text/>
+      </attribute>
+    </optional>
+  </define>
+  <define name="attlist.affix" combine="interleave">
+    <optional>
+      <attribute a:defaultValue="icon">
+        <name ns="">icon_type</name>
+        <choice>
+          <value>icon</value>
+          <value>url</value>
+        </choice>
+      </attribute>
+    </optional>
+  </define>
+  <define name="attlist.affix" combine="interleave">
+    <optional>
+      <attribute>
+        <name ns="">url_size</name>
         <text/>
       </attribute>
     </optional>

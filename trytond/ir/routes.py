@@ -24,6 +24,8 @@ from trytond.transaction import Transaction
 
 SOURCE = config.get(
     'html', 'src', default='https://cloud.tinymce.com/stable/tinymce.min.js')
+AVATAR_TIMEOUT = config.getint(
+    'web', 'avatar_timeout', default=7 * 24 * 60 * 60)
 
 
 def get_token(record):
@@ -112,11 +114,27 @@ TEMPLATE = '''<!DOCTYPE html>
     tinymce.init({
         selector: '#text',
         language: '%(language)s',
-        plugins: 'fullscreen autosave %(plugins)s',
+        plugins: 'fullscreen autosave code %(plugins)s',
         removed_menuitems: 'newdocument',
         toolbar: 'save | undo redo | styleselect | bold italic | ' +
             'alignleft aligncenter alignright alignjustify | ' +
             'bullist numlist outdent indent | link image | close',
+        extended_valid_elements:
+            'py:if[test],' +
+            'py:choose[test],py:when[test],py:otherwise,' +
+            'py:for[each],' +
+            'py:def[function],' +
+            'py:match[path],' +
+            'py:with[vars],' +
+            'py:replace[value]',
+        custom_elements:
+            'py:if,' +
+            'py:choose,py:when,py:otherwise,' +
+            'py:for,' +
+            'py:def,' +
+            'py:match,' +
+            'py:with,' +
+            'py:replace',
         content_css: %(css)s,
         body_class: %(class)s,
         setup: function(editor) {
@@ -191,6 +209,15 @@ def data(request, pool, model):
             request.args.get('d', '[]'), object_hook=JSONDecoder())
     except json.JSONDecodeError:
         abort(HTTPStatus.BAD_REQUEST)
+    try:
+        ctx = json.loads(
+            request.args.get('c', '{}'), object_hook=JSONDecoder())
+    except json.JSONDecoder:
+        abort(HTTPStatus.BAD_REQUEST)
+    for key in list(ctx.keys()):
+        if key.startswith('_') and key != '_datetime':
+            del ctx[key]
+    context.update(ctx)
     limit = None
     offset = 0
     if 's' in request.args:
@@ -253,3 +280,26 @@ def data(request, pool, model):
             'Content-Disposition', 'attachment', filename=filename)
         response.headers.add('Content-Length', len(data))
         return response
+
+
+@app.route('/avatar/<base64:database_name>/<uuid>', methods={'GET'})
+@with_pool
+@with_transaction()
+def avatar(request, pool, uuid):
+    Avatar = pool.get('ir.avatar')
+
+    try:
+        avatar, = Avatar.search([
+                ('uuid', '=', uuid),
+                ])
+    except ValueError:
+        abort(HTTPStatus.NOT_FOUND)
+    try:
+        size = int(request.args.get('s', 64))
+    except ValueError:
+        abort(HTTPStatus.BAD_REQUEST)
+    response = Response(avatar.get(size), mimetype='image/jpeg')
+    response.headers['Cache-Control'] = (
+        'max-age=%s, public' % AVATAR_TIMEOUT)
+    response.add_etag()
+    return response

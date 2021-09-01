@@ -2,6 +2,10 @@
 msgid ""
 msgstr "Content-Type: text/plain; charset=utf-8\n"
 
+msgctxt "field:ir.action,groups:"
+msgid "Groups"
+msgstr "Grupos"
+
 msgctxt "field:ir.action-res.group,action:"
 msgid "Action"
 msgstr "Acción"
@@ -9,6 +13,26 @@ msgstr "Acción"
 msgctxt "field:ir.action-res.group,group:"
 msgid "Group"
 msgstr "Grupo"
+
+msgctxt "field:ir.action.act_window,groups:"
+msgid "Groups"
+msgstr "Grupos"
+
+msgctxt "field:ir.action.keyword,groups:"
+msgid "Groups"
+msgstr "Grupos"
+
+msgctxt "field:ir.action.report,groups:"
+msgid "Groups"
+msgstr "Grupos"
+
+msgctxt "field:ir.action.url,groups:"
+msgid "Groups"
+msgstr "Grupos"
+
+msgctxt "field:ir.action.wizard,groups:"
+msgid "Groups"
+msgstr "Grupos"
 
 msgctxt "field:ir.export,groups:"
 msgid "Groups"
@@ -58,14 +82,6 @@ msgctxt "field:ir.rule.group-res.group,rule_group:"
 msgid "Rule Group"
 msgstr "Grupo de reglas"
 
-msgctxt "field:ir.sequence,groups:"
-msgid "User Groups"
-msgstr "Grupos de usuarios"
-
-msgctxt "field:ir.sequence.strict,groups:"
-msgid "User Groups"
-msgstr "Grupos de usuarios"
-
 msgctxt "field:ir.sequence.type,groups:"
 msgid "User Groups"
 msgstr "Grupos de usuarios"
@@ -106,6 +122,10 @@ msgctxt "field:res.group,name:"
 msgid "Name"
 msgstr "Nombre"
 
+msgctxt "field:res.group,parent:"
+msgid "Parent"
+msgstr "Padre"
+
 msgctxt "field:res.group,rule_groups:"
 msgid "Rules"
 msgstr "Reglas"
@@ -121,6 +141,10 @@ msgstr "Acciones"
 msgctxt "field:res.user,applications:"
 msgid "Applications"
 msgstr "Aplicaciones"
+
+msgctxt "field:res.user,avatar_badge_url:"
+msgid "Avatar Badge URL"
+msgstr "URL de la insignia del avatar"
 
 msgctxt "field:res.user,email:"
 msgid "Email"
@@ -218,6 +242,18 @@ msgctxt "field:res.user.application,user:"
 msgid "User"
 msgstr "Usuario"
 
+msgctxt "field:res.user.device,cookie:"
+msgid "Cookie"
+msgstr "Galleta"
+
+msgctxt "field:res.user.device,login:"
+msgid "Login"
+msgstr "Nombre de usuario"
+
+msgctxt "field:res.user.login.attempt,device_cookie:"
+msgid "Device Cookie"
+msgstr "Galleta del dispositivo"
+
 msgctxt "field:res.user.login.attempt,ip_address:"
 msgid "IP Address"
 msgstr "Dirección IP"
@@ -253,6 +289,10 @@ msgstr "Los grupos de usuarios que pueden modificar la exportación."
 msgctxt "help:ir.sequence.type,groups:"
 msgid "Groups allowed to edit the sequences of this type."
 msgstr "Los grupos que pueden editar las secuencias de este tipo."
+
+msgctxt "help:res.group,parent:"
+msgid "The group to inherit accesses from."
+msgstr "El grupo del qué heredar los permisos de acceso."
 
 msgctxt "help:res.user,actions:"
 msgid "Actions that will be run at login."
@@ -436,6 +476,10 @@ msgctxt "model:ir.rule.group,name:rule_group_view_search_admin"
 msgid "Any view search"
 msgstr "Cualquier vista de búsqueda"
 
+msgctxt "model:ir.rule.group,name:rule_group_view_search_common"
+msgid "Common view search"
+msgstr "Vista de búsqueda común"
+
 msgctxt "model:ir.rule.group-res.group,name:"
 msgid "Rule Group - Group"
 msgstr "Grupo de reglas - Grupo"
@@ -488,6 +532,10 @@ msgctxt "model:res.user.config.start,name:"
 msgid "User Config Init"
 msgstr "Configuración inicial usuario"
 
+msgctxt "model:res.user.device,name:"
+msgid "User Device"
+msgstr "Dispositivo del usuario"
+
 msgctxt "model:res.user.login.attempt,name:"
 msgid "Login Attempt"
 msgstr "Intento de inicio de sesión"
@@ -497,42 +545,26 @@ msgid "User Warning"
 msgstr "Aviso usuario"
 
 msgctxt "report:res.user.email_reset_password:"
-msgid ", has been reset."
-msgstr ", ha sido restablecida."
-
-msgctxt "report:res.user.email_reset_password:"
 msgid "Reset Password"
 msgstr "Restablecer contraseña"
 
 msgctxt "report:res.user.email_reset_password:"
-msgid "The password for your account,"
-msgstr "La contraseña de su cuenta,"
-
-msgctxt "report:res.user.email_reset_password:"
-msgid "The password will expire at"
-msgstr "La contraseña caducará el"
-
-msgctxt "report:res.user.email_reset_password:"
-msgid "UTC"
-msgstr "UTC"
-
-msgctxt "report:res.user.email_reset_password:"
-msgid "You can connect with this temporary password"
-msgstr "Podéis conectar con esta contraseña temporal"
-
-msgctxt "report:res.user.email_reset_password:"
-msgid "You must set a new one from the user's preferences."
+msgid ""
+"The password for your account, [1:%(login)s], has been reset.[2:]\n"
+"                You must set a new one from the user's preferences.[3:]\n"
+"                You can connect with this temporary password [4:%(password)s] to[5:]\n"
+"                [6:tryton://%(host)s/%(database)s][7:]\n"
+"                [8:%(host)s/#%(database)s]"
 msgstr ""
-"Debéis establecer una nueva contraseña desde las preferencias de vuestro "
-"usuario."
+"La contraseña para su cuenta, [1:%(login)s], se ha reseteado.[2:]\n"
+"                Debe establecer una nueva desde las preferencias de usuario.[3:]\n"
+"                Puede conectar con esta contraseña temporal [4:%(password)s] a [5:]\n"
+"                [6:tryton://%(host)s/%(database)s][7:]\n"
+"                [8:%(host)s/#%(database)s]"
 
 msgctxt "report:res.user.email_reset_password:"
-msgid "to"
-msgstr "a"
-
-msgctxt "report:res.user.email_reset_password:"
-msgid "tryton://"
-msgstr "tryton://"
+msgid "The password will expire at [1:%(datetime)s UTC]."
+msgstr "La contraseña caducará a las [1:%(datetime)s UTC]."
 
 msgctxt "selection:res.user.application,state:"
 msgid "Cancelled"

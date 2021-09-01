@@ -10,7 +10,6 @@ try:
 except ImportError:
     from werkzeug.wrappers import Headers
 from werkzeug.wrappers import Response
-from werkzeug.utils import cached_property
 from werkzeug.exceptions import (
     BadRequest, InternalServerError, Conflict, Forbidden, Locked,
     TooManyRequests)
@@ -25,6 +24,7 @@ from trytond.protocols.wrappers import Request
 from trytond.exceptions import (
     TrytonException, UserWarning, LoginException, ConcurrencyException,
     RateLimitException, MissingDependenciesException)
+from trytond.tools import cached_property
 
 
 class JSONDecoder(object):
@@ -145,11 +145,17 @@ class JSONRequest(Request):
 
     @cached_property
     def rpc_method(self):
-        return self.parsed_data['method']
+        try:
+            return self.parsed_data['method']
+        except Exception:
+            pass
 
     @cached_property
     def rpc_params(self):
-        return self.parsed_data['params']
+        try:
+            return self.parsed_data['params']
+        except Exception:
+            pass
 
 
 class JSONProtocol:

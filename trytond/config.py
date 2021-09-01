@@ -1,15 +1,23 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
-import os
+import __main__ as main
 import configparser
-import urllib.parse
 import logging
+import os
+import urllib.parse
+
+from . import status
 
 import six
 
 __all__ = ['config', 'get_hostname', 'get_port', 'split_netloc',
     'parse_listen', 'parse_uri']
 logger = logging.getLogger(__name__)
+
+# Needed so urlunsplit to always set netloc
+for backend_name in ['postgresql', 'sqlite']:
+    if backend_name not in urllib.parse.uses_netloc:
+        urllib.parse.uses_netloc.append(backend_name)
 
 
 def get_hostname(netloc):
@@ -170,3 +178,6 @@ class TrytonConfigParser(configparser.ConfigParser):
 
 
 config = TrytonConfigParser()
+
+if os.path.basename(getattr(main, '__file__', '')) != 'trytond-stat':
+    status.start(config.get('database', 'path'))

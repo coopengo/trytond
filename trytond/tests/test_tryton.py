@@ -9,6 +9,7 @@ import subprocess
 import sys
 import time
 import unittest
+import unittest.mock
 from configparser import ConfigParser
 from functools import reduce
 from functools import wraps
@@ -218,6 +219,7 @@ class ModuleTestCase(unittest.TestCase):
     module = None
     extras = None
     cache_name = None
+    language = 'en'
 
     @classmethod
     def setUpClass(cls):
@@ -225,7 +227,7 @@ class ModuleTestCase(unittest.TestCase):
         modules = [cls.module]
         if cls.extras:
             modules.extend(cls.extras)
-        activate_module(modules, cache_name=cls.cache_name)
+        activate_module(modules, lang=cls.language, cache_name=cls.cache_name)
         super(ModuleTestCase, cls).setUpClass()
 
     @classmethod
@@ -242,12 +244,29 @@ class ModuleTestCase(unittest.TestCase):
             # as there is a fallback to id
             if model._rec_name == 'name':
                 continue
-            self.assertIn(model._rec_name, model._fields,
+            self.assertIn(model._rec_name, model._fields.keys(),
                 msg='Wrong _rec_name "%s" for %s' % (model._rec_name, mname))
             field = model._fields[model._rec_name]
             self.assertIn(field._type, {'char', 'text'},
                 msg="Wrong '%s' type for _rec_name of %s'" % (
                     field._type, mname))
+
+    @with_transaction()
+    def test_model__access__(self):
+        "Test existing model __access__"
+        pool = Pool()
+        for mname, Model in pool.iterobject():
+            if not isregisteredby(Model, self.module):
+                continue
+            for field_name in Model.__access__:
+                self.assertIn(field_name, Model._fields.keys(),
+                    msg="Wrong __access__ '%s' for %s" % (field_name, mname))
+                field = Model._fields[field_name]
+                Target = field.get_target()
+                self.assertTrue(
+                    Target,
+                    msg='Missing target for __access__ "%s" of %s' % (
+                        field_name, mname))
 
     @with_transaction()
     def test_view(self):
@@ -288,16 +307,26 @@ class ModuleTestCase(unittest.TestCase):
 
             for element in tree_root.iter():
                 if element.tag in ('field', 'label', 'separator', 'group'):
-                    for attr in ('name', 'icon'):
+                    for attr in ['name', 'icon', 'symbol']:
                         field = element.get(attr)
                         if field:
-                            self.assertIn(field, res['fields'],
-                                msg='Missing field: %s' % field)
+                            self.assertIn(field, res['fields'].keys(),
+                                msg='Missing field: %s in %s' % (
+                                    field, Model.__name__))
                 if element.tag == 'button':
                     button_name = element.get('name')
-                    self.assertIn(button_name, Model._buttons,
+                    self.assertIn(button_name, Model._buttons.keys(),
                         msg="Button '%s' is not in %s._buttons"
                         % (button_name, Model.__name__))
+
+    @with_transaction()
+    def test_icon(self):
+        "Test icons of the module"
+        pool = Pool()
+        Icon = pool.get('ir.ui.icon')
+        icons = Icon.search([('module', '=', self.module)])
+        for icon in icons:
+            self.assertTrue(icon.icon)
 
     @with_transaction()
     def test_rpc_callable(self):
@@ -382,7 +411,7 @@ class ModuleTestCase(unittest.TestCase):
             if depend.startswith('_parent_'):
                 depend = depend[len('_parent_'):]
             self.assertIsInstance(getattr(model, depend, None), fields.Field,
-                msg='Unknonw "%s" in %s' % (depend, qualname))
+                msg='Unknown "%s" in %s' % (depend, qualname))
             if nested:
                 target = getattr(model, depend).get_target()
                 test_depend_exists(target, nested, qualname)
@@ -473,7 +502,7 @@ class ModuleTestCase(unittest.TestCase):
                 else:
                     continue
                 if rfield:
-                    self.assertIn(rfield, Relation._fields,
+                    self.assertIn(rfield, Relation._fields.keys(),
                         msg=('Missing relation field "%s" on "%s" '
                             'for "%s"."%s"') % (
                             rfield, Relation.__name__, mname, fname))
@@ -533,10 +562,22 @@ class ModuleTestCase(unittest.TestCase):
         'Test missing default model access'
         pool = Pool()
         Access = pool.get('ir.model.access')
-        no_groups = {a.model.name for a in Access.search([
+        no_groups = {a.model.model for a in Access.search([
                     ('group', '=', None),
                     ])}
-        with_groups = {a.model.name for a in Access.search([
+
+        def has_access(Model, models):
+            if Model.__name__ in models:
+                return True
+            for field_name in Model.__access__:
+                Target = Model._fields[field_name].get_target()
+                if has_access(Target, models):
+                    return True
+        for mname, Model in pool.iterobject():
+            if has_access(Model, no_groups):
+                no_groups.add(mname)
+
+        with_groups = {a.model.model for a in Access.search([
                     ('group', '!=', None),
                     ])}
 
@@ -577,7 +618,7 @@ class ModuleTestCase(unittest.TestCase):
             if not isregisteredby(wizard, self.module, type_='wizard'):
                 continue
             session_id, start_state, _ = wizard.create()
-            self.assertIn(start_state, wizard.states,
+            self.assertIn(start_state, wizard.states.keys(),
                 msg='Unknown start state '
                 '"%(state)s" on wizard "%(wizard)s"' % {
                     'state': start_state,
@@ -587,7 +628,14 @@ class ModuleTestCase(unittest.TestCase):
             for state_name, state in wizard_instance.states.items():
                 if isinstance(state, StateView):
                     # Don't test defaults as they may depend on context
-                    state.get_view(wizard_instance, state_name)
+                    view = state.get_view(wizard_instance, state_name)
+                    self.assertEqual(
+                        view.get('type'), 'form',
+                        msg='Wrong view type for "%(state)s" '
+                        'on wizard "%(wizard)s"' % {
+                            'state': state_name,
+                            'wizard': wizard_name,
+                            })
                     for button in state.get_buttons(
                             wizard_instance, state_name):
                         if button['state'] == wizard.end_state:
@@ -643,7 +691,7 @@ class ModuleTestCase(unittest.TestCase):
                         continue
                     self.assertTrue(getattr(model, func_name, None),
                         msg="Missing method '%(func_name)s' "
-                        "on model '%(model)s' for field '%(field)s" % {
+                        "on model '%(model)s' for field '%(field)s'" % {
                             'func_name': func_name,
                             'model': model.__name__,
                             'field': field_name,
@@ -810,6 +858,42 @@ def create_db(name=DB_NAME, lang='en'):
             Module.update_list()
 
 
+class ExtensionTestCase(unittest.TestCase):
+    extension = None
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls._activate_extension()
+
+    @classmethod
+    def tearDownClass(cls):
+        super().tearDownClass()
+        cls._deactivate_extension()
+
+    @classmethod
+    @with_transaction()
+    def _activate_extension(cls):
+        connection = Transaction().connection
+        cursor = connection.cursor()
+        cursor.execute('CREATE EXTENSION "%s"' % cls.extension)
+        connection.commit()
+        cls._clear_cache()
+
+    @classmethod
+    @with_transaction()
+    def _deactivate_extension(cls):
+        connection = Transaction().connection
+        cursor = connection.cursor()
+        cursor.execute('DROP EXTENSION "%s"' % cls.extension)
+        connection.commit()
+        cls._clear_cache()
+
+    @classmethod
+    def _clear_cache(cls):
+        backend.Database._has_proc.clear()
+
+
 def drop_db(name=DB_NAME):
     if db_exist(name):
         database = backend.Database(name)
@@ -834,6 +918,7 @@ def doctest_setup(test):
 
 
 def doctest_teardown(test):
+    unittest.mock.patch.stopall()
     return drop_db()
 
 

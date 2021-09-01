@@ -11,7 +11,7 @@ from trytond.model import ModelView
 from trytond.pool import Pool
 from trytond.url import http_host, HOSTNAME
 
-from .mixin import TestMixin, TestSecondMixin, NotMixin
+from .mixin import TestMixin, TestSecondMixin, NotMixin, ReportMixin
 
 
 class UrlTestCase(unittest.TestCase):
@@ -103,6 +103,14 @@ class MixinTestCase(unittest.TestCase):
         for _, model in Pool().iterobject():
             self.assertFalse(issubclass(model, NotMixin))
 
+    @with_transaction()
+    def test_report_mixin(self):
+        "Test mixin applies on default report"
+        pool = Pool()
+        Report = pool.get('test.report.mixin', type='report')
+
+        self.assertTrue(issubclass(Report, ReportMixin))
+
 
 class DeactivableMixinTestCase(unittest.TestCase):
     "Test DeactivableMixin"
@@ -143,6 +151,6 @@ class DeactivableMixinTestCase(unittest.TestCase):
 def suite():
     func = unittest.TestLoader().loadTestsFromTestCase
     suite = unittest.TestSuite()
-    for testcase in [UrlTestCase, MixinTestCase]:
+    for testcase in [UrlTestCase, MixinTestCase, DeactivableMixinTestCase]:
         suite.addTests(func(testcase))
     return suite

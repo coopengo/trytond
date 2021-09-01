@@ -4,17 +4,13 @@ from collections import defaultdict
 
 from sql import Literal
 
+from trytond.cache import Cache
 from trytond.i18n import gettext
+from trytond.model import ModelView, ModelSQL, fields, EvalEnvironment, Check
 from trytond.model.exceptions import ValidationError
-from ..model import ModelView, ModelSQL, fields, EvalEnvironment, Check
-from ..transaction import Transaction
-from ..cache import Cache
-from ..pool import Pool
-from ..pyson import PYSONDecoder
-
-__all__ = [
-    'RuleGroup', 'Rule',
-    ]
+from trytond.pool import Pool
+from trytond.pyson import PYSONDecoder
+from trytond.transaction import Transaction
 
 
 class DomainError(ValidationError):
@@ -140,11 +136,14 @@ class Rule(ModelSQL, ModelView):
     @staticmethod
     def _get_context():
         User = Pool().get('res.user')
-        user_id = Transaction().user
-        with Transaction().set_context(_check_access=False, _datetime=None):
+        transaction = Transaction()
+        user_id = transaction.user
+        with transaction.set_context(_check_access=False, _datetime=None), \
+                transaction.set_user(0):
             user = EvalEnvironment(User(user_id), User)
         return {
             'user': user,
+            'groups': User.get_groups()
             }
 
     @staticmethod
@@ -163,25 +162,42 @@ class Rule(ModelSQL, ModelView):
         rule_table = cls.__table__()
         rule_group = RuleGroup.__table__()
         rule_group_group = RuleGroup_Group.__table__()
-        user_group = User_Group.__table__()
+        user_group = User_Group.user_group_all_table()
         model = Model.__table__()
         transaction = Transaction()
 
         assert mode in cls.modes
 
+        model_names = []
+        model2field = defaultdict(list)
+
+        def update_model_names(Model, path=None):
+            if Model.__name__ in model_names:
+                return
+            model_names.append(Model.__name__)
+            if path:
+                model2field[Model.__name__].append(path)
+            for field_name in Model.__access__:
+                field = getattr(Model, field_name)
+                Target = field.get_target()
+                if path:
+                    target_path = path + '.' + field_name
+                else:
+                    target_path = field_name
+                update_model_names(Target, target_path)
+        update_model_names(pool.get(model_name))
+
         cursor = transaction.connection.cursor()
         user_id = transaction.user
         # root user above constraint
         if user_id == 0:
-            user_id = transaction.context.get('user')
-            if not user_id:
-                return {}, {}
+            return {}, {}
         cursor.execute(*rule_table.join(rule_group,
                 condition=rule_group.id == rule_table.rule_group
                 ).join(model,
                 condition=rule_group.model == model.id
                 ).select(rule_table.id,
-                where=(model.model == model_name)
+                where=(model.model.in_(model_names))
                 & (getattr(rule_group, 'perm_%s' % mode) == Literal(True))
                 & (rule_group.id.in_(
                         rule_group_group.join(
@@ -200,7 +216,7 @@ class Rule(ModelSQL, ModelView):
         cursor.execute(*rule_group.join(model,
                 condition=rule_group.model == model.id
                 ).select(rule_group.id,
-                where=(model.model == model_name)
+                where=(model.model.in_(model_names))
                 & ~rule_group.id.in_(rule_table.select(rule_table.rule_group))
                 & rule_group.id.in_(rule_group_group.join(user_group,
                         condition=rule_group_group.group == user_group.group
@@ -217,6 +233,12 @@ class Rule(ModelSQL, ModelView):
                 assert rule.domain, ('Rule domain empty,'
                     'check if migration was done')
                 dom = decoder.decode(rule.domain)
+                target_model = rule.rule_group.model.model
+                if target_model in model2field:
+                    target_dom = ['OR']
+                    for field in model2field[target_model]:
+                        target_dom.append((field, 'where', dom))
+                    dom = target_dom
                 if rule.rule_group.global_p:
                     clause_global[rule.rule_group].append(dom)
                 else:
@@ -232,11 +254,9 @@ class Rule(ModelSQL, ModelView):
     def domain_get(cls, model_name, mode='read'):
         transaction = Transaction()
         # root user above constraint
-        if transaction.user == 0:
-            if not transaction.context.get('user'):
-                return
-            with transaction.set_user(Transaction().context['user']):
-                return cls.domain_get(model_name, mode=mode)
+        if ((transaction.user == 0)
+                or not transaction.context.get('_check_access')):
+            return []
 
         assert mode in cls.modes
 
