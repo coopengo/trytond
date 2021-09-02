@@ -1554,9 +1554,10 @@ class ModelStorage(Model):
 
         def filter_(id_):
             return (id_ == self.id  # Ensure the value is read
-                or (
-                    (id_ not in delete_records)
-                    and (id_ not in self._cache or name not in self._cache[id_])
+                or (id_ not in delete_records
+                    and (
+                        id_ not in self._cache
+                        or name not in self._cache[id_])
                     and (id_ not in self._local_cache
                         or name not in self._local_cache[id_])))
 
