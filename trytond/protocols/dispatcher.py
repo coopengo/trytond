@@ -344,8 +344,7 @@ def _dispatch(request, pool, *args, **kwargs):
             else:
                 slow_logger.debug(slow_msg, *slow_args)
 
-        timer.store_call(user, pool, request.rpc_method,
-            datetime.date.today(), dt)
+        timer.store_call(user, pool, request.rpc_method, dt)
 
         response = app.make_response(request, result)
         if rpc.readonly and rpc.cache:
