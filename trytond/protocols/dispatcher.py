@@ -30,11 +30,8 @@ from trytond.perf_analyzer import logger as perf_logger
 from trytond.error_handling import error_wrap
 from trytond.worker import run_task
 from .wrappers import with_pool
-
-from trytond.config import config
 from trytond.modules.perf_analysis import perf_analysis
 
-import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -203,9 +200,8 @@ def help_method(request, pool):
 @app.auth_required
 @with_pool
 def _dispatch(request, pool, *args, **kwargs):
-    if config.getboolean('perf', 'activate'):
-        timer = pool.get('ir.timer')
-        dt = timer.start_timer()
+    timer = pool.get('ir.timer')
+    dt = timer.start_timer()
 
     obj, method = get_object_method(request, pool)
     if method in obj.__rpc__:
@@ -277,7 +273,7 @@ def _dispatch(request, pool, *args, **kwargs):
 
                 if (rpc.instantiate is None
                         or not is_instance_method(obj, method)):
-                    #appel methode
+
                     result = rpc.result(meth(*c_args, **c_kwargs))
                 else:
                     assert rpc.instantiate == 0
@@ -348,9 +344,8 @@ def _dispatch(request, pool, *args, **kwargs):
             else:
                 slow_logger.debug(slow_msg, *slow_args)
 
-        if config.getboolean('perf', 'activate'):
-            timer.store_call(user, pool, request.rpc_method,
-                datetime.date.today(), dt)
+        timer.store_call(user, pool, request.rpc_method,
+            datetime.date.today(), dt)
 
         response = app.make_response(request, result)
         if rpc.readonly and rpc.cache:
