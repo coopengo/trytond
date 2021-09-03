@@ -13,23 +13,18 @@ class Timer(ModelSQL, ModelView):
     "Timer"
     __name__ = "ir.timer"
 
-    # _message_cache = Cache('ir.message', size_limit=10240, context=False)
-    # text = fields.Text("Text", required=True, translate=True)
-    # def __init__(self):
-    #     self.dt = None
+    @classmethod
+    def start_timer(cls):
+        return 0
 
     @classmethod
-    def start_timer(self):
-        print('début chrono')
+    def end_timer(cls, dt):
+        return 0
 
     @classmethod
-    def end_timer(self):
-        print('end chrono')
+    def check_time(cls, tm):
+        return False
 
     @classmethod
-    def check_time(self, tm, limit):
-        print('time query')
-
-    @classmethod
-    def store_call(self, user, session, method_name, date, time=10):
-        print('store call')
+    def store_call(self, user, pool, method_name, date, time=10):
+        pass
