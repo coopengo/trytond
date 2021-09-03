@@ -15,11 +15,9 @@ from sql.functions import CurrentTimestamp
 from sql.aggregate import Count
 
 import trytond.tools as tools
-from trytond.cache import Cache
 from trytond.config import config
 from trytond.exceptions import MissingDependenciesException
 from trytond.transaction import Transaction
-from trytond import backend
 import trytond.convert as convert
 
 logger = logging.getLogger(__name__)
@@ -191,6 +189,8 @@ def load_translations(pool, node, languages, prefix):
 
 
 def load_module_graph(graph, pool, update=None, lang=None):
+    # Prevent to import backend when importing module
+    from trytond.cache import Cache
     from trytond.ir.lang import get_parent_language
 
     if lang is None:
@@ -214,7 +214,7 @@ def load_module_graph(graph, pool, update=None, lang=None):
         for sub_modules in tools.grouped_slice(modules):
             cursor.execute(*ir_module.select(ir_module.name, ir_module.state,
                     where=ir_module.name.in_(list(sub_modules))))
-            module2state.update(cursor.fetchall())
+            module2state.update(cursor)
         modules = set(modules)
 
         idx = 0
@@ -256,7 +256,7 @@ def load_module_graph(graph, pool, update=None, lang=None):
 
                 # Instanciate a new parser for the module
                 tryton_parser = convert.TrytondXmlHandler(
-                    pool, module, package_state, modules)
+                    pool, module, package_state, modules, lang)
 
                 for filename in node.info.get('xml', []):
                     filename = filename.replace('/', os.sep)
@@ -289,6 +289,8 @@ def load_module_graph(graph, pool, update=None, lang=None):
             caches_to_clear += list(Cache._reset.get(transaction, []))
             Cache.rollback(transaction)
             transaction.commit()
+            # Clear transaction cache to update default_factory
+            transaction.cache.clear()
 
         if not update:
             pool.setup()
@@ -316,6 +318,11 @@ def load_module_graph(graph, pool, update=None, lang=None):
         while modules_todo:
             (module, to_delete) = modules_todo.pop()
             convert.post_import(pool, module, to_delete)
+
+        # Ensure cache is clear for other instances
+        if update:
+            Cache.clear_all()
+            Cache.refresh_pool(transaction)
     logger.info('all modules loaded')
 
 
@@ -365,6 +372,8 @@ def register_classes():
 
 def load_modules(
         database_name, pool, update=None, lang=None, activatedeps=False):
+    # Do not import backend when importing module
+    from trytond import backend
     res = True
     if update:
         update = update[:]
@@ -522,7 +531,7 @@ def load_modules(
                 cursor.execute(*ir_module.select(ir_module.name,
                         where=ir_module.state.in_(('activated', 'to upgrade',
                                 'to remove'))))
-            module_list = [name for (name,) in cursor.fetchall()]
+            module_list = [name for (name,) in cursor]
             graph = None
             while graph is None:
                 module_list += update
@@ -535,26 +544,28 @@ def load_modules(
 
             load_module_graph(graph, pool, update, lang)
 
+            Configuration = pool.get('ir.configuration')
+            Configuration(1).check()
+
             if update:
                 cursor.execute(*ir_module.select(ir_module.name,
                         where=(ir_module.state == 'to remove')))
-                fetchall = cursor.fetchall()
-                if fetchall:
-                    for (mod_name,) in fetchall:
-                        # TODO check if ressource not updated by the user
-                        cursor.execute(*ir_model_data.select(
+                for mod_name, in cursor:
+                    res = False
+                    # TODO check if ressource not updated by the user
+                    with transaction.connection.cursor() as cursor_delete:
+                        cursor_delete.execute(*ir_model_data.select(
                                 ir_model_data.model, ir_model_data.db_id,
                                 where=(ir_model_data.module == mod_name),
                                 order_by=ir_model_data.id.desc))
-                        for rmod, rid in cursor.fetchall():
+                        for rmod, rid in cursor_delete:
                             Model = pool.get(rmod)
                             Model.delete([Model(rid)])
-                        Transaction().connection.commit()
-                    cursor.execute(*ir_module.update([ir_module.state],
-                            ['not activated'],
-                            where=(ir_module.state == 'to remove')))
-                    Transaction().connection.commit()
-                    res = False
+                    transaction.connection.commit()
+                cursor.execute(*ir_module.update([ir_module.state],
+                        ['not activated'],
+                        where=(ir_module.state == 'to remove')))
+                transaction.connection.commit()
 
                 Module = pool.get('ir.module')
                 Module.update_list()

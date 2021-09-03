@@ -2,10 +2,6 @@
 msgid ""
 msgstr "Content-Type: text/plain; charset=utf-8\n"
 
-msgctxt "field:ir.action,groups:"
-msgid "Groups"
-msgstr "Grupės"
-
 msgctxt "field:ir.action,icon:"
 msgid "Icon"
 msgstr "Ikona"
@@ -17,6 +13,11 @@ msgstr "Raktiniai žodžiai"
 msgctxt "field:ir.action,name:"
 msgid "Name"
 msgstr "Pavadinimas"
+
+#, fuzzy
+msgctxt "field:ir.action,records:"
+msgid "Records"
+msgstr "Įrašo ID"
 
 msgctxt "field:ir.action,type:"
 msgid "Type"
@@ -58,10 +59,6 @@ msgctxt "field:ir.action.act_window,domains:"
 msgid "Domains"
 msgstr "Domenai"
 
-msgctxt "field:ir.action.act_window,groups:"
-msgid "Groups"
-msgstr "Grupės"
-
 msgctxt "field:ir.action.act_window,icon:"
 msgid "Icon"
 msgstr "Ikona"
@@ -97,6 +94,11 @@ msgstr "PySON rikiavimo tvarka"
 msgctxt "field:ir.action.act_window,pyson_search_value:"
 msgid "PySON Search Criteria"
 msgstr "PySON paieškos kriterijus"
+
+#, fuzzy
+msgctxt "field:ir.action.act_window,records:"
+msgid "Records"
+msgstr "Įrašo ID"
 
 msgctxt "field:ir.action.act_window,res_model:"
 msgid "Model"
@@ -146,10 +148,6 @@ msgctxt "field:ir.action.keyword,action:"
 msgid "Action"
 msgstr "Veiksmas"
 
-msgctxt "field:ir.action.keyword,groups:"
-msgid "Groups"
-msgstr "Grupės"
-
 msgctxt "field:ir.action.keyword,keyword:"
 msgid "Keyword"
 msgstr "Raktažodis"
@@ -166,17 +164,9 @@ msgctxt "field:ir.action.report,direct_print:"
 msgid "Direct Print"
 msgstr "Tiesioginis spausdinimas"
 
-msgctxt "field:ir.action.report,email:"
-msgid "Email"
-msgstr "El. paštas"
-
 msgctxt "field:ir.action.report,extension:"
 msgid "Extension"
 msgstr "Plėtinys"
-
-msgctxt "field:ir.action.report,groups:"
-msgid "Groups"
-msgstr "Grupės"
 
 msgctxt "field:ir.action.report,icon:"
 msgid "Icon"
@@ -202,9 +192,10 @@ msgctxt "field:ir.action.report,name:"
 msgid "Name"
 msgstr "Pavadinimas"
 
-msgctxt "field:ir.action.report,pyson_email:"
-msgid "PySON Email"
-msgstr "PySON el.paštas"
+#, fuzzy
+msgctxt "field:ir.action.report,records:"
+msgid "Records"
+msgstr "Įrašo ID"
 
 msgctxt "field:ir.action.report,report:"
 msgid "Path"
@@ -254,10 +245,6 @@ msgctxt "field:ir.action.url,action:"
 msgid "Action"
 msgstr "Veiksmas"
 
-msgctxt "field:ir.action.url,groups:"
-msgid "Groups"
-msgstr "Grupės"
-
 msgctxt "field:ir.action.url,icon:"
 msgid "Icon"
 msgstr "Ikona"
@@ -269,6 +256,11 @@ msgstr "Raktiniai žodžiai"
 msgctxt "field:ir.action.url,name:"
 msgid "Name"
 msgstr "Pavadinimas"
+
+#, fuzzy
+msgctxt "field:ir.action.url,records:"
+msgid "Records"
+msgstr "Įrašo ID"
 
 msgctxt "field:ir.action.url,type:"
 msgid "Type"
@@ -286,14 +278,6 @@ msgctxt "field:ir.action.wizard,action:"
 msgid "Action"
 msgstr "Veiksmas"
 
-msgctxt "field:ir.action.wizard,email:"
-msgid "Email"
-msgstr "El. paštas"
-
-msgctxt "field:ir.action.wizard,groups:"
-msgid "Groups"
-msgstr "Grupės"
-
 msgctxt "field:ir.action.wizard,icon:"
 msgid "Icon"
 msgstr "Ikona"
@@ -309,6 +293,11 @@ msgstr "Modelis"
 msgctxt "field:ir.action.wizard,name:"
 msgid "Name"
 msgstr "Pavadinimas"
+
+#, fuzzy
+msgctxt "field:ir.action.wizard,records:"
+msgid "Records"
+msgstr "Įrašo ID"
 
 msgctxt "field:ir.action.wizard,type:"
 msgid "Type"
@@ -378,6 +367,64 @@ msgstr "Santrauka"
 msgctxt "field:ir.attachment,type:"
 msgid "Type"
 msgstr "Tipas"
+
+#, fuzzy
+msgctxt "field:ir.avatar,cache:"
+msgid "Cache"
+msgstr "Podėlis"
+
+#, fuzzy
+msgctxt "field:ir.avatar,copy_to_resources:"
+msgid "Copy to Resources"
+msgstr "Resursas"
+
+#, fuzzy
+msgctxt "field:ir.avatar,copy_to_resources_visible:"
+msgid "Copy to Resources Visible"
+msgstr "Resursas"
+
+msgctxt "field:ir.avatar,image:"
+msgid "Image"
+msgstr ""
+
+msgctxt "field:ir.avatar,image_id:"
+msgid "Image ID"
+msgstr ""
+
+#, fuzzy
+msgctxt "field:ir.avatar,last_modification:"
+msgid "Last Modification"
+msgstr "Paskutinis taisymas"
+
+#, fuzzy
+msgctxt "field:ir.avatar,last_user:"
+msgid "Last User"
+msgstr "Paskutinis naudotojas"
+
+#, fuzzy
+msgctxt "field:ir.avatar,resource:"
+msgid "Resource"
+msgstr "Resursas"
+
+msgctxt "field:ir.avatar,uuid:"
+msgid "UUID"
+msgstr ""
+
+msgctxt "field:ir.avatar.cache,avatar:"
+msgid "Avatar"
+msgstr ""
+
+msgctxt "field:ir.avatar.cache,image:"
+msgid "Image"
+msgstr ""
+
+msgctxt "field:ir.avatar.cache,image_id:"
+msgid "Image ID"
+msgstr ""
+
+msgctxt "field:ir.avatar.cache,size:"
+msgid "Size"
+msgstr ""
 
 msgctxt "field:ir.cache,name:"
 msgid "Name"
@@ -450,6 +497,115 @@ msgstr "Kitas įvykis"
 msgctxt "field:ir.cron,weekday:"
 msgid "Day of Week"
 msgstr "Savaitės diena"
+
+msgctxt "field:ir.email,addresses:"
+msgid "Addresses"
+msgstr ""
+
+msgctxt "field:ir.email,at:"
+msgid "At"
+msgstr ""
+
+msgctxt "field:ir.email,body:"
+msgid "Body"
+msgstr ""
+
+msgctxt "field:ir.email,recipients:"
+msgid "Recipients"
+msgstr ""
+
+msgctxt "field:ir.email,recipients_hidden:"
+msgid "Hidden Recipients"
+msgstr ""
+
+msgctxt "field:ir.email,recipients_secondary:"
+msgid "Secondary Recipients"
+msgstr ""
+
+#, fuzzy
+msgctxt "field:ir.email,resource:"
+msgid "Resource"
+msgstr "Resursas"
+
+msgctxt "field:ir.email,subject:"
+msgid "Subject"
+msgstr ""
+
+#, fuzzy
+msgctxt "field:ir.email,user:"
+msgid "User"
+msgstr "Naudotojas"
+
+msgctxt "field:ir.email.address,address:"
+msgid "Address"
+msgstr ""
+
+#, fuzzy
+msgctxt "field:ir.email.address,email:"
+msgid "E-mail"
+msgstr "El. paštas"
+
+msgctxt "field:ir.email.template,body:"
+msgid "Body"
+msgstr ""
+
+#, fuzzy
+msgctxt "field:ir.email.template,model:"
+msgid "Model"
+msgstr "Modelis"
+
+#, fuzzy
+msgctxt "field:ir.email.template,model_name:"
+msgid "Model Name"
+msgstr "Modelio pavadinimas"
+
+#, fuzzy
+msgctxt "field:ir.email.template,name:"
+msgid "Name"
+msgstr "Pavadinimas"
+
+msgctxt "field:ir.email.template,recipients:"
+msgid "Recipients"
+msgstr ""
+
+msgctxt "field:ir.email.template,recipients_hidden:"
+msgid "Hidden Recipients"
+msgstr ""
+
+msgctxt "field:ir.email.template,recipients_hidden_pyson:"
+msgid "Hidden Recipients"
+msgstr ""
+
+msgctxt "field:ir.email.template,recipients_pyson:"
+msgid "Recipients"
+msgstr ""
+
+msgctxt "field:ir.email.template,recipients_secondary:"
+msgid "Secondary Recipients"
+msgstr ""
+
+msgctxt "field:ir.email.template,recipients_secondary_pyson:"
+msgid "Secondary Recipients"
+msgstr ""
+
+#, fuzzy
+msgctxt "field:ir.email.template,reports:"
+msgid "Reports"
+msgstr "Ataskaitos"
+
+msgctxt "field:ir.email.template,subject:"
+msgid "Subject"
+msgstr ""
+
+#, fuzzy
+msgctxt "field:ir.email.template-ir.action.report,report:"
+msgid "Report"
+msgstr "Ataskaitos"
+
+#, fuzzy
+msgctxt "field:ir.email.template-ir.action.report,template:"
+msgid "Template"
+msgstr "Šablonų plėtiniai"
 
 msgctxt "field:ir.export,export_fields:"
 msgid "Fields"
@@ -542,6 +698,10 @@ msgstr "Teigiamo ženklo pozicija"
 msgctxt "field:ir.lang,parent:"
 msgid "Parent Code"
 msgstr "Motininis kodas"
+
+msgctxt "field:ir.lang,pg_text_search:"
+msgid "PostgreSQL Text Search Configuration"
+msgstr ""
 
 msgctxt "field:ir.lang,pm:"
 msgid "PM"
@@ -723,6 +883,11 @@ msgstr "Nesinchronizuota"
 msgctxt "field:ir.model.data,values:"
 msgid "Values"
 msgstr "Vertės"
+
+#, fuzzy
+msgctxt "field:ir.model.field,access:"
+msgid "Access"
+msgstr "Teisė skaityti"
 
 msgctxt "field:ir.model.field,field_description:"
 msgid "Field Description"
@@ -957,10 +1122,6 @@ msgctxt "field:ir.rule.group,rules:"
 msgid "Tests"
 msgstr "Testai"
 
-msgctxt "field:ir.sequence,code:"
-msgid "Sequence Code"
-msgstr "Numeruotės kodas"
-
 msgctxt "field:ir.sequence,last_timestamp:"
 msgid "Last Timestamp"
 msgstr "Paskutinė laiko žyma"
@@ -989,6 +1150,11 @@ msgctxt "field:ir.sequence,prefix:"
 msgid "Prefix"
 msgstr "Priešdėlis"
 
+#, fuzzy
+msgctxt "field:ir.sequence,sequence_type:"
+msgid "Sequence Type"
+msgstr "Numeruočių tipai"
+
 msgctxt "field:ir.sequence,suffix:"
 msgid "Suffix"
 msgstr "Galūnė"
@@ -1004,10 +1170,6 @@ msgstr "Laiko žymos apvalinimas"
 msgctxt "field:ir.sequence,type:"
 msgid "Type"
 msgstr "Type"
-
-msgctxt "field:ir.sequence.strict,code:"
-msgid "Sequence Code"
-msgstr "Numeruotės kodas"
 
 msgctxt "field:ir.sequence.strict,last_timestamp:"
 msgid "Last Timestamp"
@@ -1037,6 +1199,11 @@ msgctxt "field:ir.sequence.strict,prefix:"
 msgid "Prefix"
 msgstr "Priešdėlis"
 
+#, fuzzy
+msgctxt "field:ir.sequence.strict,sequence_type:"
+msgid "Sequence Type"
+msgstr "Numeruočių tipai"
+
 msgctxt "field:ir.sequence.strict,suffix:"
 msgid "Suffix"
 msgstr "Galūnė"
@@ -1052,10 +1219,6 @@ msgstr "Laiko žymos apvalinimas"
 msgctxt "field:ir.sequence.strict,type:"
 msgid "Type"
 msgstr "Tipas"
-
-msgctxt "field:ir.sequence.type,code:"
-msgid "Sequence Code"
-msgstr "Numeruotės kodas"
 
 msgctxt "field:ir.sequence.type,name:"
 msgid "Sequence Name"
@@ -1345,6 +1508,10 @@ msgctxt "field:ir.ui.view_tree_width,width:"
 msgid "Width"
 msgstr "Plotis"
 
+msgctxt "help:ir.action,records:"
+msgid "The records on which the action runs."
+msgstr ""
+
 msgctxt "help:ir.action.act_window,context_domain:"
 msgid "Part of the domain that will be evaluated on each refresh."
 msgstr ""
@@ -1353,20 +1520,22 @@ msgctxt "help:ir.action.act_window,limit:"
 msgid "Default limit for the list view."
 msgstr ""
 
-msgctxt "help:ir.action.act_window,search_value:"
-msgid "Default search criteria for the list view."
+msgctxt "help:ir.action.act_window,records:"
+msgid "The records on which the action runs."
 msgstr ""
 
-msgctxt "help:ir.action.report,email:"
-msgid ""
-"Python dictonary where keys define \"to\" \"cc\" \"subject\"\n"
-"Example: {'to': 'test@example.com', 'cc': 'user@example.com'}"
+msgctxt "help:ir.action.act_window,search_value:"
+msgid "Default search criteria for the list view."
 msgstr ""
 
 msgctxt "help:ir.action.report,extension:"
 msgid ""
 "Leave empty for the same as template, see LibreOffice documentation for "
 "compatible format."
+msgstr ""
+
+msgctxt "help:ir.action.report,records:"
+msgid "The records on which the action runs."
 msgstr ""
 
 msgctxt "help:ir.action.report,single:"
@@ -1377,8 +1546,46 @@ msgctxt "help:ir.action.report,translatable:"
 msgid "Uncheck to disable translations for this report."
 msgstr ""
 
+msgctxt "help:ir.action.url,records:"
+msgid "The records on which the action runs."
+msgstr ""
+
+msgctxt "help:ir.action.wizard,records:"
+msgid "The records on which the action runs."
+msgstr ""
+
 msgctxt "help:ir.action.wizard,window:"
 msgid "Run wizard in a new window."
+msgstr ""
+
+msgctxt "help:ir.email.template,recipients:"
+msgid "The field that contains the recipient(s)."
+msgstr ""
+
+msgctxt "help:ir.email.template,recipients_hidden:"
+msgid "The field that contains the secondary recipient(s)."
+msgstr ""
+
+msgctxt "help:ir.email.template,recipients_hidden_pyson:"
+msgid ""
+"A PYSON expression that generates a list of hidden recipients with the "
+"record represented by \"self\"."
+msgstr ""
+
+msgctxt "help:ir.email.template,recipients_pyson:"
+msgid ""
+"A PYSON expression that generates a list of recipients with the record "
+"represented by \"self\"."
+msgstr ""
+
+msgctxt "help:ir.email.template,recipients_secondary:"
+msgid "The field that contains the secondary recipient(s)."
+msgstr ""
+
+msgctxt "help:ir.email.template,recipients_secondary_pyson:"
+msgid ""
+"A PYSON expression that generates a list of secondary recipients with the "
+"record represented by \"self\"."
 msgstr ""
 
 msgctxt "help:ir.lang,code:"
@@ -1413,6 +1620,12 @@ msgstr ""
 
 msgctxt "help:ir.model.data,fs_id:"
 msgid "The id of the record as known on the file system."
+msgstr ""
+
+msgctxt "help:ir.model.field,access:"
+msgid ""
+"If checked, the access right on the model of the field is also tested "
+"against the relation of the field."
 msgstr ""
 
 msgctxt "help:ir.model.field,module:"
@@ -1512,9 +1725,24 @@ msgctxt "model:ir.action,name:act_config_wizard_item_form"
 msgid "Config Wizard Items"
 msgstr ""
 
+#, fuzzy
 msgctxt "model:ir.action,name:act_cron_form"
-msgid "Scheduled Actions"
-msgstr "Suplanuotieji veiksmai"
+msgid "Actions"
+msgstr "Veiksmai"
+
+#, fuzzy
+msgctxt "model:ir.action,name:act_email_form"
+msgid "E-mails"
+msgstr "El. paštas"
+
+#, fuzzy
+msgctxt "model:ir.action,name:act_email_form_relate"
+msgid "E-mail Archives"
+msgstr "El. paštas"
+
+msgctxt "model:ir.action,name:act_email_template_form"
+msgid "E-mail Templates"
+msgstr ""
 
 msgctxt "model:ir.action,name:act_export_form"
 msgid "Exports"
@@ -1613,9 +1841,10 @@ msgctxt "model:ir.action,name:act_sequence_strict_form"
 msgid "Sequences Strict"
 msgstr ""
 
+#, fuzzy
 msgctxt "model:ir.action,name:act_sequence_type_form"
-msgid "Sequence Types"
-msgstr "Numeruočių tipai"
+msgid "Types"
+msgstr "Tipas"
 
 msgctxt "model:ir.action,name:act_translation_clean"
 msgid "Clean Translations"
@@ -1732,6 +1961,14 @@ msgstr "Veiksmo vediklis"
 msgctxt "model:ir.attachment,name:"
 msgid "Attachment"
 msgstr "Priedai"
+
+msgctxt "model:ir.avatar,name:"
+msgid "Avatar"
+msgstr ""
+
+msgctxt "model:ir.avatar.cache,name:"
+msgid "Avatar Cache"
+msgstr ""
 
 msgctxt "model:ir.cache,name:"
 msgid "Cache"
@@ -1909,6 +2146,23 @@ msgctxt "model:ir.date,name:"
 msgid "Date"
 msgstr "Data"
 
+#, fuzzy
+msgctxt "model:ir.email,name:"
+msgid "Email"
+msgstr "El. paštas"
+
+msgctxt "model:ir.email.address,name:"
+msgid "Email Address"
+msgstr ""
+
+msgctxt "model:ir.email.template,name:"
+msgid "Email Template"
+msgstr ""
+
+msgctxt "model:ir.email.template-ir.action.report,name:"
+msgid "Email Template - Report"
+msgstr ""
+
 msgctxt "model:ir.export,name:"
 msgid "Export"
 msgstr "Eksportas"
@@ -2038,6 +2292,16 @@ msgctxt "model:ir.message,text:msg_access_rule_field_error"
 msgid "You are not allowed to access \"%(model)s.%(field)s\"."
 msgstr ""
 
+#, fuzzy
+msgctxt "model:ir.message,text:msg_access_wizard_error"
+msgid "You are not allowed to execute wizard \"%(wizard)s\"."
+msgstr "You are not allowed to delete this record."
+
+#, fuzzy
+msgctxt "model:ir.message,text:msg_access_wizard_model_error"
+msgid "You are not allowed to execute wizard \"%(wizard)s\" on \"%(model)s\"."
+msgstr "You are not allowed to delete this record."
+
 msgctxt "model:ir.message,text:msg_action_invalid_context"
 msgid "Invalid context \"%(context)s\" for action \"%(action)s\"."
 msgstr ""
@@ -2066,6 +2330,26 @@ msgstr ""
 msgctxt "model:ir.message,text:msg_attachments"
 msgid "Attachments"
 msgstr "Priedai"
+
+msgctxt "model:ir.message,text:msg_avatar"
+msgid "Avatar"
+msgstr ""
+
+msgctxt "model:ir.message,text:msg_avatar_resource_unique"
+msgid "Only one avatar is allowed per resource."
+msgstr ""
+
+msgctxt "model:ir.message,text:msg_avatar_size_unique"
+msgid "The size of an avatar must be unique."
+msgstr ""
+
+msgctxt "model:ir.message,text:msg_avatar_url"
+msgid "Avatar URL"
+msgstr ""
+
+msgctxt "model:ir.message,text:msg_avatars"
+msgid "Avatars"
+msgstr ""
 
 msgctxt "model:ir.message,text:msg_base_config_record"
 msgid "This record is part of the base configuration."
@@ -2132,12 +2416,30 @@ msgctxt "model:ir.message,text:msg_dict_schema_help"
 msgid "Help"
 msgstr "Pagalba"
 
+#, fuzzy
+msgctxt "model:ir.message,text:msg_dict_schema_help_selection"
+msgid "Help Selection"
+msgstr "Parinktis"
+
+msgctxt "model:ir.message,text:msg_dict_schema_help_selection_help"
+msgid "The key followed by the help text separated by a \":\", one per line."
+msgstr ""
+
+#, fuzzy
+msgctxt "model:ir.message,text:msg_dict_schema_help_selection_json"
+msgid "Help Selection JSON"
+msgstr "JSON parinktis"
+
 msgctxt "model:ir.message,text:msg_dict_schema_integer"
 msgid "Integer"
 msgstr ""
 
 msgctxt "model:ir.message,text:msg_dict_schema_invalid_domain"
 msgid "Invalid domain in schema \"%(schema)s\"."
+msgstr ""
+
+msgctxt "model:ir.message,text:msg_dict_schema_invalid_help_selection"
+msgid "Invalid help selection in schema \"%(schema)s\"."
 msgstr ""
 
 msgctxt "model:ir.message,text:msg_dict_schema_invalid_selection"
@@ -2208,6 +2510,39 @@ msgctxt "model:ir.message,text:msg_edited_by"
 msgid "Edited by"
 msgstr "Taisęs naudotojas"
 
+msgctxt "model:ir.message,text:msg_email_template_invalid_body"
+msgid ""
+"Invalid body in e-mail template \"%(template)s\" with exception "
+"\"%(exception)s\"."
+msgstr ""
+
+msgctxt "model:ir.message,text:msg_email_template_invalid_field_pyson"
+msgid ""
+"Invalid PYSON %(field)s in e-mail template \"%(template)s\" with exception "
+"\"%(exception)s\"."
+msgstr ""
+
+msgctxt "model:ir.message,text:msg_email_template_invalid_field_pyson_type"
+msgid ""
+"The PYSON %(field)s in e-mail template \"%(template)s\" must generate a "
+"list."
+msgstr ""
+
+msgctxt "model:ir.message,text:msg_email_template_invalid_subject"
+msgid ""
+"Invalid subject in e-mail template \"%(template)s\" with exception "
+"\"%(exception)s\"."
+msgstr ""
+
+#, fuzzy
+msgctxt "model:ir.message,text:msg_forbidden_char_validation_record"
+msgid ""
+"The value \"%(value)s\" for field \"%(field)s\" in \"%(model)s\" contains "
+"some invalid chars \"%(chars)s\"."
+msgstr ""
+"The time value \"%(value)s\" of field \"%(field)s\" on \"%(model)s\" is not "
+"valid."
+
 msgctxt "model:ir.message,text:msg_foreign_model_exist"
 msgid ""
 "The records could not be deleted because they are used by field "
@@ -2227,12 +2562,14 @@ msgctxt "model:ir.message,text:msg_id_positive"
 msgid "ID must be positive."
 msgstr "ID turi būti teigiamas."
 
+#, fuzzy
 msgctxt "model:ir.message,text:msg_language_default_translatable"
-msgid "The default language must be translatable."
+msgid "The default language \"%(language)s\" must be translatable."
 msgstr "Numatytoji kalba turi būti verčiama."
 
+#, fuzzy
 msgctxt "model:ir.message,text:msg_language_delete_default"
-msgid "The default language can not be deleted."
+msgid "The default language \"%(language)s\" can not be deleted."
 msgstr "Numatytosios kalbos negalima ištrinti."
 
 msgctxt "model:ir.message,text:msg_language_invalid_date"
@@ -2331,6 +2668,12 @@ msgstr ""
 msgctxt "model:ir.message,text:msg_sequence"
 msgid "Sequence"
 msgstr "Numeruotė"
+
+msgctxt "model:ir.message,text:msg_sequence_change_sequence_type"
+msgid ""
+"You cannot change the sequence type of a sequence instead create a new "
+"sequence."
+msgstr ""
 
 msgctxt "model:ir.message,text:msg_sequence_invalid_prefix"
 msgid "Invalid prefix \"%(affix)s\" for sequence \"%(sequence)s\"."
@@ -2687,9 +3030,19 @@ msgctxt "model:ir.ui.menu,name:menu_config_wizard_item_form"
 msgid "Config Wizard Items"
 msgstr ""
 
+#, fuzzy
 msgctxt "model:ir.ui.menu,name:menu_cron_form"
-msgid "Scheduled Actions"
-msgstr "Suplanuotieji veiksmai"
+msgid "Actions"
+msgstr "Veiksmai"
+
+#, fuzzy
+msgctxt "model:ir.ui.menu,name:menu_email_form"
+msgid "E-mails"
+msgstr "El. paštas"
+
+msgctxt "model:ir.ui.menu,name:menu_email_template_form"
+msgid "E-mail Templates"
+msgstr ""
 
 msgctxt "model:ir.ui.menu,name:menu_export_form"
 msgid "Exports"
@@ -2699,9 +3052,10 @@ msgctxt "model:ir.ui.menu,name:menu_icon_form"
 msgid "Icons"
 msgstr "Ikonos"
 
+#, fuzzy
 msgctxt "model:ir.ui.menu,name:menu_ir_sequence_type"
-msgid "Sequence Types"
-msgstr "Numeruočių tipai"
+msgid "Types"
+msgstr "Tipas"
 
 msgctxt "model:ir.ui.menu,name:menu_lang_form"
 msgid "Languages"
@@ -2715,9 +3069,10 @@ msgctxt "model:ir.ui.menu,name:menu_menu_list"
 msgid "Menu"
 msgstr "Meniu"
 
+#, fuzzy
 msgctxt "model:ir.ui.menu,name:menu_message_form"
-msgid "Messages"
-msgstr "Žinutės"
+msgid "Message"
+msgstr "Žinutė"
 
 msgctxt "model:ir.ui.menu,name:menu_model_access_form"
 msgid "Models Access"
@@ -2851,6 +3206,24 @@ msgctxt "model:ir.ui.view_tree_width,name:"
 msgid "View Tree Width"
 msgstr "Hierarchinio sąrašo rodinio plotis"
 
+msgctxt "selection:ir.action,records:"
+msgid "Listed"
+msgstr ""
+
+#, fuzzy
+msgctxt "selection:ir.action,records:"
+msgid "Selected"
+msgstr "Pasirinkti mazgai"
+
+msgctxt "selection:ir.action.act_window,records:"
+msgid "Listed"
+msgstr ""
+
+#, fuzzy
+msgctxt "selection:ir.action.act_window,records:"
+msgid "Selected"
+msgstr "Pasirinkti mazgai"
+
 msgctxt "selection:ir.action.keyword,keyword:"
 msgid "Action form"
 msgstr "Veiksmo forma"
@@ -2870,6 +3243,33 @@ msgstr "Atverti hierarchinį sąrašą"
 msgctxt "selection:ir.action.keyword,keyword:"
 msgid "Print form"
 msgstr "Spausdinti formą"
+
+msgctxt "selection:ir.action.report,records:"
+msgid "Listed"
+msgstr ""
+
+#, fuzzy
+msgctxt "selection:ir.action.report,records:"
+msgid "Selected"
+msgstr "Pasirinkti mazgai"
+
+msgctxt "selection:ir.action.url,records:"
+msgid "Listed"
+msgstr ""
+
+#, fuzzy
+msgctxt "selection:ir.action.url,records:"
+msgid "Selected"
+msgstr "Pasirinkti mazgai"
+
+msgctxt "selection:ir.action.wizard,records:"
+msgid "Listed"
+msgstr ""
+
+#, fuzzy
+msgctxt "selection:ir.action.wizard,records:"
+msgid "Selected"
+msgstr "Pasirinkti mazgai"
 
 msgctxt "selection:ir.attachment,type:"
 msgid "Data"
@@ -2898,6 +3298,11 @@ msgstr "Mėnesiai"
 msgctxt "selection:ir.cron,interval_type:"
 msgid "Weeks"
 msgstr "Savaitės"
+
+#, fuzzy
+msgctxt "selection:ir.cron,method:"
+msgid "Clean Task Queue"
+msgstr "Vertimai sėkmingai ištrinti!"
 
 msgctxt "selection:ir.cron,method:"
 msgid "Run On Time Triggers"
@@ -3064,6 +3469,10 @@ msgid "General"
 msgstr "Pagrindinis"
 
 msgctxt "view:ir.attachment:"
+msgid "Document"
+msgstr ""
+
+msgctxt "view:ir.attachment:"
 msgid "Last Modification Time"
 msgstr "Paskutinio keitimo laikas"
 
@@ -3078,6 +3487,18 @@ msgstr "Kiekvienas"
 msgctxt "view:ir.cron:"
 msgid "Run Once"
 msgstr "Vienkartinis vykdymas"
+
+msgctxt "view:ir.email.template:"
+msgid "Hidden Recipients:"
+msgstr ""
+
+msgctxt "view:ir.email.template:"
+msgid "Recipients:"
+msgstr ""
+
+msgctxt "view:ir.email.template:"
+msgid "Secondary Recipients:"
+msgstr ""
 
 msgctxt "view:ir.lang.config.start:"
 msgid "You can now load aditional translations to the system."
@@ -3203,16 +3624,16 @@ msgid "Clean Translations?"
 msgstr "Ištrinti vertimus?"
 
 msgctxt "view:ir.translation.clean.succeed:"
-msgid "Clean Translations Succeed!"
-msgstr "Vertimai sėkmingai ištrinti!"
+msgid "Translations cleaned successfully."
+msgstr ""
 
 msgctxt "view:ir.translation.set.start:"
 msgid "Synchronize Translations?"
 msgstr "Sinchronizuoti vertimus?"
 
 msgctxt "view:ir.translation.set.succeed:"
-msgid "Set Succeed!"
-msgstr "Pritaikyta sėkmingai!"
+msgid "Translations set successfully."
+msgstr ""
 
 #, fuzzy
 msgctxt "wizard_button:ir.lang.config,start,end:"

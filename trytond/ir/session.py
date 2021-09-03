@@ -16,10 +16,6 @@ from trytond.model import ModelSQL, fields
 from trytond.config import config
 from trytond.cache import Cache
 
-__all__ = [
-    'Session', 'SessionWizard',
-    ]
-
 
 class Session(ModelSQL):
     "Session"

@@ -5,12 +5,12 @@ from sql.aggregate import Max
 from sql.conditionals import Coalesce
 from sql.operators import Or
 
+from trytond.pool import Pool
 from trytond.pyson import PYSONEncoder
+from trytond.tools import reduce_ids
+from trytond.transaction import Transaction
 from .field import (Field, search_order_validate, context_validate,
     with_inactive_records, instantiate_context)
-from ...pool import Pool
-from ...tools import reduce_ids
-from ...transaction import Transaction
 
 
 class Many2One(Field):
@@ -125,7 +125,7 @@ class Many2One(Field):
         right = getattr(Target, self.right).sql_column(table)
         cursor.execute(*table.select(left, right, where=red_sql))
         where = Or()
-        for l, r in cursor.fetchall():
+        for l, r in cursor:
             if operator.endswith('child_of'):
                 where.append((left >= l) & (right <= r))
             else:

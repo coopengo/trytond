@@ -11,27 +11,22 @@ from sql.conditionals import Case
 from collections import defaultdict
 from itertools import groupby
 
+from trytond.cache import Cache
 from trytond.i18n import gettext
+from trytond.model import (
+    ModelView, ModelSQL, Workflow, DeactivableMixin, fields, Unique,
+    EvalEnvironment)
 from trytond.model.exceptions import AccessError, ValidationError
-from ..model import (ModelView, ModelSQL, Workflow, DeactivableMixin, fields,
-    Unique, EvalEnvironment)
-from ..report import Report
-from ..wizard import Wizard, StateView, StateAction, Button
-from ..transaction import Transaction
-from ..cache import Cache
-from ..pool import Pool
-from ..pyson import Bool, Eval, PYSONDecoder
-from ..rpc import RPC
-from ..protocols.jsonrpc import JSONDecoder, JSONEncoder
-from ..tools import is_instance_method, cursor_dict, grouped_slice
-from ..tools.string_ import StringMatcher
+from trytond.pool import Pool
+from trytond.protocols.jsonrpc import JSONDecoder, JSONEncoder
+from trytond.pyson import Bool, Eval, PYSONDecoder
+from trytond.report import Report
+from trytond.rpc import RPC
+from trytond.tools import is_instance_method, cursor_dict, grouped_slice
+from trytond.tools.string_ import StringMatcher
+from trytond.transaction import Transaction
+from trytond.wizard import Wizard, StateView, StateAction, Button
 
-__all__ = [
-    'Model', 'ModelField', 'ModelAccess', 'ModelFieldAccess', 'ModelButton',
-    'ModelButtonRule', 'ModelButtonClick', 'ModelButtonReset',
-    'ModelData', 'PrintModelGraphStart', 'PrintModelGraph', 'ModelGraph',
-    'ModelWorkflowGraph',
-    ]
 logger = logging.getLogger(__name__)
 
 
@@ -63,7 +58,7 @@ class Model(ModelSQL, ModelView):
     global_search_p = fields.Boolean('Global Search')
     fields = fields.One2Many('ir.model.field', 'model', 'Fields',
        required=True)
-    _get_name_cache = Cache('ir.model.get_name')
+    _get_names_cache = Cache('ir.model.get_names')
 
     @classmethod
     def __setup__(cls):
@@ -77,6 +72,7 @@ class Model(ModelSQL, ModelView):
         cls.__rpc__.update({
                 'list_models': RPC(),
                 'list_history': RPC(),
+                'get_names': RPC(),
                 'global_search': RPC(),
                 })
 
@@ -109,6 +105,7 @@ class Model(ModelSQL, ModelView):
                     [ir_model.name, ir_model.info],
                     [model._get_name(), model.__doc__],
                     where=ir_model.id == model_id))
+        cls._get_names_cache.clear()
         return model_id
 
     @classmethod
@@ -146,6 +143,25 @@ class Model(ModelSQL, ModelView):
         'Return a list of all models with history'
         return [name for name, model in Pool().iterobject()
             if getattr(model, '_history', False)]
+
+    @classmethod
+    def get_name_items(cls):
+        "Return a list of couple mapping models to names"
+        items = cls._get_names_cache.get('items')
+        if items is None:
+            models = cls.search([])
+            items = [(m.model, m.name) for m in models]
+            cls._get_names_cache.set('items', items)
+        return items
+
+    @classmethod
+    def get_names(cls):
+        "Return a dictionary mapping models to names"
+        dict_ = cls._get_names_cache.get('dict')
+        if dict_ is None:
+            dict_ = dict(cls.get_name_items())
+            cls._get_names_cache.set('dict', dict_)
+        return dict_
 
     @classmethod
     def global_search(cls, text, limit, menu='ir.ui.menu'):
@@ -187,16 +203,7 @@ class Model(ModelSQL, ModelView):
 
     @classmethod
     def get_name(cls, model):
-        name = cls._get_name_cache.get(model)
-        if name is None:
-            models = cls.search([('model', '=', model)], limit=1)
-            if models:
-                model, = models
-                name = model.name
-                cls._get_name_cache.set(model, name)
-            else:
-                name = model
-        return name
+        return cls.get_names().get(model, model)
 
 
 class ModelField(ModelSQL, ModelView):
@@ -236,6 +243,15 @@ class ModelField(ModelSQL, ModelView):
         depends=['module'])
     module = fields.Char('Module',
        help="Module in which this field is defined.")
+    access = fields.Boolean(
+        "Access",
+        states={
+            'invisible': ~Eval('relation'),
+            },
+        depends=['relation'],
+        help="If checked, the access right on the model of the field "
+        "is also tested against the relation of the field.")
+
     _get_name_cache = Cache('ir.model.field.get_name')
 
     @classmethod
@@ -266,6 +282,7 @@ class ModelField(ModelSQL, ModelView):
                 ir_model_field.relation.as_('relation'),
                 ir_model_field.module.as_('module'),
                 ir_model_field.help.as_('help'),
+                ir_model_field.access.as_('access'),
                 where=ir_model.model == model.__name__))
         model_fields = {f['name']: f for f in cursor_dict(cursor)}
 
@@ -276,27 +293,32 @@ class ModelField(ModelSQL, ModelView):
                 relation = field.relation_name
             else:
                 relation = None
+            access = field_name in model.__access__
 
             if field_name not in model_fields:
                 cursor.execute(*ir_model_field.insert(
                         [ir_model_field.model, ir_model_field.name,
                             ir_model_field.field_description,
                             ir_model_field.ttype, ir_model_field.relation,
-                            ir_model_field.help, ir_model_field.module],
+                            ir_model_field.help, ir_model_field.module,
+                            ir_model_field.access],
                         [[
                                 model_id, field_name,
                                 field.string,
                                 field._type, relation,
-                                field.help, module_name]]))
+                                field.help, module_name,
+                                access]]))
             elif (model_fields[field_name]['field_description'] != field.string
                     or model_fields[field_name]['ttype'] != field._type
                     or model_fields[field_name]['relation'] != relation
-                    or model_fields[field_name]['help'] != field.help):
+                    or model_fields[field_name]['help'] != field.help
+                    or model_fields[field_name]['access'] != access):
                 cursor.execute(*ir_model_field.update(
                         [ir_model_field.field_description,
                             ir_model_field.ttype, ir_model_field.relation,
-                            ir_model_field.help],
-                        [field.string, field._type, relation, field.help],
+                            ir_model_field.help, ir_model_field.access],
+                        [field.string, field._type, relation, field.help,
+                            access],
                         where=(ir_model_field.id
                             == model_fields[field_name]['id'])))
 
@@ -398,7 +420,7 @@ class ModelField(ModelSQL, ModelView):
             model = Model.__table__()
             cursor.execute(*model.select(model.id, model.model,
                     where=model.id.in_(model_ids)))
-            id2model = dict(cursor.fetchall())
+            id2model = dict(cursor)
 
             trans_args = []
             for rec in res:
@@ -501,7 +523,7 @@ class ModelAccess(DeactivableMixin, ModelSQL, ModelView):
         user = Transaction().user
         model_access = cls.__table__()
         ir_model = Model.__table__()
-        user_group = UserGroup.__table__()
+        user_group = UserGroup.user_group_all_table()
         group = Group.__table__()
 
         access = {}
@@ -513,6 +535,18 @@ class ModelAccess(DeactivableMixin, ModelSQL, ModelView):
         else:
             return access
 
+        def fill_models(Model, models):
+            if Model.__name__ in models:
+                return
+            models.append(Model.__name__)
+            for field_name in Model.__access__:
+                field = getattr(Model, field_name)
+                fill_models(field.get_target(), models)
+        model2models = defaultdict(list)
+        for model in models:
+            fill_models(pool.get(model), model2models[model])
+
+        all_models = list(set(sum(model2models.values(), [])))
         default = {'read': True, 'write': True, 'create': True, 'delete': True}
         access = dict((m, default) for m in models)
         cursor.execute(*model_access.join(ir_model, 'LEFT',
@@ -535,16 +569,24 @@ class ModelAccess(DeactivableMixin, ModelSQL, ModelView):
                 Max(Case(
                         (model_access.perm_delete == Literal(True), 1),
                         else_=0)),
-                where=ir_model.model.in_(models)
+                where=ir_model.model.in_(all_models)
                 & (model_access.active == Literal(True))
                 & ((
                         (user_group.user == user)
                         & (group.active == Literal(True)))
                     | (model_access.group == Null)),
                 group_by=ir_model.model))
-        access.update(dict(
-                (m, {'read': r, 'write': w, 'create': c, 'delete': d})
-                for m, r, w, c, d in cursor.fetchall()))
+        raw_access = {
+            m: {'read': r, 'write': w, 'create': c, 'delete': d}
+            for m, r, w, c, d in cursor}
+
+        for model in models:
+            access[model] = {
+                perm: max(
+                    (raw_access[m][perm] for m in model2models[model]
+                        if m in raw_access),
+                    default=True)
+                for perm in ['read', 'write', 'create', 'delete']}
         for model, maccess in access.items():
             cls._get_access_cache.set((user, model), maccess)
         return access
@@ -687,7 +729,7 @@ class ModelFieldAccess(DeactivableMixin, ModelSQL, ModelView):
         field_access = cls.__table__()
         ir_model = Model.__table__()
         model_field = ModelField.__table__()
-        user_group = UserGroup.__table__()
+        user_group = UserGroup.user_group_all_table()
         group = Group.__table__()
 
         accesses = {}
@@ -732,7 +774,7 @@ class ModelFieldAccess(DeactivableMixin, ModelSQL, ModelView):
                         & (group.active == Literal(True)))
                     | (field_access.group == Null)),
                 group_by=[ir_model.model, model_field.name]))
-        for m, f, r, w, c, d in cursor.fetchall():
+        for m, f, r, w, c, d in cursor:
             accesses[m][f] = {'read': r, 'write': w, 'create': c, 'delete': d}
         for model, maccesses in accesses.items():
             cls._get_access_cache.set((user, model), maccesses)
@@ -1215,7 +1257,7 @@ class ModelData(ModelSQL, ModelView):
             cursor = Transaction().connection.cursor()
 
             cursor.execute(*table.select(table.model, group_by=[table.model]))
-            models = [m[0] for m in cursor.fetchall()]
+            models = [m for m, in cursor]
             cls._has_model_cache.set(None, models)
         return model in models
 

@@ -9,10 +9,6 @@ from trytond.tools import grouped_slice
 from trytond.pool import Pool
 from trytond.rpc import RPC
 
-__all__ = [
-    'UIMenu', 'UIMenuFavorite',
-    ]
-
 
 def one_in(i, j):
     """Check the presence of an element of setA in setB
@@ -78,7 +74,10 @@ CLIENT_ICONS = [(x, x) for x in [
         ]]
 
 
-class UIMenu(DeactivableMixin, sequence_ordered(), tree(separator=' / '),
+class UIMenu(
+        DeactivableMixin,
+        sequence_ordered(order='ASC NULLS LAST'),
+        tree(separator=' / '),
         ModelSQL, ModelView):
     "UI menu"
     __name__ = 'ir.ui.menu'
@@ -112,9 +111,9 @@ class UIMenu(DeactivableMixin, sequence_ordered(), tree(separator=' / '),
     def default_icon():
         return 'tryton-folder'
 
-    @staticmethod
-    def default_sequence():
-        return 10
+    @classmethod
+    def default_sequence(cls):
+        return 50
 
     @staticmethod
     def list_icons():

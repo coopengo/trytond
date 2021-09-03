@@ -1,6 +1,6 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
-from ..pool import Pool
+from trytond.pool import Pool
 from . import configuration
 from . import translation
 from . import sequence
@@ -9,6 +9,7 @@ from . import action
 from . import model
 from . import attachment
 from . import note
+from . import avatar
 from . import cron
 from . import lang
 from . import export
@@ -21,6 +22,7 @@ from . import session
 from . import queue
 from . import calendar_
 from . import message
+from . import email_
 from . import routes
 
 __all__ = ['register', 'routes']
@@ -69,6 +71,8 @@ def register():
         attachment.Attachment,
         note.Note,
         note.NoteRead,
+        avatar.Avatar,
+        avatar.AvatarCache,
         cron.Cron,
         lang.Lang,
         lang.LangConfigStart,
@@ -94,6 +98,10 @@ def register():
         calendar_.Month,
         calendar_.Day,
         message.Message,
+        email_.Email,
+        email_.EmailAddress,
+        email_.EmailTemplate,
+        email_.EmailTemplate_Report,
         performance.Timer,
         module='ir', type_='model')
     Pool.register(

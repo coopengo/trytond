@@ -1,7 +1,6 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
 import os
-import logging
 import json
 
 from functools import lru_cache
@@ -17,13 +16,6 @@ from trytond.wizard import Wizard, StateView, Button
 from trytond.pool import Pool
 from trytond.rpc import RPC
 from trytond.cache import MemoryCache
-
-__all__ = [
-    'View', 'ShowViewStart', 'ShowView',
-    'ViewTreeWidth', 'ViewTreeState', 'ViewSearch',
-    ]
-
-logger = logging.getLogger(__name__)
 
 
 class XMLError(ValidationError):
@@ -53,6 +45,7 @@ class View(ModelSQL, ModelView):
                 ('type', '!=', None)),
             ],
         depends=['inherit'])
+    type_string = type.translated('type')
     data = fields.Text('Data')
     name = fields.Char('Name', states={
             'invisible': ~(Eval('module') & Eval('name')),
@@ -92,6 +85,11 @@ class View(ModelSQL, ModelView):
     @staticmethod
     def default_module():
         return Transaction().context.get('module') or ''
+
+    def get_rec_name(self, name):
+        return '%s (%s)' % (
+            self.model,
+            self.inherit.rec_name if self.inherit else self.type_string)
 
     @classmethod
     @ModelView.button_action('ir.act_view_show')
@@ -152,8 +150,6 @@ class View(ModelSQL, ModelView):
                 if not validator.validate(tree):
                     error_log = '\n'.join(map(str,
                             validator.error_log.filter_from_errors()))
-                    logger.error('Invalid XML view %s:\n%s\n%s',
-                        view.rec_name, error_log, xml)
                     raise XMLError(
                         gettext('ir.msg_view_invalid_xml', name=view.rec_name),
                         error_log)
@@ -175,9 +171,6 @@ class View(ModelSQL, ModelView):
                         error_log = '%s: <%s %s="%s"/>' % (
                             e, element.get('id') or element.get('name'), attr,
                             element.get(attr))
-                        logger.error(
-                            'Invalid XML view %s:\n%s\n%s',
-                            view.rec_name, error_log, xml)
                         raise XMLError(
                             gettext(
                                 'ir.msg_view_invalid_xml', name=view.rec_name),
@@ -227,6 +220,7 @@ class View(ModelSQL, ModelView):
 class ShowViewStart(ModelView):
     'Show view'
     __name__ = 'ir.ui.view.show.start'
+    __no_slots__ = True
 
 
 class ShowView(Wizard):
@@ -243,7 +237,8 @@ class ShowView(Wizard):
             View = pool.get('ir.ui.view')
             view_id = Transaction().context.get('active_id')
             if not view_id:
-                return {}
+                # Set type to please ModuleTestCase.test_wizards
+                return {'type': 'form'}
             view = View(view_id)
             Model = pool.get(view.model)
             return Model.fields_view_get(view_id=view.id)
@@ -397,8 +392,7 @@ class ViewSearch(ModelSQL, ModelView):
     name = fields.Char('Name', required=True)
     model = fields.Char('Model', required=True)
     domain = fields.Char('Domain', help="The PYSON domain.")
-    user = fields.Many2One('res.user', 'User', required=True,
-        ondelete='CASCADE')
+    user = fields.Many2One('res.user', 'User', ondelete='CASCADE')
 
     @classmethod
     def __setup__(cls):
@@ -407,20 +401,29 @@ class ViewSearch(ModelSQL, ModelView):
                 'get_search': RPC(),
                 })
 
+    @classmethod
+    def __register__(cls, module):
+        super().__register__(module)
+        table_h = cls.__table_handler__(module)
+
+        # Migration from 5.6: remove user required
+        table_h.not_null_action('user', 'remove')
+
     @staticmethod
     def default_user():
         return Transaction().user
 
     @classmethod
-    def get_search(cls, user_id=None):
-        if user_id is None:
-            user_id = Transaction().user
+    def get_search(cls):
         decoder = PYSONDecoder()
-        searches = cls.search([
-                ('user', '=', user_id),
-                ], order=[('model', 'ASC'), ('name', 'ASC')])
+        searches = cls.search_read(
+            [], order=[('model', 'ASC'), ('name', 'ASC')],
+            fields_names=['id', 'name', 'model', 'domain', '_delete'])
         result = {}
         for search in searches:
-            result.setdefault(search.model, []).append(
-                (search.id, search.name, decoder.decode(search.domain)))
+            result.setdefault(search['model'], []).append((
+                    search['id'],
+                    search['name'],
+                    decoder.decode(search['domain']),
+                    search['_delete']))
         return result

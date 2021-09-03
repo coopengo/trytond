@@ -57,6 +57,7 @@ class Pool(object):
     _instances = {}
     _init_hooks = {}
     _post_init_calls = {}
+    _modules = None
 
     def __new__(cls, database_name=None):
         if database_name is None:
@@ -122,12 +123,12 @@ class Pool(object):
         with cls._lock:
             if database_name in cls._instances:
                 del cls._instances[database_name]
-        lock = cls._locks.get(database_name)
-        if not lock:
-            return
-        with lock:
-            if database_name in cls._pool:
-                del cls._pool[database_name]
+            lock = cls._locks.get(database_name)
+            if not lock:
+                return
+            with lock:
+                if database_name in cls._pool:
+                    del cls._pool[database_name]
 
     @classmethod
     def database_list(cls):
@@ -156,11 +157,7 @@ class Pool(object):
         Set update to proceed to update
         lang is a list of language code to be updated
         '''
-        # ABDC: inter-workers communication
-        from trytond import iwc
         with self._lock:
-            # ABDC: inter-workers communication
-            iwc.start(self.database_name)
             if not self._started:
                 self.start()
 
@@ -170,18 +167,22 @@ class Pool(object):
                 return
             logger.info('init pool for "%s"', self.database_name)
             self._pool.setdefault(self.database_name, {})
+            self._modules = []
             # Clean the _pool before loading modules
-            for type in list(self.classes.keys()):
+            for type in self.classes.keys():
                 self._pool[self.database_name][type] = {}
             self._post_init_calls[self.database_name] = []
-            with ServerContext().set_context(disable_auto_cache=True):
-                restart = not load_modules(self.database_name, self,
-                    update=update, lang=lang, activatedeps=activatedeps)
+            try:
+                with ServerContext().set_context(disable_auto_cache=True):
+                    restart = not load_modules(
+                        self.database_name, self, update=update, lang=lang,
+                        activatedeps=activatedeps)
+            except Exception:
+                del self._pool[self.database_name]
+                self._modules = None
+                raise
             if restart:
                 self.init()
-            # ABDC: inter-workers communication
-            if update:
-                iwc.broadcast_init_pool(self.database_name)
 
     def post_init(self, update):
         for hook in self._post_init_calls[self.database_name]:
@@ -205,10 +206,12 @@ class Pool(object):
             if type == 'report':
                 from trytond.report import Report
                 # Keyword argument 'type' conflicts with builtin function
-                cls = builtins.type(str(name), (Report,), {})
+                cls = builtins.type(name, (Report,), {'__slots__': ()})
                 cls.__setup__()
+                cls.__post_setup__()
                 self.add(cls, type)
-                return cls
+                self.setup_mixin(self._modules, type='report', name=name)
+                return self.get(name, type=type)
             raise
 
     def add(self, cls, type='model'):
@@ -250,6 +253,7 @@ class Pool(object):
                 classes[type_].append(cls)
         self._post_init_calls[self.database_name] += self._init_hooks.get(
             module, [])
+        self._modules.append(module)
         return classes
 
     def setup(self, classes=None):
@@ -265,19 +269,30 @@ class Pool(object):
             for cls in lst:
                 cls.__post_setup__()
 
-    def setup_mixin(self, modules):
+    def setup_mixin(self, modules, type=None, name=None):
         logger.info('setup mixin for "%s"', self.database_name)
+        if type is not None:
+            types = [type]
+        else:
+            types = self.classes.keys()
         for module in modules:
             if module not in self.classes_mixin:
                 continue
-            for type_ in list(self.classes.keys()):
-                for _, cls in self.iterobject(type=type_):
+            for type_ in types:
+                for kname, cls in self.iterobject(type=type_):
+                    if name is not None and kname != name:
+                        continue
                     for parent, mixin in self.classes_mixin[module]:
                         if (not issubclass(cls, parent)
                                 or issubclass(cls, mixin)):
                             continue
-                        cls = type(cls.__name__, (mixin, cls), {})
+                        cls = builtins.type(
+                            cls.__name__, (mixin, cls), {'__slots__': ()})
                         self.add(cls, type=type_)
+
+    def refresh(self, modules):
+        if self._modules is not None and set(self._modules) != modules:
+            self.stop(self.database_name)
 
 
 def isregisteredby(obj, module, type_='model'):
