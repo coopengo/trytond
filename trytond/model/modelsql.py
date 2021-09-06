@@ -834,7 +834,7 @@ class ModelSQL(ModelStorage):
 
         cache = transaction.get_cache().setdefault(
             cls.__name__, LRUDict(cache_size(), cls._record))
-        if getter_fields and (transaction.readonly or cachable_fields):
+        if getter_fields and cachable_fields:
             for row in result:
                 for fname in cachable_fields:
                     cache[row['id']][fname] = row[fname]
