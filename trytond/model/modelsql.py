@@ -832,9 +832,9 @@ class ModelSQL(ModelStorage):
         getter_fields = [f for f in all_fields
             if f in cls._fields and hasattr(cls._fields[f], 'get')]
 
+        cache = transaction.get_cache().setdefault(
+            cls.__name__, LRUDict(cache_size(), cls._record))
         if getter_fields and cachable_fields:
-            cache = transaction.get_cache().setdefault(
-                cls.__name__, LRUDict(cache_size(), cls._record))
             for row in result:
                 for fname in cachable_fields:
                     cache[row['id']][fname] = row[fname]
@@ -859,6 +859,7 @@ class ModelSQL(ModelStorage):
                 for row in result:
                     row[fname] = getter_result[row['id']]
 
+        transaction = Transaction()
         for key in func_fields:
             field_list = func_fields[key]
             fname = field_list[0]
@@ -876,13 +877,25 @@ class ModelSQL(ModelStorage):
             else:
                 for sub_results in grouped_slice(result, cache_size()):
                     sub_results = list(sub_results)
-                    sub_ids = [r['id'] for r in sub_results]
-                    getter_results = field.get(
-                        sub_ids, cls, field_list, values=sub_results)
-                    for fname in field_list:
-                        getter_result = getter_results[fname]
-                        for row in sub_results:
-                            row[fname] = getter_result[row['id']]
+                    sub_ids = []
+                    for row in sub_results:
+                        if (row['id'] not in cache
+                                or any(f not in cache[row['id']]
+                                    for f in field_list)):
+                            sub_ids.append(row['id'])
+                        else:
+                            for fname in field_list:
+                                row[fname] = cache[row['id']][fname]
+                    if sub_ids:
+                        getter_results = field.get(
+                            sub_ids, cls, field_list, values=sub_results)
+                        for fname in field_list:
+                            getter_result = getter_results[fname]
+                            for row in sub_results:
+                                if row['id'] in sub_ids:
+                                    row[fname] = getter_result[row['id']]
+                                    if transaction.readonly:
+                                        cache[row['id']][fname] = row[fname]
 
         def read_related(field, Target, rows, fields):
             name = field.name
