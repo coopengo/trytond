@@ -76,20 +76,7 @@ class Request(_Request):
         authorization = super(Request, self).authorization
         if authorization is None:
             header = self.environ.get('HTTP_AUTHORIZATION')
-            auth = parse_authorization_header(header)
-            if auth and auth.type == 'token':
-                database_name = self.view_args.get('database_name')
-                if not database_name:
-                    return None
-                user_id, party_id = security.check_token(
-                    database_name, auth.get('token'))
-                return Authorization('token', {
-                        'token': auth.get('token'),
-                        'user_id': user_id,
-                        'party_id': party_id
-                    })
-            else:
-                return auth
+            return parse_authorization_header(header)
         return authorization
 
     @cached_property
@@ -108,7 +95,8 @@ class Request(_Request):
                 database_name, auth.get('userid'), auth.get('session'),
                 context=context)
         elif auth.type == 'token':
-            user_id = auth.get('user_id')
+            user_id, __ = security.check_token(
+                database_name, auth.get('token'))
         else:
             try:
                 user_id = security.login(
