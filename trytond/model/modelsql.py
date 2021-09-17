@@ -1305,6 +1305,8 @@ class ModelSQL(ModelStorage):
         rule_domain = Rule.domain_get(cls.__name__, mode='read')
         if domain and domain[0] == 'OR':
             local_domains, subquery_domains = split_subquery_domain(domain)
+            if local_domains:
+                local_domains = [['OR'] + local_domains]
         else:
             local_domains, subquery_domains = None, None
 
@@ -1313,7 +1315,7 @@ class ModelSQL(ModelStorage):
         # used indexes
         if subquery_domains:
             union_tables = []
-            for sub_domain in [['OR'] + local_domains] + subquery_domains:
+            for sub_domain in local_domains + subquery_domains:
                 tables, expression = cls.search_domain(sub_domain)
                 if rule_domain:
                     tables, domain_exp = cls.search_domain(

@@ -923,6 +923,17 @@ class ModelSQLTranslationTestCase(TranslationTestCase):
             Model.search(domain),
             result_without_split)
 
+        domain = ['OR',
+            ('targets.name', 'ilike', '%A'),
+            ]
+        with patch('trytond.model.modelsql.split_subquery_domain') as no_split:
+            # Mocking in order not to trigger the split
+            no_split.side_effect = lambda d: (d, [])
+            result_without_split = Model.search(domain)
+        self.assertEqual(
+            Model.search(domain),
+            result_without_split)
+
     def test_split_subquery_domain_empty(self):
         """
         Test the split of domains in local and relation parts (empty domain)
