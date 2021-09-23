@@ -1,3 +1,5 @@
+* Use UNION for 'Or'-ed domain with subqueries
+* Use global cache for Function fields in readonly transactions
 * Add option to strip leading and trailing whitespace from fields.Char
 * Allow column sql types to be tested from the table handler
 * Combine search and get_keys in DictSchemaMixin
