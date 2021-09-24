@@ -6,7 +6,7 @@ from collections import OrderedDict, defaultdict
 from functools import wraps
 
 from sql import (Table, Column, Literal, Desc, Asc, Expression, Null,
-    NullsFirst, NullsLast, For, Union)
+    NullsFirst, NullsLast, For)
 from sql.functions import CurrentTimestamp, Extract
 from sql.conditionals import Coalesce
 from sql.operators import Or, And, Operator, Equal
@@ -1298,72 +1298,20 @@ class ModelSQL(ModelStorage):
             raise AccessError(msg)
 
     @classmethod
-    def __search_query(cls, domain, count, query):
+    def search(cls, domain, offset=0, limit=None, order=None, count=False,
+            query=False):
         pool = Pool()
         Rule = pool.get('ir.rule')
+        transaction = Transaction()
+        cursor = transaction.connection.cursor()
 
-        rule_domain = Rule.domain_get(cls.__name__, mode='read')
-        if domain and domain[0] == 'OR':
-            local_domains, subquery_domains = split_subquery_domain(domain)
-            if local_domains:
-                local_domains = [['OR'] + local_domains]
-        else:
-            local_domains, subquery_domains = None, None
+        super(ModelSQL, cls).search(
+            domain, offset=offset, limit=limit, order=order, count=count)
 
-        # In case the search uses subqueries it's more efficient to use a UNION
-        # of queries than using clauses with some JOIN because databases can
-        # used indexes
-        if subquery_domains:
-            union_tables = []
-            for sub_domain in local_domains + subquery_domains:
-                tables, expression = cls.search_domain(sub_domain)
-                if rule_domain:
-                    tables, domain_exp = cls.search_domain(
-                        rule_domain, active_test=False, tables=tables)
-                    expression &= domain_exp
-                main_table, _ = tables[None]
-                table = convert_from(None, tables)
-                columns = cls.__searched_columns(
-                    main_table, not count and not query)
-                union_tables.append(table.select(
-                        *columns, where=expression))
-            expression = None
-            tables = {
-                None: (Union(*union_tables, all_=False), None),
-                }
-        else:
-            tables, expression = cls.search_domain(domain)
-            if rule_domain:
-                tables, domain_exp = cls.search_domain(
-                    rule_domain, active_test=False, tables=tables)
-                expression &= domain_exp
+        # Get domain clauses
+        tables, expression = cls.search_domain(domain)
 
-        return tables, expression
-
-    @classmethod
-    def __searched_columns(cls, table, eager=False, history=False):
-        columns = [table.id.as_('id')]
-        if (cls._history and Transaction().context.get('_datetime')
-                and (eager or history)):
-            columns.append(
-                Coalesce(table.write_date, table.create_date).as_('_datetime'))
-            columns.append(Column(table, '__id').as_('__id'))
-        if eager:
-            columns += [f.sql_column(table).as_(n)
-                for n, f in cls._fields.items()
-                if not hasattr(f, 'get')
-                and n != 'id'
-                and not getattr(f, 'translate', False)
-                and f.loading == 'eager']
-            if not callable(cls.table_query):
-                sql_type = fields.Char('timestamp').sql_type().base
-                columns += [Extract('EPOCH',
-                        Coalesce(table.write_date, table.create_date)
-                        ).cast(sql_type).as_('_timestamp')]
-        return columns
-
-    @classmethod
-    def __search_order(cls, order, tables):
+        # Get order by
         order_by = []
         order_types = {
             'DESC': Desc,
@@ -1392,34 +1340,42 @@ class ModelSQL(ModelStorage):
             forder = field.convert_order(oexpr, tables, cls)
             order_by.extend((NullOrdering(Order(o)) for o in forder))
 
-        return order_by
-
-    @classmethod
-    def search(cls, domain, offset=0, limit=None, order=None, count=False,
-            query=False):
-        transaction = Transaction()
-        cursor = transaction.connection.cursor()
-
-        super(ModelSQL, cls).search(
-            domain, offset=offset, limit=limit, order=order, count=count)
-
-        tables, expression = cls.__search_query(domain, count, query)
+        # construct a clause for the rules :
+        domain = Rule.domain_get(cls.__name__, mode='read')
+        if domain:
+            tables, dom_exp = cls.search_domain(
+                domain, active_test=False, tables=tables)
+            expression &= dom_exp
 
         main_table, _ = tables[None]
+        table = convert_from(None, tables)
+
         if count:
-            table = convert_from(None, tables)
             cursor.execute(*table.select(Count(Literal('*')),
                     where=expression, limit=limit, offset=offset))
             return cursor.fetchone()[0]
-
-        order_by = cls.__search_order(order, tables)
-        # compute it here because __search_order might modify tables
-        table = convert_from(None, tables)
-        columns = cls.__searched_columns(main_table, not query)
-        select = table.select(
-            *columns, where=expression, limit=limit, offset=offset,
-            order_by=order_by)
-
+        # execute the "main" query to fetch the ids we were searching for
+        columns = [main_table.id.as_('id')]
+        if (cls._history and transaction.context.get('_datetime')
+                and not query):
+            columns.append(Coalesce(
+                    main_table.write_date,
+                    main_table.create_date).as_('_datetime'))
+            columns.append(Column(main_table, '__id').as_('__id'))
+        if not query:
+            columns += [f.sql_column(main_table).as_(n)
+                for n, f in cls._fields.items()
+                if not hasattr(f, 'get')
+                and n != 'id'
+                and not getattr(f, 'translate', False)
+                and f.loading == 'eager']
+            if not callable(cls.table_query):
+                sql_type = fields.Char('timestamp').sql_type().base
+                columns += [Extract('EPOCH',
+                        Coalesce(main_table.write_date, main_table.create_date)
+                        ).cast(sql_type).as_('_timestamp')]
+        select = table.select(*columns,
+            where=expression, order_by=order_by, limit=limit, offset=offset)
         if query:
             return select
         cursor.execute(*select)
@@ -1498,7 +1454,12 @@ class ModelSQL(ModelStorage):
                 cache[cls.__name__][data['id']]._update(data)
 
         if len(rows) >= transaction.database.IN_MAX:
-            columns = cls.__searched_columns(main_table, history=True)
+            if (cls._history
+                    and transaction.context.get('_datetime')
+                    and not query):
+                columns = columns[:3]
+            else:
+                columns = columns[:1]
             cursor.execute(*table.select(*columns,
                     where=expression, order_by=order_by,
                     limit=limit, offset=offset))
@@ -1746,30 +1707,3 @@ def convert_from(table, tables):
             continue
         table = convert_from(table, sub_tables)
     return table
-
-
-def split_subquery_domain(domain):
-    """
-    Split a domain in two parts:
-        - the first one contains all the sub-domains with only local fields
-        - the second one contains all the sub-domains using a related field
-    The main operator of the domain will be stripped from the results.
-    """
-    local_domains, subquery_domains = [], []
-    for sub_domain in domain:
-        if is_leaf(sub_domain):
-            if '.' in sub_domain[0]:
-                subquery_domains.append(sub_domain)
-            else:
-                local_domains.append(sub_domain)
-        elif (not sub_domain or list(sub_domain) in [['OR'], ['AND']]
-                or sub_domain in ['OR', 'AND']):
-            continue
-        else:
-            sub_ldomains, sub_sqdomains = split_subquery_domain(sub_domain)
-            if sub_sqdomains:
-                subquery_domains.append(sub_domain)
-            else:
-                local_domains.append(sub_domain)
-
-    return local_domains, subquery_domains
