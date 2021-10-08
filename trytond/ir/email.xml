@@ -60,11 +60,11 @@ this repository contains the full copyright notices and license terms. -->
             <field name="view" ref="email_view_form"/>
             <field name="act_window" ref="act_email_form_relate"/>
         </record>
+        <!--  JMO: specific Coog,  remove email archives relates on all models
         <record model="ir.action.keyword" id="act_email_form_relate_keyword1">
             <field name="keyword">form_relate</field>
             <field name="action" ref="act_email_form_relate"/>
-        </record>
-
+        </record> -->
         <record model="ir.ui.view" id="email_template_view_form">
             <field name="model">ir.email.template</field>
             <field name="type">form</field>
