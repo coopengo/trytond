@@ -127,7 +127,7 @@ class ForSkipLocked(For):
 
 class Unaccent(Function):
     __slots__ = ()
-    _function = 'unaccent'
+    _function = config.get('database', 'unaccent_function', default='unaccent')
 
 
 class AdvisoryLock(Function):
