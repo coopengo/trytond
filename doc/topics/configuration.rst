@@ -192,6 +192,20 @@ default_name
 The name of the database to use for operations without a database name.
 Default: ``template1`` for PostgreSQL, ``:memory:`` for SQLite.
 
+unaccent_function
+~~~~~~~~~~~~~~~~~
+
+The name of the unaccent function.
+
+Default: ``unaccent``
+
+similarity_function
+~~~~~~~~~~~~~~~~~~~
+
+The name of the similarity function.
+
+Default: ``similarity``
+
 request
 -------
 
