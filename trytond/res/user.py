@@ -523,7 +523,7 @@ class User(avatar_mixin(100, 'login'), DeactivableMixin, ModelSQL, ModelView):
             user = cls(user)
             preferences = cls._get_preferences(user, context_only=context_only)
             cls._get_preferences_cache.set(key, preferences)
-            # AKE: add token information to get_preferences RPC
+        # AKE: add token information to get_preferences RPC
         token = Transaction().context.get('token', None)
         if token is not None:
             preferences['token'] = token
