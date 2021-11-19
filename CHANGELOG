@@ -1,5 +1,5 @@
 * Use UNION for 'Or'-ed domain with subqueries
-* Use global cache for Function fields in readonly transactions
+* Use local cache for relation fields in readonly transactions
 * Add option to strip leading and trailing whitespace from fields.Char
 
 Version 6.0.2 - 2021-05-15
