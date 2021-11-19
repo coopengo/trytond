@@ -843,7 +843,9 @@ class ModelSQL(ModelStorage):
         for fname in getter_fields:
             field = cls._fields[fname]
             if isinstance(field, fields.Function):
-                key = (field.getter, getattr(field, 'datetime_field', None))
+                key = (
+                    field.getter, field.getter_with_context,
+                    getattr(field, 'datetime_field', None))
                 func_fields.setdefault(key, [])
                 func_fields[key].append(fname)
             elif getattr(field, 'datetime_field', None):
@@ -864,7 +866,7 @@ class ModelSQL(ModelStorage):
             field_list = func_fields[key]
             fname = field_list[0]
             field = cls._fields[fname]
-            _, datetime_field = key
+            _, getter_with_context, datetime_field = key
             if datetime_field:
                 for row in result:
                     with Transaction().set_context(
@@ -894,6 +896,9 @@ class ModelSQL(ModelStorage):
                             for row in sub_results:
                                 if row['id'] in sub_ids:
                                     row[fname] = getter_result[row['id']]
+                                    if (transaction.readonly
+                                            and not getter_with_context):
+                                        cache[row['id']][fname] = row[fname]
 
         def read_related(field, Target, rows, fields):
             name = field.name
