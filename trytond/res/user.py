@@ -455,10 +455,6 @@ class User(DeactivableMixin, ModelSQL, ModelView):
         ConfigItem = pool.get('ir.module.config_wizard.item')
 
         res = {}
-        # AKE: add token information to get_preferences RPC
-        token = Transaction().context.get('token', None)
-        if token is not None:
-            res['token'] = token
         if context_only:
             fields = cls._context_fields
         else:
@@ -508,12 +504,15 @@ class User(DeactivableMixin, ModelSQL, ModelView):
     def get_preferences(cls, context_only=False):
         key = (Transaction().user, context_only)
         preferences = cls._get_preferences_cache.get(key)
-        if preferences is not None:
-            return preferences.copy()
-        user = Transaction().user
-        user = cls(user)
-        preferences = cls._get_preferences(user, context_only=context_only)
-        cls._get_preferences_cache.set(key, preferences)
+        if preferences is None:
+            user = Transaction().user
+            user = cls(user)
+            preferences = cls._get_preferences(user, context_only=context_only)
+            cls._get_preferences_cache.set(key, preferences)
+        # AKE: add token information to get_preferences RPC
+        token = Transaction().context.get('token', None)
+        if token is not None:
+            preferences['token'] = token
         return preferences.copy()
 
     @classmethod
