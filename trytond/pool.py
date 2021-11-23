@@ -54,6 +54,8 @@ class Pool(object):
     _instances = {}
     _init_hooks = {}
     _post_init_calls = {}
+    _modules = None
+    pool_types = {'model', 'report', 'wizard'}
 
     def __new__(cls, database_name=None):
         if database_name is None:
@@ -74,20 +76,26 @@ class Pool(object):
             database_name = Transaction().database.name
         self.database_name = database_name
 
-    @staticmethod
-    def register(*classes, **kwargs):
+    @classmethod
+    def register(cls, *classes, **kwargs):
         '''
         Register a list of classes
         '''
         module = kwargs['module']
         type_ = kwargs['type_']
         depends = set(kwargs.get('depends', []))
-        assert type_ in ('model', 'report', 'wizard')
+        assert type_ in cls.pool_types
         for cls in classes:
             mpool = Pool.classes[type_][module]
             assert cls not in mpool, cls
             assert issubclass(cls.__class__, PoolMeta), cls
             mpool[cls] = depends
+
+    @classmethod
+    def add_pool_type(cls, type):
+        cls.pool_types.add(type)
+        if type not in cls.classes:
+            cls.classes[type] = defaultdict(OrderedDict)
 
     @staticmethod
     def register_mixin(mixin, classinfo, module):
