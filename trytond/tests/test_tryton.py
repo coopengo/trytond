@@ -978,7 +978,7 @@ def all_suite(modules=None):
     return suite_
 
 
-def modules_suite(modules=None, doc=True):
+def modules_suite(modules=None, doc=True, only=None):
     '''
     Return all tests suite of all modules
     '''
@@ -999,6 +999,8 @@ def modules_suite(modules=None, doc=True):
             continue
         for test in test_mod.suite():
             if isinstance(test, doctest.DocTestCase) and not doc:
+                continue
+            if only and not any(x in str(test) for x in only.split(',')):
                 continue
             suite_.addTest(test)
     return suite_

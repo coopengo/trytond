@@ -28,12 +28,14 @@ parser.add_argument("-v", action="count", default=0, dest="verbosity",
     help="Increase verbosity")
 parser.add_argument("-x", "--xmloutput", action="store_true",
     default=False, dest="xmloutput", help="Generate XML files")
+parser.add_argument("-o", "--only", help="filter tests by name")
 parser.add_argument('tests', metavar='test', nargs='*')
 parser.epilog = ('The database name can be specified in the DB_NAME '
     'environment variable.\n'
     "A database dump cache directory can be specified in the DB_CACHE "
     "environment variable. Dumps will be used to speed up re-run of tests.")
 opt = parser.parse_args()
+
 
 config.update_etc(opt.config)
 
@@ -49,7 +51,7 @@ from trytond.tests.test_tryton import all_suite, modules_suite  # noqa: E402
 if not opt.modules:
     suite = all_suite(opt.tests)
 else:
-    suite = modules_suite(opt.tests, doc=opt.doctest)
+    suite = modules_suite(opt.tests, doc=opt.doctest, only=opt.only)
 
 if not opt.xmloutput:
     result = unittest.TextTestRunner(
