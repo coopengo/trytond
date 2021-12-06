@@ -36,7 +36,6 @@ parser.epilog = ('The database name can be specified in the DB_NAME '
     "environment variable. Dumps will be used to speed up re-run of tests.")
 opt = parser.parse_args()
 
-
 config.update_etc(opt.config)
 
 # Import after application is configured
