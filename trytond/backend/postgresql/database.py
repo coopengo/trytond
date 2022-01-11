@@ -663,13 +663,12 @@ class Database(DatabaseInterface):
             ToTsQuery = WebsearchToTsQuery
         else:
             ToTsQuery = PlainToTsQuery
-        if language:
-            config_name = self._search_full_text_language(language)
-            if not isinstance(query, TsQuery):
-                query = ToTsQuery(config_name, query)
-        else:
-            if not isinstance(query, TsQuery):
-                query = ToTsQuery(query)
+        if not isinstance(query, TsQuery):
+            if language:
+                config_name = self._search_full_text_language(language)
+            else:
+                config_name = 'simple'
+            query = ToTsQuery(config_name, query)
         return query
 
     def search_full_text(self, document, query):

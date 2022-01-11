@@ -503,6 +503,21 @@ class FieldTextTestCase(unittest.TestCase, CommonTestCaseMixin):
                     'text': 'foobar',
                     })
 
+    @unittest.skipIf(backend.name == 'sqlite',
+        "SQLite does not have full text search")
+    @with_transaction()
+    def test_search_full_text(self):
+        "Test the full text search"
+        pool = Pool()
+        Model = pool.get('test.text')
+
+        sambreville, = Model.create([{
+                    'text': "Sambreville",
+                    }])
+        self.assertListEqual(Model.search([
+                    ('text', 'ilike', '%Sambreville%'),
+                    ]), [sambreville])
+
 
 class FieldTextTranslatedTestCase(unittest.TestCase, CommonTestCaseMixin):
     "Test Field Text Translated"
