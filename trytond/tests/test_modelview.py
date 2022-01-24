@@ -694,6 +694,22 @@ class ModelView(unittest.TestCase):
 
         self.assertIn('bar', fields)
 
+    @with_transaction()
+    def test_states_depends(self):
+        "Test that fields used in states are included"
+        pool = Pool()
+        Depends = pool.get('test.modelview.states_depends')
+
+        readonly_fields = Depends.fields_view_get(view_type='tree')['fields']
+        self.assertIn('bar', readonly_fields)
+        self.assertNotIn('baz', readonly_fields)
+        self.assertIn('quux', readonly_fields)
+
+        writeable_fields = Depends.fields_view_get(view_type='form')['fields']
+        self.assertIn('bar', writeable_fields)
+        self.assertIn('baz', writeable_fields)
+        self.assertIn('quux', writeable_fields)
+
 
 def suite():
     func = unittest.TestLoader().loadTestsFromTestCase

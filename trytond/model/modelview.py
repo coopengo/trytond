@@ -16,9 +16,8 @@ from trytond.config import config
 from trytond.pool import Pool
 from trytond.rpc import RPC
 from trytond.server_context import ServerContext
-from trytond.config import config
 
-from .fields import on_change_result
+from .fields import get_eval_fields, on_change_result
 
 __all__ = ['ModelView']
 
@@ -473,12 +472,19 @@ class ModelView(Model):
         ModelAccess = pool.get('ir.model.access')
         FieldAccess = pool.get('ir.model.field.access')
 
+        tree_root = tree.getroottree().getroot()
+        readonly_view = (tree_root.tag == 'board'
+            or (tree_root.tag == 'tree'
+                and tree_root.attrib.get('editable', '0') == '0'))
+
         encoder = PYSONEncoder()
         if view_depends is None:
             view_depends = []
         else:
             view_depends = view_depends.copy()
         for xpath, attribute, value, *extra in cls.view_attributes():
+            if readonly_view and attribute in {'required', 'readonly'}:
+                continue
             depends = []
             if extra:
                 depends, = extra
@@ -489,7 +495,6 @@ class ModelView(Model):
                 view_depends.extend(depends)
 
         fields_width = {}
-        tree_root = tree.getroottree().getroot()
 
         # Find field without read access
         fread_accesses = FieldAccess.check(cls.__name__,
@@ -571,17 +576,42 @@ class ModelView(Model):
             if depend not in fields_to_remove:
                 fields_def.setdefault(depend, {'name': depend})
 
+        states_depends = ['invisible']
+        if not readonly_view:
+            states_depends.extend(['readonly', 'required'])
+        seen_fields = set()
         field_names = list(fields_def.keys())
+
+        def add_depends(depends):
+            for depend in depends:
+                if depend in {'context', 'active_model', 'active_id'}:
+                    continue
+                if depend not in fields_def:
+                    fields_def[depend] = {'name': depend}
+                    field_names.append(depend)
+
         while field_names:
             field_name = field_names.pop()
+            if field_name in seen_fields:
+                continue
+            else:
+                seen_fields.add(field_name)
             if field_name in cls._fields:
                 field = cls._fields[field_name]
             else:
                 continue
-            for depend in field.depends:
-                if depend not in fields_def:
-                    fields_def[depend] = {'name': depend}
-                    field_names.append(depend)
+            add_depends(field.depends)
+            for state in states_depends:
+                state_expr = field.states.get(state)
+                if not state_expr:
+                    continue
+                add_depends(get_eval_fields(state_expr))
+            if not readonly_view:
+                add_depends(get_eval_fields(field.domain))
+                if hasattr(field, 'add_remove'):
+                    add_depends(get_eval_fields(field.add_remove))
+                if hasattr(field, 'size'):
+                    add_depends(get_eval_fields(field.size))
 
         arch = etree.tostring(
             tree, encoding='utf-8', pretty_print=False).decode('utf-8')
