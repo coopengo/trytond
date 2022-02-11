@@ -1,3 +1,4 @@
+* Add estimation count to ModelStorage
 * Don't return cached preferences, try to enrich it with the transaction context
 * Use UNION for 'Or'-ed domain with subqueries
 * Use global cache for Function fields in readonly transactions

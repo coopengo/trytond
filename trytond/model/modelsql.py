@@ -1618,7 +1618,7 @@ class ModelSQL(ModelStorage):
                     limit=1))
             nested_create = cursor.fetchone()
 
-            if not nested_create and len(ids) < 2:
+            if not nested_create and len(ids) < max(cls.count() / 4, 4):
                 for id_ in ids:
                     cls._update_tree(id_, field_name,
                         field.left, field.right)
