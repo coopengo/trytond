@@ -284,38 +284,22 @@ def localize_domain(domain, field_name=None, strip_target=False):
             for part in domain]
 
 
-def _simplify_in_domain(domain):
-    if is_leaf(domain):
-        return domain
-    elif isinstance(domain, list) and len(domain) == 1:
-        return _simplify_in_domain(domain[0])
-    else:
-        return [_simplify_in_domain(b) for b in domain]
-
-
 def simplify(domain):
-    """Remove duplicate expressions, extra domain markers and useless OR/AND"""
+    "remove unused domain delimiter"
     if is_leaf(domain):
-        return [domain]
-    elif not domain:
         return domain
+    elif domain in ('OR', 'AND'):
+        return domain
+    elif domain in (['OR'], ['AND']):
+        return []
+    elif (isinstance(domain, list) and len(domain) == 1
+            and not is_leaf(domain[0])):
+        return simplify(domain[0])
+    elif (isinstance(domain, list) and len(domain) == 2
+            and domain[0] in ('AND', 'OR')):
+        return [simplify(domain[1])]
     else:
-        dedup_branches = []
-        bool_op = None
-        if domain[0] in ['AND', 'OR']:
-            bool_op, *domain = domain
-        for branch in domain:
-            simplified_branch = _simplify_in_domain(simplify(branch))
-            if not simplified_branch:
-                if bool_op == 'OR':
-                    return []
-                else:
-                    continue
-            elif simplified_branch not in dedup_branches:
-                dedup_branches.append(simplified_branch)
-        if bool_op and len(dedup_branches) > 1:
-            dedup_branches.insert(0, bool_op)
-        return dedup_branches
+        return [simplify(branch) for branch in domain]
 
 
 def merge(domain, domoperator=None):
