@@ -298,6 +298,9 @@ def _dispatch(request, pool, *args, **kwargs):
                     else:
                         result = [rpc.result(meth(i, *c_args, **c_kwargs))
                             for i in inst]
+            except backend.DatabaseTimeoutError as exception:
+                logger.debug(log_message, *log_args, exc_info=True)
+                raise TimeoutException from exception
             except backend.DatabaseOperationalError:
                 if count and not rpc.readonly:
                     transaction.rollback()

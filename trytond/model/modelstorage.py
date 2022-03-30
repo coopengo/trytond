@@ -31,6 +31,7 @@ from .descriptors import dualmethod
 __all__ = ['ModelStorage', 'EvalEnvironment']
 _cache_record = config.getint('cache', 'record')
 _cache_field = config.getint('cache', 'field')
+_database_timeout = 10
 
 
 class AccessError(UserError):
@@ -125,10 +126,13 @@ class ModelStorage(Model):
                     'delete': RPC(readonly=False, instantiate=0),
                     'copy': RPC(readonly=False, instantiate=0, unique=False,
                         result=lambda r: list(map(int, r))),
-                    'search': RPC(result=lambda r: list(map(int, r))),
-                    'search_count': RPC(),
+                    'search': RPC(
+                        result=lambda r: list(map(int, r)),
+                        timeout=_database_timeout),
+                    'search_count': RPC(timeout=_database_timeout),
                     'search_read': RPC(),
-                    'resources': RPC(instantiate=0, unique=False),
+                    'resources': RPC(instantiate=0, unique=False,
+                        timeout=_database_timeout),
                     'export_data_domain': RPC(),
                     'export_data': RPC(instantiate=0, unique=False),
                     'import_data': RPC(readonly=False),

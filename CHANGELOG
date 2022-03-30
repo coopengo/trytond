@@ -1,3 +1,4 @@
+* Add database timeout parameter on RPC calls
 * Deduplicate entries in domain inversion's simplify
 * Don't return cached preferences, try to enrich it with the transaction context
 * Use UNION for 'Or'-ed domain with subqueries

@@ -73,7 +73,7 @@ class Model(ModelSQL, ModelView):
                 'list_models': RPC(),
                 'list_history': RPC(),
                 'get_names': RPC(),
-                'global_search': RPC(),
+                'global_search': RPC(timeout=3600),
                 })
 
     @classmethod
