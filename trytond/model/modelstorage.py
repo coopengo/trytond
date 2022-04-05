@@ -5,6 +5,7 @@ import datetime
 import time
 import csv
 import logging
+import random
 
 from decimal import Decimal
 from itertools import islice, chain
@@ -24,7 +25,7 @@ from trytond.config import config
 from trytond.i18n import gettext, lazy_gettext
 from trytond.transaction import Transaction
 from trytond.pool import Pool
-from trytond.cache import LRUDict, LRUDictTransaction, freeze
+from trytond.cache import Cache, LRUDict, LRUDictTransaction, freeze
 from trytond.rpc import RPC
 from .modelview import ModelView
 from .descriptors import dualmethod
@@ -32,6 +33,10 @@ from .descriptors import dualmethod
 __all__ = ['ModelStorage', 'EvalEnvironment']
 _cache_record = config.getint('cache', 'record')
 _cache_field = config.getint('cache', 'field')
+_cache_count_timeout = config.getint(
+    'cache', 'count_timeout', default=60 * 60 * 24)
+_cache_count_clear = config.getint(
+    'cache', 'count_clear', default=1000)
 
 
 class AccessError(UserError):
@@ -107,6 +112,8 @@ class ModelStorage(Model):
     rec_name = fields.Function(
         fields.Char(lazy_gettext('ir.msg_record_name')), 'get_rec_name',
         searcher='search_rec_name')
+    _count_cache = Cache(
+        'modelstorage.count', duration=_cache_count_timeout, context=False)
 
     @classmethod
     def __setup__(cls):
@@ -167,6 +174,13 @@ class ModelStorage(Model):
 
         # Increase transaction counter
         Transaction().counter += 1
+
+        count = cls._count_cache.get(cls.__name__)
+        if count is not None:
+            if random.random() < 1 / _cache_count_clear:
+                cls._count_cache.set(cls.__name__, None)
+            else:
+                cls._count_cache.set(cls.__name__, count + len(vlist))
 
     @classmethod
     @without_check_access
@@ -304,6 +318,13 @@ class ModelStorage(Model):
                     for record in records:
                         if record.id in cache[cls.__name__]:
                             del cache[cls.__name__][record.id]
+
+        count = cls._count_cache.get(cls.__name__)
+        if count is not None:
+            if random.random() < 1 / _cache_count_clear:
+                cls._count_cache.set(cls.__name__, None)
+            else:
+                cls._count_cache.set(cls.__name__, count - len(records))
 
     @classmethod
     @without_check_access
@@ -493,11 +514,12 @@ class ModelStorage(Model):
         return []
 
     @classmethod
-    def search_count(cls, domain):
+    def search_count(cls, domain, offset=0, limit=None):
         '''
         Return the number of records that match the domain.
         '''
-        res = cls.search(domain, order=[], count=True)
+        res = cls.search(
+            domain, order=[], count=True, offset=offset, limit=limit)
         if isinstance(res, list):
             return len(res)
         return res
@@ -552,6 +574,15 @@ class ModelStorage(Model):
                     domain = ['AND', domain, ('active', '=', True)]
             return domain
         return process(domain)
+
+    @classmethod
+    def count(cls):
+        "Returns the estimation of the number of records."
+        count = cls._count_cache.get(cls.__name__)
+        if count is None:
+            count = cls.search([], count=True)
+            cls._count_cache.set(cls.__name__, count)
+        return count
 
     def resources(self):
         pool = Pool()

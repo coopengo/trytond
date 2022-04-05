@@ -1,3 +1,5 @@
+* Support limit and offset to ModelSQL count search and search_count
+* Add estimation count to ModelStorage
 * Don't return cached preferences, try to enrich it with the transaction context
 * Use UNION for 'Or'-ed domain with subqueries
 * Add option to strip leading and trailing whitespace from fields.Char
