@@ -1451,9 +1451,17 @@ class ModelSQL(ModelStorage):
         main_table, _ = tables[None]
         if count:
             table = convert_from(None, tables)
-            cursor.execute(*table.select(Count(Literal('*')),
-                    where=expression, limit=limit, offset=offset))
-            return cursor.fetchone()[0]
+            if (limit is not None and limit < cls.count()) or offset:
+                select = table.select(
+                    Literal(1), where=expression, limit=limit, offset=offset
+                    ).select(Count(Literal('*')))
+            else:
+                select = table.select(Count(Literal('*')), where=expression)
+            if query:
+                return select
+            else:
+                cursor.execute(*select)
+                return cursor.fetchone()[0]
 
         order_by = cls.__search_order(order, tables)
         # compute it here because __search_order might modify tables
@@ -1618,7 +1626,7 @@ class ModelSQL(ModelStorage):
                     limit=1))
             nested_create = cursor.fetchone()
 
-            if not nested_create and len(ids) < 2:
+            if not nested_create and len(ids) < max(cls.count() / 4, 4):
                 for id_ in ids:
                     cls._update_tree(id_, field_name,
                         field.left, field.right)

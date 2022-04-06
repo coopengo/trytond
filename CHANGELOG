@@ -1,3 +1,6 @@
+* Support limit and offset to ModelSQL count search and search_count
+* Add estimation count to ModelStorage
+* Deduplicate entries in domain inversion's simplify
 * Don't return cached preferences, try to enrich it with the transaction context
 * Use UNION for 'Or'-ed domain with subqueries
 * Use global cache for Function fields in readonly transactions
