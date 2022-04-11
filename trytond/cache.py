@@ -386,6 +386,9 @@ class MemoryCache(BaseCache):
             raise
         finally:
             database.put_connection(conn)
+            with cls._listener_lock[pid]:
+                if cls._listener.get((pid, dbname)) == current_thread:
+                    del cls._listener[pid, dbname]
 
     @classmethod
     def purge_listeners(cls, dbname):
