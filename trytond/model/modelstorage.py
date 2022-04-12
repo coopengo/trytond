@@ -36,7 +36,7 @@ _cache_count_timeout = config.getint(
     'cache', 'count_timeout', default=60 * 60 * 24)
 _cache_count_clear = config.getint(
     'cache', 'count_clear', default=1000)
-_database_timeout = 10
+_database_timeout = 120
 
 
 class AccessError(UserError):
