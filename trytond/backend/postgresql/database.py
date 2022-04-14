@@ -31,6 +31,7 @@ except ImportError:
 from psycopg2 import IntegrityError as DatabaseIntegrityError
 from psycopg2 import OperationalError as DatabaseOperationalError
 from psycopg2 import ProgrammingError
+from psycopg2.errors import QueryCanceled as DatabaseTimeoutError
 from psycopg2.extras import register_default_json, register_default_jsonb
 
 from sql import Flavor, Cast, For, Table
@@ -47,7 +48,8 @@ from trytond.perf_analyzer import analyze_before, analyze_after
 from trytond.perf_analyzer import logger as perf_logger
 
 
-__all__ = ['Database', 'DatabaseIntegrityError', 'DatabaseOperationalError']
+__all__ = ['Database', 'DatabaseIntegrityError', 'DatabaseOperationalError',
+    'DatabaseTimeoutError']
 
 logger = logging.getLogger(__name__)
 
@@ -309,7 +311,8 @@ class Database(DatabaseInterface):
     def connect(self):
         return self
 
-    def get_connection(self, autocommit=False, readonly=False):
+    def get_connection(
+            self, autocommit=False, readonly=False, statement_timeout=None):
         for count in range(config.getint('database', 'retry'), -1, -1):
             try:
                 conn = self._connpool.getconn()
@@ -331,12 +334,18 @@ class Database(DatabaseInterface):
             conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
         else:
             conn.set_isolation_level(ISOLATION_LEVEL_REPEATABLE_READ)
+        statements = []
         # psycopg2cffi does not have the readonly property
         if hasattr(conn, 'readonly'):
             conn.readonly = readonly
         elif not autocommit and readonly:
+            statements.append('SET TRANSACTION READ ONLY')
+        if statement_timeout:
+            statements.append(
+                'SET LOCAL statement_timeout=%s' % (statement_timeout * 1000))
+        if statements:
             cursor = conn.cursor()
-            cursor.execute('SET TRANSACTION READ ONLY')
+            cursor.execute(';'.join(statements))
         conn.cursor_factory = PerfCursor
         return conn
 
