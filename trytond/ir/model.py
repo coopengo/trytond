@@ -77,7 +77,7 @@ class Model(ModelSQL, ModelView):
         cls.__rpc__.update({
                 'list_models': RPC(),
                 'list_history': RPC(),
-                'global_search': RPC(),
+                'global_search': RPC(timeout=10),
                 })
 
     @classmethod

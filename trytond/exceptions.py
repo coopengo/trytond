@@ -71,3 +71,9 @@ class MissingDependenciesException(TrytonException):
 
     def __str__(self):
         return 'Missing dependencies: %s' % ' '.join(self.missings)
+
+
+class TimeoutException(TrytonException):
+
+    def __init__(self):
+        super().__init__('TimeoutException')
