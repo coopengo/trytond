@@ -8,6 +8,7 @@ import uuid
 import unittest
 import xmlrunner
 import sys
+import time
 
 from trytond.config import config
 
@@ -56,5 +57,6 @@ if not opt.xmloutput:
         verbosity=opt.verbosity, failfast=opt.failfast).run(suite)
 else:
     result = xmlrunner.XMLTestRunner(
-        output='test-reports', verbosity=opt.verbosity).run(suite)
+        output='test-reports', outsuffix=str(time.time()),
+        verbosity=opt.verbosity).run(suite)
 sys.exit(not result.wasSuccessful())
