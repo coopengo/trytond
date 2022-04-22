@@ -151,7 +151,6 @@ class User(avatar_mixin(100, 'login'), DeactivableMixin, ModelSQL, ModelView):
             'get_sessions')
     _get_preferences_cache = Cache('res_user.get_preferences')
     _get_groups_cache = Cache('res_user.get_groups', context=False)
-    _get_login_cache = Cache('res_user._get_login', context=False)
 
     @classmethod
     def __setup__(cls):
@@ -375,10 +374,7 @@ class User(avatar_mixin(100, 'login'), DeactivableMixin, ModelSQL, ModelView):
     @classmethod
     def create(cls, vlist):
         vlist = [cls._convert_vals(vals) for vals in vlist]
-        res = super(User, cls).create(vlist)
-        # Restart the cache for _get_login
-        cls._get_login_cache.clear()
-        return res
+        return super(User, cls).create(vlist)
 
     @classmethod
     def write(cls, users, values, *args):
@@ -414,8 +410,6 @@ class User(avatar_mixin(100, 'login'), DeactivableMixin, ModelSQL, ModelView):
         pool.get('ir.rule')._domain_get_cache.clear()
         # Restart the cache for get_groups
         cls._get_groups_cache.clear()
-        # Restart the cache for _get_login
-        cls._get_login_cache.clear()
         # Restart the cache for get_preferences
         cls._get_preferences_cache.clear()
         # Restart the cache of check
@@ -627,9 +621,6 @@ class User(avatar_mixin(100, 'login'), DeactivableMixin, ModelSQL, ModelView):
 
     @classmethod
     def _get_login(cls, login):
-        result = cls._get_login_cache.get(login)
-        if result:
-            return result
         cursor = Transaction().connection.cursor()
         table = cls.__table__()
         cursor.execute(*table.select(table.id, table.password_hash,
@@ -639,9 +630,7 @@ class User(avatar_mixin(100, 'login'), DeactivableMixin, ModelSQL, ModelView):
                     else_=None),
                 where=(table.login == login)
                 & (table.active == Literal(True))))
-        result = cursor.fetchone() or (None, None, None)
-        cls._get_login_cache.set(login, result)
-        return result
+        return cursor.fetchone() or (None, None, None)
 
     @classmethod
     def get_login(cls, login, parameters):
