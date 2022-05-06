@@ -1667,12 +1667,15 @@ class ModelStorage(Model):
                 self._transaction.reset_context(), \
                 self._transaction.set_context(
                     self._context, _check_access=False) as transaction:
+            read_size = min(
+                self._cache.size_limit, self._local_cache.size_limit,
+                self._transaction.database.IN_MAX)
             if (self.id in self._cache and name in self._cache[self.id]
                     and not require_context_field):
                 # Use values from cache
                 ids = islice(chain(islice(self._ids, index, None),
                         islice(self._ids, 0, max(index - 1, 0))),
-                    self._transaction.database.IN_MAX)
+                    read_size)
                 ffields = {name: ffields[name]}
                 read_data = [{'id': i, name: self._cache[i][name]}
                     for i in ids
@@ -1680,7 +1683,8 @@ class ModelStorage(Model):
             else:
                 # Order data read to update cache in the same order
                 index = {i: n for n, i in enumerate(ids)}
-                read_data = self.read(list(index.keys()), list(ffields.keys()))
+                read_data = self.read(
+                    list(index.keys())[:read_size], list(ffields.keys()))
                 read_data.sort(key=lambda r: index[r['id']])
             # create browse records for 'remote' models
             no_local_cache = {'binary'}
