@@ -1683,11 +1683,13 @@ class ModelStorage(Model):
                 if id_ not in s:
                     s.add(id_)
                     yield id_
+        read_size = max(1, min(
+                self._cache.size_limit, self._local_cache.size_limit,
+                self._transaction.database.IN_MAX))
         index = self._ids.index(self.id)
         ids = chain(islice(self._ids, index, None),
             islice(self._ids, 0, max(index - 1, 0)))
-        ids = islice(unique(filter(filter_, ids)),
-            self._transaction.database.IN_MAX)
+        ids = islice(unique(filter(filter_, ids)), read_size)
 
         def instantiate(field, value, data):
             if field._type in ('many2one', 'one2one', 'reference'):
