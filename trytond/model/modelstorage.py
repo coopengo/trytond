@@ -1610,7 +1610,7 @@ class ModelStorage(Model):
         index = self._ids.index(self.id)
         ids = chain(islice(self._ids, index, None),
             islice(self._ids, 0, max(index - 1, 0)))
-        idx = islice(unique(filter(filter_, ids)), read_size)
+        ids = islice(unique(filter(filter_, ids)), read_size)
 
         def instantiate(field, value, data):
             if field._type in ('many2one', 'one2one', 'reference'):
