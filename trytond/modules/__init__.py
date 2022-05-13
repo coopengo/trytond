@@ -319,8 +319,8 @@ def load_module_graph(graph, pool, update=None, lang=None):
             (module, to_delete) = modules_todo.pop()
             convert.post_import(pool, module, to_delete)
 
-        # Ensure cache is clear for other instances
         if update:
+            # Ensure cache is clear for other instances
             Cache.clear_all()
             Cache.refresh_pool(transaction)
     logger.info('all modules loaded')

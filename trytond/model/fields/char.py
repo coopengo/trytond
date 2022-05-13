@@ -4,6 +4,7 @@ import string
 import warnings
 
 from sql import Query, Expression
+from sql.conditionals import Coalesce, NullIf
 from sql.operators import Not
 from sql.functions import Trim
 
@@ -112,21 +113,25 @@ class Char(FieldTranslate):
                 language = transaction.language
                 model, join, column = self._get_translation_column(
                     Model, name)
+                column = Coalesce(NullIf(column, ''), self.sql_column(model))
             else:
                 language = None
                 column = self.sql_column(table)
             column = self._domain_column(operator, column)
 
-            if database.has_similarity() and is_full_text(value):
-                threshold = context.get(
-                    '%s.%s.search_similarity' % (Model.__name__, name),
-                    context.get('search_similarity', 0.3))
+            threshold = context.get(
+                '%s.%s.search_similarity' % (Model.__name__, name),
+                context.get('search_similarity'))
+            if database.has_similarity() and is_full_text(value) and threshold:
                 sim_value = unescape_wildcard(value)
                 sim_value = self._domain_value(operator, sim_value)
                 expression = (
                     database.similarity(column, sim_value) >= threshold)
                 if operator.startswith('not'):
                     expression = Not(expression)
+                if self.translate:
+                    expression = table.id.in_(
+                        join.select(model.id, where=expression))
 
             key = '%s.%s.search_full_text' % (Model.__name__, name)
             if ((self.search_full_text or context.get(key))

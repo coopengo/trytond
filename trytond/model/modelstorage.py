@@ -18,14 +18,14 @@ from trytond.model import Model
 from trytond.model import fields
 from trytond.tools import reduce_domain, is_instance_method, grouped_slice
 from trytond.tools.domain_inversion import (
-    domain_inversion, parse as domain_parse)
+    domain_inversion, eval_domain, parse as domain_parse)
 from trytond.pyson import PYSONEncoder, PYSONDecoder, PYSON
 from trytond.const import OPERATORS
 from trytond.config import config
 from trytond.i18n import gettext, lazy_gettext
 from trytond.transaction import Transaction
 from trytond.pool import Pool
-from trytond.cache import Cache, LRUDict, LRUDictTransaction, freeze
+from trytond.cache import Cache, LRUDict, LRUDictTransaction, freeze, unfreeze
 from trytond.rpc import RPC
 from .descriptors import dualmethod
 
@@ -1088,8 +1088,8 @@ class ModelStorage(Model):
     @without_check_access
     def _validate(cls, records, field_names=None):
         pool = Pool()
-        # Ensure to read only the records to validate
-        # and convert iterator to list
+        # Ensure only records to validate are read,
+        # also convert iterator to list
         records = cls.browse(records)
 
         ctx_pref = {}
@@ -1131,44 +1131,54 @@ class ModelStorage(Model):
                 Relation = field.get_target()
             else:
                 Relation = cls
-            domains = defaultdict(list)
-            if is_pyson(field.domain):
-                pyson_domain = PYSONEncoder().encode(field.domain)
+            domains = defaultdict(lambda: defaultdict(list))
+            if is_pyson(field.domain) or is_pyson(field.context):
+                encoder = PYSONEncoder()
+                pyson_domain = encoder.encode(field.domain)
+                pyson_context = encoder.encode(field.context)
                 for record in records:
                     domain = freeze(_record_eval_pyson(
                             record, pyson_domain, encoded=True))
-                    domains[domain].append(record)
+                    context = freeze(_record_eval_pyson(
+                            record, pyson_context, encoded=True))
+                    domains[context][domain].append(record)
                 # Select strategy depending if it is closer to one domain per
                 # record or one domain for all records
-                if len(domains) > len(records) * 0.5:
-                    # Do not use IN_MAX to let spaces for the pyson domain
-                    in_max = Transaction().database.IN_MAX
-                    count = in_max // 10
-                    new_domains = {}
-                    for sub_domains in grouped_slice(
-                            list(domains.keys()), count):
-                        grouped_domain = ['OR']
-                        grouped_records = []
-                        for d in sub_domains:
-                            sub_records = domains[d]
-                            grouped_records.extend(sub_records)
-                            relations = relation_domain(field, sub_records)
-                            if len(relations) > in_max:
-                                break
-                            grouped_domain.append(
-                                [('id', 'in', [r.id for r in relations]), d])
+                # Do not use IN_MAX to let spaces for the pyson domain
+                in_max = Transaction().database.IN_MAX
+                count = in_max // 10
+                for context, ctx_domains in domains.items():
+                    if len(ctx_domains) > len(records) * 0.5:
+                        new_domains = {}
+                        for sub_domains in grouped_slice(
+                                list(ctx_domains.keys()), count):
+                            grouped_domain = ['OR']
+                            grouped_records = []
+                            for d in sub_domains:
+                                sub_records = ctx_domains[d]
+                                grouped_records.extend(sub_records)
+                                relations = relation_domain(field, sub_records)
+                                if len(relations) > in_max:
+                                    break
+                                grouped_domain.append(
+                                    [('id', 'in',
+                                            [r.id for r in relations]), d])
+                            else:
+                                new_domains[freeze(grouped_domain)] = \
+                                    grouped_records
+                                continue
+                            break
                         else:
-                            new_domains[freeze(grouped_domain)] = \
-                                grouped_records
-                            continue
-                        break
-                    else:
-                        domains = new_domains
+                            domains[context] = new_domains
             else:
-                domains[freeze(field.domain)].extend(records)
+                domains[freeze(field.context)][freeze(field.domain)].extend(
+                    records)
 
-            for domain, sub_records in domains.items():
-                validate_relation_domain(field, sub_records, Relation, domain)
+            for context, ctx_domains in domains.items():
+                for domain, sub_records in ctx_domains.items():
+                    with Transaction().set_context(unfreeze(context)):
+                        validate_relation_domain(
+                            field, sub_records, Relation, unfreeze(domain))
 
         def relation_domain(field, records):
             if field._type in ('many2one', 'one2many', 'many2many', 'one2one'):
@@ -1215,10 +1225,13 @@ class ModelStorage(Model):
                         else:
                             fields.add(field.name)
                         for field_name in sorted(fields):
+                            env = EvalEnvironment(invalid_record, Relation)
                             invalid_domain = domain_inversion(
-                                domain, field_name,
-                                EvalEnvironment(invalid_record, Relation))
+                                domain, field_name, env)
                             if isinstance(invalid_domain, bool):
+                                continue
+                            if (len(fields) > 1  # no need to evaluate
+                                    and eval_domain(invalid_domain, env)):
                                 continue
                             field_def = Relation.fields_get(
                                 [field_name], level=level)
