@@ -7,7 +7,7 @@ stages:
 
 include:
   - project: 'coopengo/devops/gitlab-ci-template'
-    ref: test
+    ref: master
     file: '/Security/SAST.gitlab-ci.yml'
 
 ## Main
