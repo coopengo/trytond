@@ -4,6 +4,7 @@ stages:
 
 ## includes
 
+
 include:
   - project: 'coopengo/devops/gitlab-ci-template'
     ref: master
