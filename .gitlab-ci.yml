@@ -1,0 +1,62 @@
+stages:
+  - synchronize
+  - test
+
+## includes
+
+include:
+  - project: 'coopengo/devops/gitlab-ci-template'
+    ref: master
+    file: '/Security/SAST.gitlab-ci.yml'
+
+## Main
+
+synchronize:pipeline:
+  stage: synchronize
+  image: bitnami/git
+  variables:
+    GIT_STRATEGY: none
+    REPOSITORY_SSH_KEY: "${SSH_KEY}"
+    REPOSITORY_COOPENGO_URL: "git@github.com"
+  before_script:
+    - echo "Source is $CI_PIPELINE_SOURCE"
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - ssh-keyscan -H "${CI_SERVER_HOST}" >>~/.ssh/known_hosts
+    - ssh-keyscan -H "github.com" >>~/.ssh/known_hosts
+    - echo "${REPOSITORY_SSH_KEY}" >~/.ssh/id_rsa
+    - chmod 400 ~/.ssh/id_rsa
+    - ssh-keygen -y -f ~/.ssh/id_rsa >~/.ssh/id_rsa.pub
+    - git config --global user.email "${GITLAB_USER_EMAIL}"
+    - git config --global user.name "🤖 GitLab CI/CD 🤖"
+    - git clone --branch "${CI_COMMIT_REF_NAME}" "${REPOSITORY_COOPENGO_URL}:${CI_PROJECT_ROOT_NAMESPACE}/${CI_PROJECT_NAME}.git" "${CI_PROJECT_DIR}"
+    - git fetch --all
+  script:
+    - |-
+      for BRANCH in $(git ls-remote --refs -h origin -l "coog-*" | cut -s -d '/' -f3 | grep -E "^(coog-[[:digit:]]{1,2}).([[:digit:]]{1,2})$" )
+      do
+        git checkout "${BRANCH}"
+        git checkout "origin/${CI_DEFAULT_BRANCH}" .gitlab-ci.yml
+        git commit -m "Merge .gitlab-ci.yml from \"${CI_DEFAULT_BRANCH}\""
+      done
+      git push --all
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH'
+      changes:
+        - .gitlab-ci.yml
+
+trigger:security:test:
+  stage: test
+  image: bitnami/git
+  script:
+    - |-
+      for BRANCH in $(git ls-remote --head origin -l "coog-*" | cut -d '/' -f3 | grep -E '^(coog-[[:digit:]]{1,2}.[[:digit:]]{1,3})$' | sort -Vr | head -n 4)
+      do
+        curl -X POST \
+          --fail \
+          -F "token=${CI_JOB_TOKEN}" \
+          -F "ref=${BRANCH}" \
+          https://gitlab.com/api/v4/projects/${CI_PROJECT_ID}/trigger/pipeline
+      done
+  rules:
+    - if: '$CI_PIPELINE_SOURCE =~ /^(web|schedule)$/ && $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH'
