@@ -249,6 +249,8 @@ class Transaction(object):
                 # which could occur otherwise.
                 sub_transaction.connection.commit()
             self.started_at = self.monotonic_time()
+            for cache in self.cache.values():
+                cache.clear()
             Cache.commit(self)
             self.connection.commit()
         except Exception:

@@ -331,7 +331,7 @@ class ModelView(Model):
             if not result['arch']:
                 raise ValueError("Missing view architecture for %s" % ((
                             cls.__name__, view_id, view_type),))
-            parser = etree.XMLParser(remove_comments=True)
+            parser = etree.XMLParser(remove_comments=True, resolve_entities=False)
             try:
                 encoded_arch = result['arch'].encode('utf-8')
             except UnicodeEncodeError:
@@ -390,7 +390,8 @@ class ModelView(Model):
             level = 1 if result['type'] == 'tree' else 0
 
         # Update arch and compute fields from arch
-        parser = etree.XMLParser(remove_blank_text=True)
+        parser = etree.XMLParser(
+            remove_blank_text=True, resolve_entities=False)
         tree = etree.fromstring(result['arch'], parser)
         result['arch'], result['fields'] = cls.parse_view(
             tree, result['type'], result['field_childs'], level=level)
