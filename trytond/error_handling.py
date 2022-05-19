@@ -2,7 +2,7 @@
 # this repository contains the full copyright notices and license terms.
 import sys
 
-from werkzeug.exceptions import Forbidden
+from werkzeug.exceptions import Forbidden, Unauthorized
 
 from trytond.tools import resolve
 from trytond.config import config
@@ -94,7 +94,8 @@ def error_wrap(func):
     def wrap(*args, **kwargs):
         try:
             return func(*args, **kwargs)
-        except (UserError, UserWarning, ConcurrencyException, Forbidden):
+        except (UserError, UserWarning, ConcurrencyException, Forbidden,
+                Unauthorized):
             # Those errors are supposed to make their way to the end user
             raise
         except Exception as e:
