@@ -33,8 +33,8 @@ class WSGIAppTestCase(unittest.TestCase):
             sentinel.request = request
             raise exception
 
-        client = Client(app)
-        (response, status, headers) = client.get('/willfail')
+        client = Client(app, Response)
+        _ = client.get('/willfail')
 
         spy.assert_called_once_with(app, sentinel.request, exception)
 
@@ -59,8 +59,8 @@ class WSGIAppTestCase(unittest.TestCase):
             sentinel.request = request
             raise exception
 
-        client = Client(app)
-        (response, status, headers) = client.get('/willfail')
+        client = Client(app, Response)
+        _ = client.get('/willfail')
 
         spy1.assert_called_once_with(app, sentinel.request, exception)
         spy2.assert_called_once_with(app, sentinel.request, exception)
@@ -83,8 +83,8 @@ class WSGIAppTestCase(unittest.TestCase):
             sentinel.request = request
             raise exception
 
-        client = Client(app)
-        (response, status, headers) = client.get('/willfail')
+        client = Client(app, Response)
+        _ = client.get('/willfail')
 
         spy.assert_called_once_with(app, sentinel.request, exception)
 
@@ -104,11 +104,11 @@ class WSGIAppTestCase(unittest.TestCase):
         def _route(request):
             raise self.TestException('foo')
 
-        client = Client(app)
-        (response, status, headers) = client.get('/willfail')
+        client = Client(app, Response)
+        response = client.get('/willfail')
 
-        self.assertEqual(next(response), b'baz')
-        self.assertEqual(status, "418 I'M A TEAPOT")
+        self.assertEqual(next(response.response), b'baz')
+        self.assertEqual(response.status, "418 I'M A TEAPOT")
 
 
 def suite():

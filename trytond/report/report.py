@@ -9,6 +9,7 @@ import logging
 import math
 import subprocess
 import tempfile
+import unicodedata
 import warnings
 import zipfile
 import requests
@@ -93,18 +94,12 @@ TIMEDELTA_DEFAULT_CONVERTER['w'] = TIMEDELTA_DEFAULT_CONVERTER['d'] * 7
 TIMEDELTA_DEFAULT_CONVERTER['M'] = TIMEDELTA_DEFAULT_CONVERTER['d'] * 30
 TIMEDELTA_DEFAULT_CONVERTER['Y'] = TIMEDELTA_DEFAULT_CONVERTER['d'] * 365
 
+REPORT_NAME_MAX_LENGTH = 200
+
+
 class UnoConversionError(UserError):
     pass
 
-
-class ReportFactory:
-
-    def __call__(self, records, **kwargs):
-        data = {}
-        data['objects'] = records  # XXX To remove
-        data['records'] = records
-        data.update(kwargs)
-        return data
 
 class TranslateFactory:
 
@@ -169,10 +164,24 @@ class Report(URLMixin, PoolBase):
         else:
             action_report = ActionReport(action_id)
 
-        def report_name(records):
-            name = '-'.join(r.rec_name for r in records[:5])
-            if len(records) > 5:
-                name += '__' + str(len(records[5:]))
+        def report_name(records, reserved_length=0):
+            names = []
+            name_length = 0
+            record_count = len(records)
+            max_length = (REPORT_NAME_MAX_LENGTH
+                - reserved_length
+                - len(str(record_count)) - 2)
+            for record in records[:5]:
+                record_name = record.rec_name
+                name_length += len(
+                    unicodedata.normalize('NFKD', record_name)) + 1
+                if name_length > max_length:
+                    break
+                names.append(record_name)
+
+            name = '-'.join(names)
+            if len(records) > len(names):
+                name += '__' + str(record_count - len(names))
             return name
 
         records = []
@@ -194,6 +203,7 @@ class Report(URLMixin, PoolBase):
                 headers.append(dict(key))
 
         n = len(groups)
+        join_string = '-'
         if n > 1:
             padding = math.ceil(math.log10(n))
             content = BytesIO()
@@ -202,9 +212,10 @@ class Report(URLMixin, PoolBase):
                         zip(headers, groups), 1):
                     oext, rcontent = cls._execute(
                         group_records, header, data, action_report)
-                    filename = report_name(group_records)
                     number = str(i).zfill(padding)
-                    filename = slugify('%s-%s' % (number, filename))
+                    filename = report_name(
+                        group_records, len(number) + len(join_string))
+                    filename = slugify(join_string.join([number, filename]))
                     rfilename = '%s.%s' % (filename, oext)
                     content_zip.writestr(rfilename, rcontent)
             content = content.getvalue()
@@ -214,8 +225,12 @@ class Report(URLMixin, PoolBase):
                 groups[0], headers[0], data, action_report)
         if not isinstance(content, str):
             content = bytearray(content) if bytes == str else bytes(content)
-        filename = '-'.join(
-            filter(None, [action_report.name, report_name(records)]))
+        action_report_name = action_report.name[:REPORT_NAME_MAX_LENGTH]
+        filename = join_string.join(
+            filter(None, [
+                action_report_name,
+                report_name(
+                    records, len(action_report_name) + len(join_string))]))
         return (oext, content, action_report.direct_print, filename)
 
     @classmethod
@@ -352,7 +367,7 @@ class Report(URLMixin, PoolBase):
                 and output_format == 'pdf'):
             return output_format, weasyprint.HTML(string=data).write_pdf()
 
-        if output_format in MIMETYPES:
+        if input_format == output_format and output_format in MIMETYPES:
             return output_format, data
 
         dtemp = tempfile.mkdtemp(prefix='trytond_')
@@ -379,7 +394,15 @@ class Report(URLMixin, PoolBase):
             for count in range(retry, -1, -1):
                 if count != retry:
                     time.sleep(0.02 * (retry - count))
-                subprocess.check_call(cmd, timeout=timeout)
+                try:
+                    subprocess.check_call(cmd, timeout=timeout)
+                except subprocess.CalledProcessError:
+                    if count:
+                        continue
+                    logger.error(
+                        "fail to convert %s to %s", report.report_name, oext,
+                        exc_info=True)
+                    break
                 # ABDC: Please don't judge me... Soffice makes me do this
                 # because its returns before file creation.
                 nb_retry = 0
@@ -394,7 +417,7 @@ class Report(URLMixin, PoolBase):
             else:
                 logger.error(
                     'fail to convert %s to %s', report.report_name, oext)
-                return input_format, data
+            return input_format, data
         finally:
             try:
                 os.remove(path)

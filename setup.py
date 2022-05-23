@@ -73,9 +73,9 @@ if minor_version % 2:
         + '.'.join(local_version))
 
 if platform.python_implementation() == 'PyPy':
-    pg_require = ['psycopg2cffi >= 2.5.4']
+    pg_require = ['psycopg2cffi > 2.9.0']
 else:
-    pg_require = ['psycopg2 >= 2.5.4']
+    pg_require = ['psycopg2 >= 2.7.0']
 tests_require = ['pillow']
 
 setup(name=name,
@@ -156,13 +156,14 @@ setup(name=name,
     license='GPL-3',
     python_requires='>=3.6',
     install_requires=[
+        'defusedxml',
         'lxml >= 2.0',
         'relatorio[fodt] >= 0.7.0',
         'Genshi',
         'python-dateutil',
         'polib',
         'python-sql >= 0.5',
-        'werkzeug < 2',
+        'werkzeug',
         'wrapt',
         'passlib >= 1.7.0',
         ],

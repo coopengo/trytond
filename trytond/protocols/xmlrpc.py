@@ -7,6 +7,7 @@ import logging
 # convert decimal to float before marshalling:
 from decimal import Decimal
 
+import defusedxml.xmlrpc
 from werkzeug.wrappers import Response
 from werkzeug.exceptions import (
     BadRequest, InternalServerError, Conflict, Forbidden, Locked,
@@ -20,6 +21,8 @@ from trytond.exceptions import (
 from trytond.tools import cached_property
 
 logger = logging.getLogger(__name__)
+
+defusedxml.xmlrpc.monkey_patch()
 
 
 def dump_decimal(self, value, write):
@@ -55,10 +58,20 @@ def dump_timedelta(self, value, write):
     self.dump_struct(value, write)
 
 
+def dump_long(self, value, write):
+    try:
+        self.dump_long(value, write)
+    except OverflowError:
+        write('<value><biginteger>')
+        write(str(int(value)))
+        write('</biginteger></value>\n')
+
+
 client.Marshaller.dispatch[Decimal] = dump_decimal
 client.Marshaller.dispatch[datetime.date] = dump_date
 client.Marshaller.dispatch[datetime.time] = dump_time
 client.Marshaller.dispatch[datetime.timedelta] = dump_timedelta
+client.Marshaller.dispatch[int] = dump_long
 
 
 def dump_struct(self, value, write, escape=client.escape):

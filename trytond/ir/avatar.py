@@ -85,7 +85,7 @@ class Avatar(ImageMixin, ResourceMixin, ModelSQL):
                 2 ** math.ceil(math.log2(size)),
                 10 * math.ceil(size / 10) if size <= 100
                 else 50 * math.ceil(size / 50)))
-        if not (0 < size < 2048):
+        if not (0 < size <= 2048):
             raise ValueError("Invalid size")
         for avatar in self.cache:
             if avatar.size == size:
@@ -110,13 +110,13 @@ class Avatar(ImageMixin, ResourceMixin, ModelSQL):
         img = Image.open(io.BytesIO(image))
         width, height = img.size
         size = min(width, height)
-        img.crop((
+        img = img.crop((
                 (width - size) // 2,
                 (height - size) // 2,
                 (width + size) // 2,
                 (height + size) // 2))
         if size > 2048:
-            img.resize((2048, 2048))
+            img = img.resize((2048, 2048))
         img.save(data, format='jpeg', optimize=True, **_params)
         return data.getvalue()
 
@@ -155,7 +155,7 @@ class AvatarCache(ImageMixin, ModelSQL):
         "Size", required=True,
         domain=[
             ('size', '>', 0),
-            ('size', '<', 2048),
+            ('size', '<=', 2048),
             ])
 
     @classmethod
@@ -183,10 +183,13 @@ def generate(size, string):
             b = random.randint(0, 255)
         return r, v, b
 
+    try:
+        font = ImageFont.truetype(FONT, size=int(0.65 * size))
+    except ImportError:
+        return
     white = (255, 255, 255)
     image = Image.new('RGB', (size, size), background_color(string))
     draw = ImageDraw.Draw(image)
-    font = ImageFont.truetype(FONT, size=int(0.65 * size))
     letter = string[0].upper() if string else ''
     draw.text(
         (size / 2, size / 2), letter, fill=white, font=font, anchor='mm')
