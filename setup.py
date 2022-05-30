@@ -165,6 +165,7 @@ setup(name=name,
         'werkzeug < 2',
         'wrapt',
         'passlib >= 1.7.0',
+        "pytz;python_version<'3.9'",
         ],
     extras_require={
         'PostgreSQL': pg_require,
