@@ -2,6 +2,7 @@
 # this repository contains the full copyright notices and license terms.
 import datetime
 import time
+from pathlib import Path
 from dateutil.relativedelta import relativedelta
 import logging
 
@@ -176,3 +177,4 @@ class Cron(DeactivableMixin, ModelSQL, ModelView):
             task_id = transaction.tasks.pop()
             run_task(db_name, task_id)
         logger.info('cron finished for "%s"', db_name)
+        Path(f'/tmp/cron_canary_{db_name}').touch()
