@@ -46,6 +46,7 @@ def run(options):
             logger.info('start thread for "%s"', db_name)
             thread.start()
             threads[db_name] = thread
+            Path(f'/tmp/cron_canary_{db_name}').touch()
         if options.once:
             break
         time.sleep(60)
