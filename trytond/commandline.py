@@ -71,6 +71,9 @@ def get_parser_cron():
     parser = get_parser_daemon()
     parser.add_argument("-1", "--once", dest='once', action='store_true',
         help="run pending tasks and halt")
+    parser.add_argument("--check", dest='check', action='store_true',
+        help="Checks the existence of canary file for all given databases."
+        "The exit status will be 0 if ok, else 1")
     return parser
 
 
