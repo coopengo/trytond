@@ -3,6 +3,8 @@
 import threading
 import time
 import logging
+import sys
+from pathlib import Path
 
 from trytond.pool import Pool
 from trytond.transaction import Transaction
@@ -13,7 +15,16 @@ logger = logging.getLogger(__name__)
 
 def run(options):
     threads = []
+
     for name in options.database_names:
+        if options.check:
+            path = Path(f'/tmp/cron_canary_{name}')
+            if path.exists():
+                logger.info(f'canary file exists for {name}')
+                path.unlink()
+                return
+            logger.error(f'No cron canary file for {name}')
+            sys.exit(1)
         thread = threading.Thread(target=Pool(name).init)
         thread.start()
         threads.append(thread)
@@ -40,6 +51,7 @@ def run(options):
             logger.info('start thread for "%s"', db_name)
             thread.start()
             threads[db_name] = thread
+            Path(f'/tmp/cron_canary_{db_name}').touch()
         if options.once:
             break
         time.sleep(60)
