@@ -26,5 +26,6 @@ handler = commandline.generate_signal_handler(options.pidfile)
 commandline.handle_signals(handler)
 
 with commandline.pidfile(options):
-    Pool.start()
+    if not options.check:
+        Pool.start()
     cron.run(options)
