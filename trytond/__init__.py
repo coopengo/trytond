@@ -7,6 +7,7 @@ from email import charset
 
 __version__ = "6.0.3"
 
+os.environ.setdefault('TRYTOND_TZ', os.environ.get('TZ', 'UTC'))
 os.environ['TZ'] = 'UTC'
 if hasattr(time, 'tzset'):
     time.tzset()

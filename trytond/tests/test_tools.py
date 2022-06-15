@@ -13,7 +13,7 @@ import sql.operators
 from trytond.tools import (
     reduce_ids, reduce_domain, decimal_, is_instance_method, file_open,
     strip_wildcard, lstrip_wildcard, rstrip_wildcard, slugify, sortable_values,
-    escape_wildcard, unescape_wildcard, is_full_text, firstline)
+    escape_wildcard, timezone, unescape_wildcard, is_full_text, firstline)
 from trytond.tools.string_ import StringPartitioned, LazyString
 from trytond.tools.domain_inversion import (
     domain_inversion, parse, simplify, merge, concat, unique_value,
@@ -308,6 +308,11 @@ class LazyStringTestCase(unittest.TestCase):
         s = 'bar' + s
 
         self.assertEqual(s, 'barfoo')
+
+    def test_get_server_zoneinfo(self):
+        zi = timezone._get_zoneinfo('foo')
+        now = dt.datetime(2022, 5, 17, tzinfo=zi)
+        self.assertEqual(str(now), "2022-05-17 00:00:00+00:00")
 
 
 class DomainInversionTestCase(unittest.TestCase):
