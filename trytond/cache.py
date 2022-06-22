@@ -394,9 +394,10 @@ class MemoryCache(BaseCache):
                                 inst._clear(dbname)
                 cls._clean_last = datetime.now()
         except Exception:
-            logger.error(
-                "cache listener on '%s' crashed", dbname, exc_info=True)
-            raise
+            if not config.getboolean('env', 'testing'):
+                logger.error(
+                    "cache listener on '%s' crashed", dbname, exc_info=True)
+                raise
         finally:
             if conn:
                 database.put_connection(conn)
@@ -405,9 +406,12 @@ class MemoryCache(BaseCache):
                     del cls._listener[pid, dbname]
 
     @classmethod
-    def purge_listeners(cls, dbname):
+    def _purge_listeners(cls, dbname):
         '''
         Purges all listeners for a given database
+
+        Should no longer be useful, but we may need it later so we will keep it
+        around a little longer
         '''
         pid = os.getpid()
         thread_id = None
@@ -418,9 +422,9 @@ class MemoryCache(BaseCache):
 
         # JMO : doctest teardown remains stuck with code below
         # TODO: fix this
-        if not config.getboolean('env', 'testing'):
-            # We removed the thread from the list, but it can still be alive if it
-            # is busy clearing some cache
+        if config.getboolean('env', 'testing'):
+            # We removed the thread from the list, but it can still be alive if
+            # it is busy clearing some cache
             if thread_id is not None:
                 while {thread_id} & {x.ident for x in threading.enumerate()}:
                     time.sleep(0.01)
