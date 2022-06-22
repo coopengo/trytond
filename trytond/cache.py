@@ -395,6 +395,9 @@ class MemoryCache(BaseCache):
     def _purge_listeners(cls, dbname):
         '''
         Purges all listeners for a given database
+
+        Should no longer be useful, but we may need it later so we will keep it
+        around a little longer
         '''
         pid = os.getpid()
         thread_id = None
