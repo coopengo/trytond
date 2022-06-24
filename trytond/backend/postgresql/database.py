@@ -16,7 +16,6 @@ try:
 except ImportError:
     from psycopg2cffi import compat
     compat.register()
-except ImportError:
     from psycopg2 import connect
 from psycopg2 import Binary
 from psycopg2.sql import SQL, Identifier
