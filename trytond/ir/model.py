@@ -75,7 +75,7 @@ class Model(ModelSQL, ModelView):
                 'list_history': RPC(),
                 'get_notification': RPC(),
                 'get_names': RPC(),
-                'global_search': RPC(),
+                'global_search': RPC(timeout=10),
                 })
 
     @classmethod

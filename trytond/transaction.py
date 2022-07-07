@@ -104,7 +104,7 @@ class Transaction(object):
         return self.cache[(self.user, keys)]
 
     def start(self, database_name, user, readonly=False, context=None,
-            close=False, autocommit=False):
+            close=False, autocommit=False, timeout=None):
         '''
         Start transaction
         '''
@@ -123,7 +123,7 @@ class Transaction(object):
             database = backend.Database(database_name).connect()
         Flavor.set(backend.Database.flavor)
         self.connection = database.get_connection(readonly=readonly,
-            autocommit=autocommit)
+            autocommit=autocommit, statement_timeout=timeout)
         self.user = user
         self.database = database
         self.readonly = readonly
