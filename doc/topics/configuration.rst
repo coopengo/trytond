@@ -466,6 +466,20 @@ The time in seconds that a session stay valid.
 
 Default: ``2592000`` (30 days)
 
+unaccent_function
+~~~~~~~~~~~~~~~~~
+
+The name of the unaccent function.
+
+Default: ``unaccent``
+
+similarity_function
+~~~~~~~~~~~~~~~~~~~
+
+The name of the similarity function.
+
+Default: ``similarity``
+
 timeout
 ~~~~~~~
 
