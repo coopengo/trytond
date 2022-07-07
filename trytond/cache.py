@@ -97,6 +97,8 @@ class BaseCache(object):
             context.pop('_request', None)
             context.pop('_check_access', None)
             context.pop('_skip_warnings', None)
+            context.pop('session', None)
+            context.pop('token', None)
             return (key, Transaction().user, freeze(context))
         return key
 
