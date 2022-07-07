@@ -1,3 +1,4 @@
+* Add a way to register other objects in the pool
 * Catch get_connection errors in Cache listener
 * Compute cron job scheduling using server timezone
 * Reset less often the user sessions
