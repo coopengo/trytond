@@ -1,3 +1,4 @@
+* Compute cron job scheduling using server timezone
 * Reset less often the user sessions
 * Add option to strip leading and trailing whitespace from fields.Char
 * Add database timeout parameter on RPC calls

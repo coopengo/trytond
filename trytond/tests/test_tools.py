@@ -14,7 +14,7 @@ from trytond.tools import (
     decimal_, escape_wildcard, file_open, firstline, is_full_text,
     is_instance_method, lstrip_wildcard, reduce_domain, reduce_ids,
     remove_forbidden_chars, rstrip_wildcard, slugify, sortable_values,
-    strip_wildcard, unescape_wildcard)
+    strip_wildcard, timezone, unescape_wildcard)
 from trytond.tools.domain_inversion import (
     concat, domain_inversion, eval_domain, extract_reference_models,
     localize_domain, merge, parse, prepare_reference_domain, simplify,
@@ -353,6 +353,11 @@ class LazyStringTestCase(unittest.TestCase):
         s = 'bar' + s
 
         self.assertEqual(s, 'barfoo')
+
+    def test_get_server_zoneinfo(self):
+        zi = timezone._get_zoneinfo('foo')
+        now = dt.datetime(2022, 5, 17, tzinfo=zi)
+        self.assertEqual(str(now), "2022-05-17 00:00:00+00:00")
 
 
 class ImmutableDictTestCase(unittest.TestCase):
