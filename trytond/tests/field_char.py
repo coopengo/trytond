@@ -43,6 +43,13 @@ class CharSizePYSON(ModelSQL):
     size = fields.Integer("Size")
 
 
+class CharStrip(ModelSQL):
+    "Char Strip"
+    __name__ = 'test.char_strip'
+    char = fields.Char("Char")
+    char_unstripped = fields.Char("Char", strip=False)
+
+
 class CharTranslate(ModelSQL):
     'Char Translate'
     __name__ = 'test.char_translate'
@@ -79,6 +86,7 @@ def register(module):
         CharRequired,
         CharSize,
         CharSizePYSON,
+        CharStrip,
         CharTranslate,
         CharUnaccentedOn,
         CharUnaccentedOff,

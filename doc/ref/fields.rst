@@ -264,7 +264,7 @@ BigInteger
 Char
 ----
 
-.. class:: Char(string[, size[, translate[, \**options]]])
+.. class:: Char(string[, size[, translate[, strip[,\**options]]]])
 
    A single line :py:class:`string <str>` field.
 
@@ -284,6 +284,11 @@ Char
    The maximum length (in characters) of the field. The size is enforced at the
    storage level and in the client input.
    The value can be a :class:`~trytond.pyson.PYSON` statement.
+
+.. attribute:: Char.strip
+
+    If false, the leading and trailing whitespace characters of the value are
+    kept. Defaults to true.
 
 .. attribute:: Char.translate
 
