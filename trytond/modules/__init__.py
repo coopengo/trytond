@@ -165,7 +165,7 @@ def is_module_to_install(module, update):
     return False
 
 
-def load_translations(pool, node, languages):
+def load_translations(pool, node, languages, prefix):
     module = node.name
     localedir = '%s/%s' % (node.info['directory'], 'locale')
     lang2filenames = defaultdict(list)
@@ -180,7 +180,7 @@ def load_translations(pool, node, languages):
     base_path_position = len(node.info['directory']) + 1
     for language, files in lang2filenames.items():
         filenames = [f[base_path_position:] for f in files]
-        logger.info('%s:loading %s', module, ','.join(filenames))
+        logger.info('%s:loading %s', prefix, ','.join(filenames))
         Translation = pool.get('ir.translation')
         Translation.translation_import(language, module, files)
 
@@ -262,7 +262,7 @@ def load_module_graph(graph, pool, update=None, lang=None):
 
                 modules_todo.append((module, list(tryton_parser.to_delete)))
 
-                load_translations(pool, node, lang)
+                load_translations(pool, node, lang, logging_prefix)
 
                 if package_state == 'to remove':
                     continue
