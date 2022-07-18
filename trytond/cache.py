@@ -1,7 +1,6 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
 import datetime as dt
-import time
 import json
 import logging
 import os
@@ -335,10 +334,9 @@ class MemoryCache(BaseCache):
                                 inst._clear(dbname)
                 cls._clean_last = datetime.now()
         except Exception:
-            if not config.getboolean('env', 'testing'):
-                logger.error(
-                    "cache listener on '%s' crashed", dbname, exc_info=True)
-                raise
+            logger.error(
+                "cache listener on '%s' crashed", dbname, exc_info=True)
+            raise
         finally:
             if conn:
                 database.put_connection(conn)
@@ -347,35 +345,38 @@ class MemoryCache(BaseCache):
                     del cls._listener[pid, dbname]
 
     @classmethod
-    def _purge_listeners(cls, dbname):
+    def purge_listeners(cls, dbname):
         '''
         Purges all listeners for a given database
-
-        Should no longer be useful, but we may need it later so we will keep it
-        around a little longer
         '''
         pid = os.getpid()
-        thread_id = None
         with cls._listener_lock[pid]:
             if (pid, dbname) in cls._listener:
-                thread_id = cls._listener[pid, dbname].ident
                 del cls._listener[pid, dbname]
 
-        # JMO : doctest teardown remains stuck with code below
-        # TODO: fix this
-        if config.getboolean('env', 'testing'):
-            # We removed the thread from the list, but it can still be alive if
-            # it is busy clearing some cache
-            if thread_id is not None:
-                while {thread_id} & {x.ident for x in threading.enumerate()}:
-                    time.sleep(0.01)
+
+class DefaultCacheValue:
+    pass
+
+
+_default_cache_value = DefaultCacheValue()
+
+
+class SerializableMemoryCache(MemoryCache):
+    def get(self, key, default=None):
+        result = super(SerializableMemoryCache, self).get(key,
+            _default_cache_value)
+        return default if result == _default_cache_value else unpack(result)
+
+    def set(self, key, value):
+        super(SerializableMemoryCache, self).set(key, pack(value))
 
 
 if config.get('cache', 'class'):
     Cache = resolve(config.get('cache', 'class'))
 else:
     # JCA : Use serializable memory cache by default to avoid cache corruption
-    Cache = MemoryCache
+    Cache = SerializableMemoryCache
 
 
 class LRUDict(OrderedDict):

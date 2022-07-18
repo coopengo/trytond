@@ -304,11 +304,7 @@ class Database(DatabaseInterface):
         return conn
 
     def put_connection(self, connection, close=False):
-        try:
-            self._connpool.putconn(connection, close=close)
-        except PoolError:
-            # When cleaning up, the pool may already be closed
-            pass
+        self._connpool.putconn(connection, close=close)
 
     def close(self):
         with self._lock:
