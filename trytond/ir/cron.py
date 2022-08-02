@@ -99,6 +99,10 @@ class Cron(DeactivableMixin, ModelSQL, ModelView):
     def get_timezone(self, name):
         return tz.SERVER.key
 
+    @fields.depends('interval_number', 'minute', 'hour', 'day', 'weekday')
+    def on_change_with_next_call(self):
+        return self._compute_next_call_now()
+
     @staticmethod
     def check_xml_record(crons, values):
         return True
@@ -110,6 +114,10 @@ class Cron(DeactivableMixin, ModelSQL, ModelView):
                     'invisible': Eval('interval_type') == 'minutes',
                 }),
             ]
+
+    def _compute_next_call_now(self):
+        now = datetime.datetime.now()
+        return self.compute_next_call(now)
 
     def compute_next_call(self, now):
         return (now.replace(tzinfo=tz.UTC).astimezone(tz.SERVER)
