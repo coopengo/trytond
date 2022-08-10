@@ -119,11 +119,12 @@ class Cron(DeactivableMixin, ModelSQL, ModelView):
     def compute_next_call(self, now=None):
         if now is None:
             now = datetime.datetime.now()
-        if not (self.interval_type and self.interval_number):
-            return None
+        interval_delta = relativedelta(0)
+        if self.interval_type and self.interval_number:
+            interval_delta = relativedelta(
+                **{self.interval_type: self.interval_number})
         return (now.replace(tzinfo=tz.UTC).astimezone(tz.SERVER)
-            + relativedelta(**{self.interval_type: self.interval_number})
-            + relativedelta(
+            + interval_delta + relativedelta(
                 microsecond=0,
                 second=0,
                 minute=(
