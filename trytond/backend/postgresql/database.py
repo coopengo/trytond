@@ -350,6 +350,8 @@ class Database(DatabaseInterface):
         cursor.execute(SQL("DROP DATABASE {}")
             .format(Identifier(database_name)))
         self.__class__._list_cache.clear()
+        self.__class__._has_proc.pop(database_name, None)
+        self.__class__._search_full_text_languages.pop(database_name, None)
 
     def get_version(self, connection):
         version = connection.server_version
