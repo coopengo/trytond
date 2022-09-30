@@ -173,11 +173,14 @@ class Function(Field):
         self._field.__set__(inst, value)
 
     def definition(self, model, language):
-        definition = self._field.definition(model, language)
-        definition['searchable'] &= (
-            bool(self.searcher) or hasattr(model, 'domain_' + self.name))
-        definition['sortable'] &= hasattr(model, 'order_' + self.name)
-        return definition
+        return self._field.definition(model, language)
+
+    def searchable(self, model):
+        return super().searchable(model) and (
+            bool(self.searcher) or hasattr(model, f'domain_{self.name}'))
+
+    def sortable(self, model):
+        return super().sortable(model) and hasattr(model, f'order_{self.name}')
 
     def getter_multiple(self, method):
         "Returns True if getter function accepts multiple fields"
