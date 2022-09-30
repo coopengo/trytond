@@ -474,8 +474,8 @@ class Field(object):
             'states': encoder.encode(self.states),
             'type': self._type,
             'domain': encoder.encode(self.domain),
-            'searchable': hasattr(model, 'search'),
-            'sortable': hasattr(model, 'search'),
+            'searchable': self.searchable(model),
+            'sortable': self.sortable(model),
             }
 
         # Add id to on_change's if they are not cached
@@ -527,6 +527,12 @@ class Field(object):
                 if not isinstance(source, LazyString):
                     translations.append((name, ttype, language, source))
         return translations
+
+    def searchable(self, model):
+        return hasattr(model, 'search')
+
+    def sortable(self, model):
+        return hasattr(model, 'search')
 
 
 class FieldTranslate(Field):
