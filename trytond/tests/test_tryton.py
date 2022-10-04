@@ -11,6 +11,7 @@ import sys
 import time
 import unittest
 import unittest.mock
+import uuid
 from configparser import ConfigParser
 from fnmatch import fnmatchcase
 from functools import reduce, wraps
@@ -50,7 +51,7 @@ if 'DB_NAME' in os.environ:
 elif backend.name == 'sqlite':
     DB_NAME = ':memory:'
 else:
-    DB_NAME = 'test_' + str(int(time.time()))
+    DB_NAME = 'test_' + str(uuid.uuid4().int)
 os.environ['DB_NAME'] = DB_NAME
 DB_CACHE = os.environ.get('DB_CACHE')
 Pool.test = True
