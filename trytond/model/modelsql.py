@@ -530,7 +530,8 @@ class ModelSQL(ModelStorage):
                 to_delete.append(id_)
             else:
                 to_update.append(id_)
-                values = list(values)
+                values = [fields.dict.dumps(x) if isinstance(x, dict) else x
+                    for x in values]
                 cursor.execute(*table.update(columns, values,
                         where=table.id == id_))
                 rowcount = cursor.rowcount
