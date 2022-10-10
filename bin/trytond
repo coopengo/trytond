@@ -31,14 +31,18 @@ from trytond.pool import Pool
 from trytond.wsgi import app
 
 with commandline.pidfile(options):
-    Pool.start()
-    threads = []
-    for name in options.database_names:
-        thread = threading.Thread(target=Pool(name).init)
-        thread.start()
-        threads.append(thread)
-    for thread in threads:
-        thread.join()
+    # JCA: If we are in "dev" mode and WERKZEUG_RUN_MAIN != 'true', the server
+    # will be restarted anyway in "reloader" mode, so no need to init the pool
+    if os.environ.get('WERKZEUG_RUN_MAIN') == 'true' \
+            or not options.dev or options.coroutine:
+        Pool.start()
+        threads = []
+        for name in options.database_names:
+            thread = threading.Thread(target=Pool(name).init)
+            thread.start()
+            threads.append(thread)
+        for thread in threads:
+            thread.join()
     hostname, port = split_netloc(config.get('web', 'listen'))
     certificate = config.get('ssl', 'certificate')
     try:
