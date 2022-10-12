@@ -483,7 +483,8 @@ class ModelAccess(DeactivableMixin, ModelSQL, ModelView):
     perm_create = fields.Boolean('Create Access')
     perm_delete = fields.Boolean('Delete Access')
     description = fields.Text('Description')
-    _get_access_cache = Cache('ir_model_access.get_access', context=False)
+    _get_access_cache = Cache('ir_model_access.get_access', context=False,
+        size_limit=10240)
 
     @classmethod
     def __setup__(cls):
@@ -699,7 +700,8 @@ class ModelFieldAccess(DeactivableMixin, ModelSQL, ModelView):
     perm_create = fields.Boolean('Create Access')
     perm_delete = fields.Boolean('Delete Access')
     description = fields.Text('Description')
-    _get_access_cache = Cache('ir_model_field_access.check', context=False)
+    _get_access_cache = Cache('ir_model_field_access.check', context=False,
+        size_limit=10240)
 
     @staticmethod
     def check_xml_record(field_accesses, values):
