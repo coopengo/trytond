@@ -145,7 +145,7 @@ def parse_authorization_header(value):
     # So, we allow both to maintain compatibility with previous uses,
     # and be compatible with standard HTTP clients.
     elif auth_type in (b'token', b'bearer'):
-        return Authorization('token', {'token': bytes_to_wsgi(auth_info)})
+        return Authorization('token', {'token': auth_info.decode("latin1")})
 
 
 def set_max_request_size(size):
