@@ -1,3 +1,4 @@
+* Remove deprecated bytes_to_wsgi call
 * Add configuration entries for unaccent and similarity functions
 * Add more context key to clean when adding to cache
 * Add a way to register other objects in the pool
