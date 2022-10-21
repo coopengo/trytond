@@ -98,7 +98,7 @@ def error_wrap(func):
         def _get_database_name(func, args):
             '''
             This method captures the database_name of previous transaction in
-            with_pool decorator since it is passed as second argument
+            with_pool decorator since it is passed as argument
             to the wrapper
             '''
             arguments = getfullargspec(func)[0]
