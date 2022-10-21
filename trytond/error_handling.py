@@ -95,7 +95,7 @@ def error_wrap(func):
     '''
 
     def wrap(*args, **kwargs):
-        def _get_data_base_name(func, args):
+        def _get_database_name(func, args):
             '''
             This method captures the database_name of previous transaction in
             with_pool decorator since it is passed as second argument
@@ -103,7 +103,7 @@ def error_wrap(func):
             '''
             arguments = getfullargspec(func)[0]
             if 'database_name' in arguments:
-                return args[1]
+                return args[arguments.index('database_name')]
             return None
 
         try:
@@ -113,7 +113,7 @@ def error_wrap(func):
             # Those errors are supposed to make their way to the end user
             raise
         except Exception as e:
-            db_name = _get_data_base_name(func, args)
+            db_name = _get_database_name(func, args)
             ErrorHandler.handle_exception(e, db_name)
 
     return wrap
