@@ -374,6 +374,17 @@ class Report(URLMixin, PoolBase):
     @classmethod
     def convert(cls, report, data, timeout=5 * 60, retry=5):
         "converts the report data to another mimetype if necessary"
+        # AKE: support printing via external api
+        if config.get('report', 'api', default=None):
+            return cls.convert_api(report, data, timeout)
+        elif config.get('report', 'unoconv', default=True):
+            return cls.convert_unoconv(report, data, timeout)
+        else:
+            raise NotImplementedError
+
+    @classmethod
+    def convert_unoconv(cls, report, data, timeout, retry=5):
+        "converts the report data to another mimetype if necessary"
         input_format = report.template_extension
         output_format = report.extension or report.template_extension
 
