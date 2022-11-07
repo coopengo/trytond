@@ -67,7 +67,7 @@ class ErrorHandler(object):
                 raise
             return error
 
-        error_id = Handler.do_handle_exception(error, db_name, reraise)
+        error_id = Handler.do_handle_exception(error, db_name)
         wrapped_error = HandledError(Handler.get_message(), error_id)
         if reraise:
             raise wrapped_error
@@ -78,7 +78,7 @@ class ErrorHandler(object):
         return cls._message
 
     @classmethod
-    def do_handle_exception(e):
+    def do_handle_exception(e, db_name):
         '''
         The actual error handling code, that must be implemented in subclasses.
 
