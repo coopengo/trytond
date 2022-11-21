@@ -29,6 +29,8 @@ from trytond.wsgi import app
 
 from .wrappers import with_pool
 
+__all__ = ['register_authentication_service']
+
 logger = logging.getLogger(__name__)
 
 # JCA: log slow RPC (> log_time_threshold)
@@ -137,6 +139,7 @@ def root(request, *args):
     methods = {
         'common.server.version': lambda *a: __version__,
         'common.db.list': db_list,
+        'common.authentication.services': authentication_services,
         }
     return methods[request.rpc_method](request, *request.rpc_params)
 
@@ -164,6 +167,17 @@ def db_list(request, *args):
             None, 0, context=context, readonly=True, close=True,
             ) as transaction:
         return transaction.database.list(hostname=hostname)
+
+
+def authentication_services(request):
+    return _AUTHENTICATION_SERVICES
+
+
+def register_authentication_service(name, url):
+    _AUTHENTICATION_SERVICES.append((name, url))
+
+
+_AUTHENTICATION_SERVICES = []
 
 
 @app.auth_required
