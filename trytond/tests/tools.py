@@ -9,7 +9,7 @@ __all__ = ['activate_modules', 'set_user']
 
 
 # PKU add cache_file_name
-def activate_modules(modules, cache_file_name=None):
+def activate_modules(modules, *, cache_file_name=None):
     if isinstance(modules, str):
         modules = [modules]
     cache_name = cache_file_name or '-'.join(modules)
