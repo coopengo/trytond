@@ -1,3 +1,4 @@
+* Raise an error when sending an email with missing configuration
 * Remove deprecated bytes_to_wsgi call
 * Add configuration entries for unaccent and similarity functions
 * Add more context key to clean when adding to cache
