@@ -261,7 +261,7 @@ this repository contains the full copyright notices and license terms. -->
         </record>
         
         <record model="ir.message" id="msg_missing_configuration">
-            <field name="text">Connection to email server failed. Please check your email server configuration.</field>
+            <field name="text">The connection to email server failed. Please check your email server configuration.</field>
         </record>
         <record model="ir.message" id="msg_model_invalid_condition">
             <field name="text">The condition "%(condition)s" is not a valid PYSON expression for button rule "%(rule)s".</field>
