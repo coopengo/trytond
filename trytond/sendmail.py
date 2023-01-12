@@ -98,8 +98,8 @@ def get_smtp_server(uri=None, strict=False):
     try:
         server = connector(uri.hostname, uri.port, **extra)
     except Exception:
+        logger.error('fail to connect to %s', uri, exc_info=True)
         if strict:
-            logger.error('fail to connect to %s', uri, exc_info=True)
             raise ValidationError(gettext('ir.msg_missing_configuration'))
         return
 
