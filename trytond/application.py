@@ -46,4 +46,18 @@ if db_names:
     for thread in threads:
         thread.join()
 
+
+# JCA: if for some reason the server works properly when starting with
+# "trytond" but not with "uwsgi", you may be in the right place.
+#
+# When the pool initialization is completed (above), there should be no
+# busy threads in the main process (psycopg2 threads can probably be ignored
+# since they have no reason to be running if the server is doing nothing).
+#
+# If there are, uwsgi may fork the "wrong" one at the wrong time, and become
+# unresponsive. Typical cause (what led me here the first time) would be a
+# cache invalidation triggered in the side MemoryCache listeners. There should
+# be NO CACHE INVALIDATION when the pool is initialized.
+#
+# If this is not the cause, good luck
 application = app
