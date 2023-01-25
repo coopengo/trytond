@@ -1,3 +1,4 @@
+* Don't catch TimeoutException in the error handler
 * Add database timeout parameter on RPC calls
 * Support limit and offset to ModelSQL count search and search_count
 * Add estimation count to ModelStorage
