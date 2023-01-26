@@ -80,6 +80,7 @@ ir_configuration = Table('ir_configuration')
 ir_lang = Table('ir_lang')
 ir_module = Table('ir_module')
 res_user = Table('res_user')
+_MAX_LENGTH = 80
 
 # JCA: log slow RPC
 def log_exception(method, *args, **kwargs):
@@ -185,6 +186,14 @@ def get_object_method(request, pool):
     return pool.get(name, type=type), method
 
 
+def _safe_repr(args, kwargs, short=False):
+    args = args + tuple('%s=%r' % (k, v) for k, v in kwargs.items())
+    result = repr(args)
+    if not short or len(result) < _MAX_LENGTH:
+        return result
+    return result[:_MAX_LENGTH] + ' [truncated]...)'
+
+
 @app.auth_required
 @with_pool
 def help_method(request, pool):
@@ -215,13 +224,18 @@ def _dispatch(request, pool, *args, **kwargs):
                 pool.database_name, user, session, context=context):
             abort(http.client.UNAUTHORIZED)
 
-    log_message = '%s.%s(*%s, **%s) from %s@%s%s'
+    log_message = '%s.%s%s from %s@%s%s in %i ms'
     username = request.authorization.username
     if isinstance(username, bytes):
         username = username.decode('utf-8')
     log_args = (
-        obj, method, args, kwargs, username, request.remote_addr, request.path)
-    logger.debug(log_message, *log_args)
+        obj.__name__, method,
+        _safe_repr(args, kwargs, not logger.isEnabledFor(logging.DEBUG)),
+        username, request.remote_addr, request.path)
+
+    def duration():
+        return (time.monotonic() - started) * 1000
+    started = time.monotonic()
 
     # JCA: log slow RPC
     if slow_threshold >= 0:
@@ -282,8 +296,9 @@ def _dispatch(request, pool, *args, **kwargs):
             except backend.DatabaseOperationalError:
                 if count and not rpc.readonly:
                     transaction.rollback()
+                    logger.debug("Retry: %i", retry - count + 1)
                     continue
-                logger.error(log_message, *log_args, exc_info=True)
+                logger.exception(log_message, *log_args, duration())
 
                 # JCA: log slow RPC
                 if slow_threshold >= 0:
@@ -293,7 +308,8 @@ def _dispatch(request, pool, *args, **kwargs):
                 raise
             except (ConcurrencyException, UserError, UserWarning,
                     LoginException):
-                logger.debug(log_message, *log_args, exc_info=True)
+                logger.info(log_message, *log_args, duration(),
+                    exc_info=logger.isEnabledFor(logging.DEBUG))
 
                 # JCA: log slow RPC
                 if slow_threshold >= 0:
@@ -302,7 +318,7 @@ def _dispatch(request, pool, *args, **kwargs):
 
                 raise
             except Exception:
-                logger.error(log_message, *log_args, exc_info=True)
+                logger.exception(log_message, *log_args, duration())
 
                 # JCA: log slow RPC
                 if slow_threshold >= 0:
@@ -319,6 +335,7 @@ def _dispatch(request, pool, *args, **kwargs):
             context = {'_request': request.context}
             security.reset(pool.database_name, session, context=context)
 
+        logger.info(log_message, *log_args, duration())
         # JCA: Allow to format json result
         if format_json_result and logger.isEnabledFor(logging.DEBUG):
             try:
