@@ -1,3 +1,5 @@
+* Manage domain on id in single value list as unique
+* Do not validate domain for empty fields
 * Don't catch TimeoutException in the error handler
 * Remove deprecated bytes_to_wsgi call
 * Add configuration entries for unaccent and similarity functions
