@@ -1,4 +1,4 @@
-* Use singleton for TableHandler
+* Add authentication services
 * Don't catch TimeoutException in the error handler
 * Add configuration entries for unaccent and similarity functions
 * Add more context key to clean when adding to cache
