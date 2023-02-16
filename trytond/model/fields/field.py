@@ -425,6 +425,12 @@ class Field(object):
         method = getattr(Model, 'domain_%s' % name, None)
         if method:
             return method(domain, tables)
+        # JCA: Hook for pseudo super calls in "domain_<field_name>" methods
+        return self._convert_domain(domain, tables, Model)
+
+    def _convert_domain(self, domain, tables, Model):
+        table, _ = tables[None]
+        name, operator, value = domain
         Operator = SQL_OPERATORS[operator]
         column = self.sql_column(table)
         column = self._domain_column(operator, column)
