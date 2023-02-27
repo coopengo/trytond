@@ -321,6 +321,7 @@ class Report(URLMixin, PoolBase):
         report_context['context'] = Transaction().context
         report_context['user'] = User(Transaction().user)
         report_context['records'] = records
+        report_context['objects'] = records
         report_context['record'] = records[0] if records else None
         report_context['format_date'] = cls.format_date
         report_context['format_datetime'] = cls.format_datetime
