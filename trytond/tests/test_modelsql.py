@@ -366,6 +366,30 @@ class ModelSQLTestCase(unittest.TestCase):
         transaction.commit()
 
     @with_transaction()
+    def test_create(self):
+        "Test records creation"
+        pool = Pool()
+        Model = pool.get('test.modelsql.create')
+
+        # The order of the keys shouldn't matter
+        foo, bar, baz = Model.create([{
+                    'char': "Foo",
+                    'integer': 2
+                    }, {
+                    'integer': 4,
+                    'char': "Bar"
+                    }, {
+                    'char': "Baz"
+                    }])
+
+        self.assertEqual(foo.char, "Foo")
+        self.assertEqual(foo.integer, 2)
+        self.assertEqual(bar.char, "Bar")
+        self.assertEqual(bar.integer, 4)
+        self.assertEqual(baz.char, "Baz")
+        self.assertEqual(baz.integer, None)
+
+    @with_transaction()
     def test_create_field_set(self):
         'Test field.set in create'
         pool = Pool()

@@ -604,6 +604,57 @@ class ModelSQL(ModelStorage):
         missing_defaults = {}  # Store missing default values by schema
         new_ids = []
         vlist = [v.copy() for v in vlist]
+        to_insert = []
+        insert_columns = [table.create_uid, table.create_date]
+        previous_column_names = set()
+
+        def db_insert(columns, values, fields):
+            # Only one query is required when the backend support both multirow
+            # insert and returning
+            if (transaction.database.has_multirow_insert()
+                    and transaction.database.has_returning()):
+                values = [list(gs) for gs in grouped_slice(values)]
+            else:
+                values = [[v] for v in values]
+
+            ids = []
+            for rows in values:
+                try:
+                    if transaction.database.has_returning():
+                        cursor.execute(*table.insert(
+                                columns, rows, [table.id]))
+                        ids.extend(r[0] for r in cursor.fetchall())
+                    else:
+                        id_new = transaction.database.nextid(
+                            transaction.connection, cls._table)
+                        if id_new:
+                            columns.append(table.id)
+                            rows.append(id_new)
+                            cursor.execute(*table.insert(columns, rows))
+                        else:
+                            cursor.execute(*table.insert(columns, rows))
+                            id_new = transaction.database.lastid(cursor)
+                        ids.append(id_new)
+                except (
+                        backend.DatabaseIntegrityError,
+                        backend.DatabaseDataError) as exception:
+                    # Skip create_uid, create_date
+                    recomposed_values = [
+                        {f: n for f, n in zip(fields, value[2:])}
+                        for value in rows]
+                    with transaction.new_transaction():
+                        for value in recomposed_values:
+                            if isinstance(
+                                    exception, backend.DatabaseIntegrityError):
+                                cls.__raise_integrity_error(
+                                    exception, value, transaction=transaction)
+                            elif isinstance(
+                                    exception, backend.DatabaseDataError):
+                                cls.__raise_data_error(
+                                    exception, value, transaction=transaction)
+                    raise
+            return ids
+
         for values in vlist:
             # Clean values
             for key in ('create_uid', 'create_date',
@@ -637,47 +688,30 @@ class ModelSQL(ModelStorage):
                     defaults_cache.update(default_values)
             values.update(missing_defaults[values_schema])
 
-            insert_columns = [table.create_uid, table.create_date]
-            insert_values = [transaction.user, CurrentTimestamp()]
+            current_column_names = set()
+            columns = [table.create_uid, table.create_date]
+            new_row = [transaction.user, CurrentTimestamp()]
 
             # Insert record
-            for fname, value in values.items():
+            for fname, value in sorted(values.items()):
                 field = cls._fields[fname]
                 if not hasattr(field, 'set'):
-                    insert_columns.append(Column(table, fname))
-                    insert_values.append(field.sql_format(value))
+                    columns.append(Column(table, fname))
+                    new_row.append(field.sql_format(value))
+                    current_column_names.add(fname)
 
-            try:
-                if transaction.database.has_returning():
-                    cursor.execute(*table.insert(insert_columns,
-                            [insert_values], [table.id]))
-                    id_new, = cursor.fetchone()
-                else:
-                    id_new = transaction.database.nextid(
-                        transaction.connection, cls._table)
-                    if id_new:
-                        insert_columns.append(table.id)
-                        insert_values.append(id_new)
-                        cursor.execute(*table.insert(insert_columns,
-                                [insert_values]))
-                    else:
-                        cursor.execute(*table.insert(insert_columns,
-                                [insert_values]))
-                        id_new = transaction.database.lastid(cursor)
-                new_ids.append(id_new)
-            except (
-                    backend.DatabaseIntegrityError,
-                    backend.DatabaseDataError) as exception:
-                transaction = Transaction()
-                with Transaction().new_transaction(), \
-                        Transaction().set_context(_check_access=False):
-                    if isinstance(exception, backend.DatabaseIntegrityError):
-                        cls.__raise_integrity_error(
-                            exception, values, transaction=transaction)
-                    elif isinstance(exception, backend.DatabaseDataError):
-                        cls.__raise_data_error(
-                            exception, values, transaction=transaction)
-                raise
+            if current_column_names != previous_column_names:
+                if to_insert:
+                    new_ids.extend(db_insert(
+                            insert_columns, to_insert, current_column_names))
+                    to_insert = []
+                insert_columns = columns
+                previous_column_names = current_column_names
+            to_insert.append(new_row)
+        else:
+            if to_insert:
+                new_ids.extend(db_insert(
+                        columns, to_insert, current_column_names))
 
         transaction.create_records[cls.__name__].update(new_ids)
 
@@ -1280,7 +1314,7 @@ class ModelSQL(ModelStorage):
                 transaction = Transaction()
                 with Transaction().new_transaction():
                     cls.__raise_integrity_error(
-                        exception, {}, transaction=transaction)
+                        exception, [{}], transaction=transaction)
                 raise
 
         if has_translation:
