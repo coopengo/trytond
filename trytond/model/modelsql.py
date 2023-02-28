@@ -613,12 +613,13 @@ class ModelSQL(ModelStorage):
             # insert and returning
             if (transaction.database.has_multirow_insert()
                     and transaction.database.has_returning()):
-                values = [list(gs) for gs in grouped_slice(values)]
+                values = (s for s in grouped_slice(values))
             else:
-                values = [[v] for v in values]
+                values = ([v] for v in values)
 
             ids = []
             for rows in values:
+                rows = list(rows)
                 try:
                     if transaction.database.has_returning():
                         cursor.execute(*table.insert(
@@ -639,9 +640,9 @@ class ModelSQL(ModelStorage):
                         backend.DatabaseIntegrityError,
                         backend.DatabaseDataError) as exception:
                     # Skip create_uid, create_date
-                    recomposed_values = [
+                    recomposed_values = (
                         {f: n for f, n in zip(fields, value[2:])}
-                        for value in rows]
+                        for value in rows)
                     with transaction.new_transaction():
                         for value in recomposed_values:
                             if isinstance(
@@ -703,7 +704,7 @@ class ModelSQL(ModelStorage):
             if current_column_names != previous_column_names:
                 if to_insert:
                     new_ids.extend(db_insert(
-                            insert_columns, to_insert, current_column_names))
+                            insert_columns, to_insert, previous_column_names))
                     to_insert = []
                 insert_columns = columns
                 previous_column_names = current_column_names
