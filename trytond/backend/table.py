@@ -13,7 +13,7 @@ class TableHandlerInterface(object):
     namedatalen = None
     __handlers = WeakKeyDictionary()
 
-    def __new__(cls, model, history=False):
+    def __new__(cls, model, module_name=None, history=False):
         transaction = Transaction()
         handlers = cls.__handlers.setdefault(transaction, {})
         key = (model.__name__, history)
