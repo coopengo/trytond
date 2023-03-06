@@ -130,6 +130,10 @@ Please refer to `psycopg2 for the complete specification of the URI
 A list of parameters supported by PostgreSQL can be found in the
 `documentation <https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-PARAMKEYWORDS>`_.
 
+.. note::
+   ``fallback_application_name`` parameter from aforementioned documentation can
+   be set directly thanks to the ``TRYTOND_APPNAME`` environment variable.
+
 SQLite
 ******
 
