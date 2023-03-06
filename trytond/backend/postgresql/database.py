@@ -11,6 +11,12 @@ from decimal import Decimal
 from itertools import chain, repeat
 from threading import RLock
 
+try:
+    from psycopg2cffi import compat
+    compat.register()
+except ImportError:
+    pass
+
 from psycopg2 import Binary, connect
 from psycopg2.extensions import (
     ISOLATION_LEVEL_REPEATABLE_READ, ISOLATION_LEVEL_AUTOCOMMIT, UNICODE, AsIs,
