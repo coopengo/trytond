@@ -104,6 +104,10 @@ PostgreSQL
     - TCP/IP connection: `postgresql://user:password@localhost:5432/`
     - Unix domain connection: `postgresql://username:password@/`
 
+.. note::
+   ``fallback_application_name`` parameter from aforementioned documentation can
+   be set directly thanks to the ``TRYTOND_APPNAME`` environment variable.
+
 SQLite
 ******
 

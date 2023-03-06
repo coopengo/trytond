@@ -249,6 +249,8 @@ class Database(DatabaseInterface):
         uri = parse_uri(config.get('database', 'uri'))
         params = {
             'dbname': name,
+            'fallback_application_name': os.environ.get(
+                'TRYTOND_APPNAME', 'trytond'),
             }
         if uri.username:
             params['user'] = uri.username
