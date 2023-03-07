@@ -277,13 +277,16 @@ class Database(DatabaseInterface):
 
     @classmethod
     def _connection_params(cls, name):
-        uri = parse_uri(config.get('database', 'uri'))
+        # JCA: psycopg2cff does not support mixing dsn and other parameters
+        uri = parse_uri(
+            config.get('database', 'uri') +
+            '?fallback_application_name=' + os.environ.get(
+                'TRYTOND_APPNAME', 'trytond')
+            )
         if uri.path and uri.path != '/':
             warnings.warn("The path specified in the URI will be overridden")
         params = {
             'dsn': uri._replace(path=name).geturl(),
-            'fallback_application_name': os.environ.get(
-                'TRYTOND_APPNAME', 'trytond'),
             }
         return params
 
