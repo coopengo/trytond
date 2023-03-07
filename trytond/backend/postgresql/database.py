@@ -4,12 +4,19 @@ import json
 import logging
 import os
 import time
+import urllib.parse
 import warnings
 from collections import defaultdict
 from datetime import datetime
 from decimal import Decimal
 from itertools import chain, repeat
 from threading import RLock
+
+try:
+    from psycopg2cffi import compat
+    compat.register()
+except ImportError:
+    pass
 
 from psycopg2 import Binary, connect
 from psycopg2.extensions import (
@@ -271,13 +278,16 @@ class Database(DatabaseInterface):
 
     @classmethod
     def _connection_params(cls, name):
+        # JCA: psycopg2cff does not support mixing dsn and other parameters
         uri = parse_uri(config.get('database', 'uri'))
+        qs = urllib.parse.parse_qs(uri.query)
+        qs['fallback_application_name'] = os.environ.get(
+            'TRYTOND_APPNAME', 'trytond')
+        query = urllib.parse.urlencode(qs, doseq=True)
         if uri.path and uri.path != '/':
             warnings.warn("The path specified in the URI will be overridden")
         params = {
-            'dsn': uri._replace(path=name).geturl(),
-            'fallback_application_name': os.environ.get(
-                'TRYTOND_APPNAME', 'trytond'),
+            'dsn': uri._replace(path=name, query=query).geturl(),
             }
         return params
 
