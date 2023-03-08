@@ -1,10 +1,11 @@
 # This file is part of Tryton.  The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
 from collections import defaultdict
-import time
 import logging
 import os
 import json
+import time
+import urllib.parse
 import warnings
 from datetime import datetime
 from decimal import Decimal
@@ -300,15 +301,15 @@ class Database(DatabaseInterface):
     @classmethod
     def _connection_params(cls, name):
         # JCA: psycopg2cff does not support mixing dsn and other parameters
-        uri = parse_uri(
-            config.get('database', 'uri') +
-            '?fallback_application_name=' + os.environ.get(
-                'TRYTOND_APPNAME', 'trytond')
-            )
+        uri = parse_uri(config.get('database', 'uri'))
+        qs = urllib.parse.parse_qs(uri.query)
+        qs['fallback_application_name'] = os.environ.get(
+            'TRYTOND_APPNAME', 'trytond')
+        query = urllib.parse.urlencode(qs, doseq=True)
         if uri.path and uri.path != '/':
             warnings.warn("The path specified in the URI will be overridden")
         params = {
-            'dsn': uri._replace(path=name).geturl(),
+            'dsn': uri._replace(path=name, query=query).geturl(),
             }
         return params
 
