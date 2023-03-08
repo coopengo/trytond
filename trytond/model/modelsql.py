@@ -211,7 +211,8 @@ class ModelSQL(ModelStorage):
 
     @classmethod
     def __table_handler__(cls, module_name=None, history=False):
-        return backend.TableHandler(cls, module_name, history=history)
+        return backend.TableHandler(
+            cls, module_name=module_name, history=history)
 
     @classmethod
     def __register__(cls, module_name):
