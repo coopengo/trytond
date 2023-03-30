@@ -128,10 +128,10 @@ class JSONRequest(Request):
             from opentelemetry import trace
             current_span = trace.get_current_span()
             current_span.set_attribute("rpc.system", "jsonrpc")
-            if '.' in self.rpc_method:
+            if self.rpc_method and '.' in self.rpc_method:
                 rpc_model, rpc_method = self.rpc_method.rsplit('.', maxsplit=1)
             else:
-                rpc_model, rpc_method = '', self.rpc_method
+                rpc_model, rpc_method = '', str(self.rpc_method)
             current_span.set_attribute("rpc.service", rpc_model)
             current_span.set_attribute("rpc.method", rpc_method)
 
