@@ -15,6 +15,7 @@ from trytond.exceptions import (
     RateLimitException, TrytonException, UserWarning)
 from trytond.protocols.wrappers import Request
 from trytond.tools import cached_property
+from trytond.opentelemetry import OPENTELEMETRY_ENABLED
 
 
 class JSONDecoder(object):
@@ -120,6 +121,20 @@ JSONEncoder.register(Decimal,
 class JSONRequest(Request):
     parsed_content_type = 'json'
 
+    def __init__(self, *args):
+        super().__init__(*args)
+
+        if OPENTELEMETRY_ENABLED:
+            from opentelemetry import trace
+            current_span = trace.get_current_span()
+            current_span.set_attribute("rpc.system", "jsonrpc")
+            if self.rpc_method and '.' in self.rpc_method:
+                rpc_model, rpc_method = self.rpc_method.rsplit('.', maxsplit=1)
+            else:
+                rpc_model, rpc_method = '', str(self.rpc_method)
+            current_span.set_attribute("rpc.service", rpc_model)
+            current_span.set_attribute("rpc.method", rpc_method)
+
     @cached_property
     def parsed_data(self):
         if self.parsed_content_type in self.environ.get('CONTENT_TYPE', ''):
@@ -164,6 +179,13 @@ class JSONProtocol:
         if (isinstance(request, JSONRequest)
                 and set(parsed_data.keys()) == {'id', 'method', 'params'}):
             response = {'id': parsed_data.get('id', 0)}
+
+            if OPENTELEMETRY_ENABLED:
+                from opentelemetry import trace
+                current_span = trace.get_current_span()
+                current_span.set_attribute(
+                    "rpc.jsonrpc.request_id", response['id'])
+
             if isinstance(data, TrytonException):
                 response['error'] = data.args
             elif isinstance(data, Exception):

@@ -84,27 +84,6 @@ class LoggingCursor(cursor):
         cursor.execute(self, sql, args)
 
 
-class PerfCursor(cursor):
-    def execute(self, query, vars=None):
-        if logger.isEnabledFor(logging.DEBUG):
-            logger.debug(self.mogrify(query, vars))
-
-        # JCA: Log slow queries
-        if _slow_logging_enabled:
-            start = time.time()
-        ret = super(PerfCursor, self).execute(query, vars)
-        if _slow_logging_enabled:
-            end = time.time()
-            if end - start > _slow_threshold:
-                logger.warning('slow:(%s s):%s' % (
-                        end - start, self.mogrify(query, vars)))
-        return ret
-
-    def callproc(self, procname, vars=None):
-        ret = super(PerfCursor, self).callproc(procname, vars)
-        return ret
-
-
 class ForSkipLocked(For):
     def __str__(self):
         assert not self.nowait, "Can not use both NO WAIT and SKIP LOCKED"
@@ -329,7 +308,6 @@ class Database(DatabaseInterface):
         if statements:
             cursor = conn.cursor()
             cursor.execute(';'.join(statements))
-        conn.cursor_factory = PerfCursor
         return conn
 
     def put_connection(self, connection, close=False):
