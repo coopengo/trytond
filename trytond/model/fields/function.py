@@ -173,7 +173,10 @@ class Function(Field):
         self._field.__set__(inst, value)
 
     def definition(self, model, language):
-        return self._field.definition(model, language)
+        definition = self._field.definition(model, language)
+        definition['searchable'] = self.searchable(model)
+        definition['sortable'] = self.sortable(model)
+        return definition
 
     def searchable(self, model):
         return super().searchable(model) and (
