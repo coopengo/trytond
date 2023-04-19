@@ -712,7 +712,10 @@ class ModelStorage(Model):
                 if descriptor:
                     value = getattr(field, descriptor)().__get__(value, eModel)
                 else:
-                    value = getattr(value, field_name)
+                    try:
+                        value = getattr(value, field_name)
+                    except AccessError:
+                        value = 'UNAUTHORIZED_401'
                 if isinstance(value, (list, tuple)):
                     first = True
                     child_fields_names = [(x[:i + 1] == fields_tree[:i + 1]
