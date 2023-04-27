@@ -283,7 +283,10 @@ class View(ModelSQL, ModelView):
         root_inherit = inherit.getroottree().getroot()
         for element in root_inherit:
             targets = tree.xpath(element.get('expr'))
-            assert targets
+            if not targets:
+                raise AttributeError(
+                    'Couldn\'t find tag (%s: %s) in parent view!'
+                    % (element.tag, element.get('expr')))
             for target in targets:
                 position = element.get('position', 'inside')
                 new_tree = getattr(cls, '_inherit_apply_%s' % position)(
