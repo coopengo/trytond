@@ -230,7 +230,7 @@ def _dispatch(request, pool, *args, **kwargs):
                 pool.database_name, user, session, context=context):
             abort(http.client.UNAUTHORIZED)
 
-    log_message = '%s.%s(*%s, **%s) from %s@%s%s'
+    log_message = '%s.%s%s from %s@%s%s'
     username = request.authorization.username
     if isinstance(username, bytes):
         username = username.decode('utf-8')
@@ -238,7 +238,7 @@ def _dispatch(request, pool, *args, **kwargs):
         obj, method,
         format_args(args, kwargs, logger.isEnabledFor(logging.DEBUG)),
         username, request.remote_addr, request.path)
-    logger.debug(log_message, *log_args)
+    logger.info(log_message, *log_args)
 
     # JCA: log slow RPC
     if slow_threshold >= 0:
