@@ -4,7 +4,7 @@ from itertools import islice
 _MAX_ARGUMENTS = 5
 _MAX_ITEMS = 5
 _ELLIPSE = '...'
-_MAX_STR_LENGTH = 20 - len(_ELLIPSE)
+_MAX_STR_LENGTH = 50 - len(_ELLIPSE)
 
 
 class Ellipse:
@@ -71,10 +71,10 @@ class format_args:
                 _nb_items -= 1
 
         def _log_repr(value):
-            if self.verbose:
-                return value
-            elif isinstance(value, bytes):
+            if isinstance(value, bytes):
                 return Ellipse(f'<{len(value)} bytes>')
+            elif self.verbose:
+                return value
             elif isinstance(value, str):
                 if len(value) <= _MAX_STR_LENGTH:
                     return value
