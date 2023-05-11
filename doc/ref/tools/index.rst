@@ -11,4 +11,5 @@ Tools API reference.
 
     misc
     singleton
+    logging
     timezone
