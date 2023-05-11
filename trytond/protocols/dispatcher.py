@@ -19,6 +19,7 @@ from trytond import security
 from trytond import backend
 from trytond.config import config, get_hostname
 from trytond import __version__
+from trytond.tools.logging import format_args
 from trytond.transaction import Transaction
 from trytond.exceptions import (
     UserError, UserWarning, ConcurrencyException, LoginException,
@@ -222,12 +223,22 @@ def _dispatch(request, pool, *args, **kwargs):
                 pool.database_name, user, session, context=context):
             abort(http.client.UNAUTHORIZED)
 
+<<<<<<< HEAD
     log_message = '%s.%s(*%s, **%s) from %s@%s/%s'
+=======
+    log_message = '%s.%s%s from %s@%s%s'
+>>>>>>> 8bba3b24d (Shorten arguments when logging [PREVIEW] (#241))
     username = request.authorization.username
     if isinstance(username, bytes):
         username = username.decode('utf-8')
     log_args = (
+<<<<<<< HEAD
         obj, method, args, kwargs, username, request.remote_addr, request.path)
+=======
+        obj, method,
+        format_args(args, kwargs, logger.isEnabledFor(logging.DEBUG)),
+        username, request.remote_addr, request.path)
+>>>>>>> 8bba3b24d (Shorten arguments when logging [PREVIEW] (#241))
     logger.info(log_message, *log_args)
 
     # JCA: log slow RPC
