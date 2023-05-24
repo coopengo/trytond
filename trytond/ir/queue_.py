@@ -225,6 +225,9 @@ class _Method(object):
         queue_batch = context.pop('queue_batch', None)
         context.pop('_check_access', None)
         context.pop('language', None)
+        # Ignore context set by Coog's test framework in order to avoid errors
+        # in _push below, it will be restored at the end of this method
+        master = context.pop('_master_test', None)
         if expected_at is not None:
             expected_at = now + expected_at
         try:
@@ -260,3 +263,5 @@ class _Method(object):
             return task_ids
         else:
             return _push(instances)
+        if master:
+            context.set_context(_master_test=master)
