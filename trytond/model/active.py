@@ -20,11 +20,22 @@ class DeactivableMixin(Model):
     def default_active(cls):
         return True
 
+    # CUSTOM for Fix #PMETA-81
+    @classmethod
+    def allow_inactive_edition(cls):
+        return False
+
     @classmethod
     def __post_setup__(cls):
         super().__post_setup__()
 
         inactive = ~Eval('active', cls.default_active())
+        # CUSTOM for Fix #PMETA-81
+        allow_inactive_edition = cls.allow_inactive_edition()
+
+        if allow_inactive_edition:
+            return
+
         for name, field in cls._fields.items():
             if name == 'active':
                 continue
