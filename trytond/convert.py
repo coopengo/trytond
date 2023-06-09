@@ -580,7 +580,7 @@ class TrytondXmlHandler(sax.handler.ContentHandler):
         force_update = ServerContext().get('force_update')
         if force_update:
             record_ids = ServerContext().get('record_ids')
-            if fs_id not in record_ids:
+            if record_ids and fs_id not in record_ids:
                 return
         module = self.module
 
