@@ -234,7 +234,7 @@ class ActionKeyword(ModelSQL, ModelView):
                 ('model', '=', None),
                 ],
             ]
-        if model_id >= 0:
+        if model_id is not None and model_id >= 0:
             clause = ['OR',
                 clause,
                 [
