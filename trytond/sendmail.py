@@ -80,7 +80,7 @@ def send_test_email(to_addrs, server=None):
         config.get('email', 'from'), to_addrs, msg, server=server, strict=True)
 
 
-def get_smtp_server(uri=None, strict=False):
+def get_smtp_server(uri=None, strict=False, timeout=None):
     if uri is None:
         uri = config.get('email', 'uri')
     ini_uri = uri
@@ -90,6 +90,8 @@ def get_smtp_server(uri=None, strict=False):
         cast = {'timeout': int}
         for key, value in parse_qs(uri.query, strict_parsing=True).items():
             extra[key] = cast.get(key, lambda a: a)(value[0])
+    if timeout:
+        extra['timeout'] = timeout
     if uri.scheme.startswith('smtps'):
         connector = smtplib.SMTP_SSL
         extra['context'] = ssl.create_default_context()
