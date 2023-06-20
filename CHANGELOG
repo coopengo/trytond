@@ -1,3 +1,4 @@
+* Allow users to reset no_update records from xml description
 * Add authentication services
 * Don't catch TimeoutException in the error handler
 * Remove deprecated bytes_to_wsgi call
