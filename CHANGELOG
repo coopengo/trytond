@@ -1,3 +1,4 @@
+* Allow users to reset no_update records from xml description
 * Enable the csv extraction of records the user does not have access to
 * Don't catch TimeoutException in the error handler
 * Add database timeout parameter on RPC calls

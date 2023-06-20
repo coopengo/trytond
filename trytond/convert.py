@@ -14,6 +14,8 @@ from trytond.pyson import PYSONEncoder, CONTEXT
 from trytond.tools import grouped_slice
 from trytond.transaction import Transaction
 
+from trytond.server_context import ServerContext
+
 logger = logging.getLogger(__name__)
 
 CDATA_START = re.compile(r'^\s*\<\!\[cdata\[', re.IGNORECASE)
@@ -568,6 +570,9 @@ class TrytondXmlHandler(sax.handler.ContentHandler):
         return set(rec.fs_id for rec in module_data)
 
     def import_record(self, model, values, fs_id):
+        force_xml_update = ServerContext().get('force_xml_update')
+        if force_xml_update and fs_id not in force_xml_update:
+            return
         module = self.module
 
         if not fs_id:
@@ -606,7 +611,8 @@ class TrytondXmlHandler(sax.handler.ContentHandler):
                     self.ModelData.write([current_record], {
                         'noupdate': True,
                     })
-                return
+                if not force_xml_update:
+                    return
 
             # this record is already in the db:
             # XXX maybe use only one call to get()
@@ -690,7 +696,7 @@ class TrytondXmlHandler(sax.handler.ContentHandler):
                 # The verification should be made only on noupdate mode,
                 # otherwise the DB should be squashed with the XML content
                 if self.noupdate and db_field != expected_value and (
-                        db_field or expected_value):
+                        db_field or expected_value) and not force_xml_update:
                     logger.warning(
                         "Field %s of %s@%s not updated (id: %s), because "
                         "it has changed since the last update",
@@ -788,7 +794,7 @@ class TrytondXmlHandler(sax.handler.ContentHandler):
             fs_values = old_values.copy()
             fs_values.update(new_values)
 
-            if values != fs_values:
+            if values != fs_values or ServerContext().get('force_xml_update'):
                 self.grouped_model_data.extend(([self.ModelData(mdata_id)], {
                             'fs_id': fs_id,
                             'model': model,
