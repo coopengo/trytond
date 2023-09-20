@@ -1,7 +1,7 @@
 # This file is part of Coog. The COPYRIGHT file at the top level of
 # this repository contains the full copyright notices and license terms.
 import sys
-
+from inspect import getfullargspec
 from werkzeug.exceptions import Forbidden, Unauthorized
 
 from trytond.tools import resolve
@@ -52,13 +52,15 @@ class ErrorHandler(object):
         return HandlingClass
 
     @staticmethod
-    def handle_exception(error, reraise=True):
+    def handle_exception(error, db_name, reraise=True):
         '''
         Exception Handling method.
 
         If reraise is True, a HandledError will be raised to communicate with
         the end user, else the error will be returned so the caller can do
         something with it.
+        If db_name is set, we will pass the real database name of previous
+        transaction.
         '''
         Handler = ErrorHandler._get_handling_class()
         if Handler is None:
@@ -66,7 +68,7 @@ class ErrorHandler(object):
                 raise
             return error
 
-        error_id = Handler.do_handle_exception(error)
+        error_id = Handler.do_handle_exception(error, db_name)
         wrapped_error = HandledError(Handler.get_message(), error_id)
         if reraise:
             raise wrapped_error
@@ -77,7 +79,7 @@ class ErrorHandler(object):
         return cls._message
 
     @classmethod
-    def do_handle_exception(e):
+    def do_handle_exception(e, db_name):
         '''
         The actual error handling code, that must be implemented in subclasses.
 
@@ -92,7 +94,19 @@ def error_wrap(func):
     A decorator that can be placed on a function to plug raised errors on the
     handler
     '''
+
     def wrap(*args, **kwargs):
+        def _get_database_name(func, args):
+            '''
+            This method captures the database_name of previous transaction in
+            with_pool decorator since it is passed as argument
+            to the wrapper
+            '''
+            arguments = getfullargspec(func)[0]
+            if 'database_name' in arguments:
+                return args[arguments.index('database_name')]
+            return None
+
         try:
             return func(*args, **kwargs)
         except (UserError, UserWarning, ConcurrencyException, Forbidden,
@@ -100,5 +114,7 @@ def error_wrap(func):
             # Those errors are supposed to make their way to the end user
             raise
         except Exception as e:
-            ErrorHandler.handle_exception(e)
+            db_name = _get_database_name(func, args)
+            ErrorHandler.handle_exception(e, db_name)
+
     return wrap
